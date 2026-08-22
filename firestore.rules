@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// Theater Inventory Tracker — Firestore Security Rules
+//
+// Phase 1 covers the users collection only. Organization, membership, and the
+// operational collections are added in later phases, alongside the code that
+// uses them. Everything not explicitly allowed is denied by the final rule.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // users/{uid} — personal profile, independent from any organization.
+    match /users/{uid} {
+
+      // Single-document read by a signed-in user who already knows the uid.
+      // Member lists and assignee pickers need display names from Phase 3, and
+      // a profile holds no sensitive data: no email, no credentials.
+      allow get: if isSignedIn();
+
+      // Enumeration is denied. Without this, any signed-in user could query the
+      // whole collection and harvest every account in the system. Reaching a
+      // profile requires already holding the uid, which comes from a membership
+      // record the caller is authorized to read.
+      allow list: if false;
+
+      // A user creates only their own profile. The document must agree with the
+      // authenticated uid, so a profile cannot be planted under another user.
+      allow create: if isSelf(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.user_id is string
+        && request.resource.data.user_id.size() > 0
+        && request.resource.data.display_name is string
+        && request.resource.data.display_name.size() > 0
+        && request.resource.data.created_at == request.time
+        && request.resource.data.updated_at == request.time;
+
+      // A user updates only their own profile, and only the display name.
+      // uid, user_id, and created_at are immutable in the MVP.
+      allow update: if isSelf(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.user_id == resource.data.user_id
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.display_name is string
+        && request.resource.data.display_name.size() > 0;
+
+      // Profiles are never deleted from the client. Historical references such
+      // as created_by_uid depend on them surviving.
+      allow delete: if false;
+    }
+
+    // Deny everything else until the phase that introduces it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

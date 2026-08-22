@@ -1,11 +1,19 @@
 /**
- * Route paths for the organization-scoped application shell.
+ * Route paths.
  *
- * Authentication and organization-selection routes are added in Phase 1 and
- * Phase 2; this file currently covers only the shell that surrounds the
- * operational modules.
+ * Auth routes are public. Organization Selection and the operational shell
+ * require an authenticated user; the organization and permission guards are
+ * added in Phase 2 and Phase 3.
  */
 export const paths = {
+  // Public
+  logIn: '/login',
+  signUp: '/signup',
+
+  // Authenticated, before an organization is chosen
+  organizations: '/organizations',
+
+  // Authenticated, inside the application shell
   dashboard: '/',
   inventory: '/inventory',
   maintenance: '/maintenance',
@@ -14,6 +22,7 @@ export const paths = {
   calendar: '/calendar',
   team: '/team',
   organizationSettings: '/organization-settings',
+  account: '/account',
 } as const
 
 export type AppPath = (typeof paths)[keyof typeof paths]

@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Link, Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { SidebarNav } from '@/components/layout/SidebarNav'
+import { SignOutButton } from '@/features/auth/SignOutButton'
+import { useAuth } from '@/features/auth/useAuth'
+import { paths } from '@/routes/paths'
 
 const APP_NAME = 'Theater Inventory Tracker'
 
@@ -13,6 +16,7 @@ const APP_NAME = 'Theater Inventory Tracker'
  */
 export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const { profile } = useAuth()
 
   return (
     <div className="bg-background text-foreground min-h-svh">
@@ -44,6 +48,15 @@ export function AppShell() {
           </Sheet>
 
           <span className="truncate text-sm font-semibold md:hidden">{APP_NAME}</span>
+
+          <div className="ml-auto flex items-center gap-2">
+            <Button asChild variant="ghost" size="sm">
+              <Link to={paths.account}>
+                <span className="max-w-32 truncate">{profile?.display_name ?? 'Account'}</span>
+              </Link>
+            </Button>
+            <SignOutButton variant="ghost" />
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-6xl px-4 py-6">
