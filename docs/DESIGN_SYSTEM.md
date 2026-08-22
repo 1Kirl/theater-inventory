@@ -108,7 +108,8 @@ Sidebar modules:
 - Team & Members (Admin)
 - Organization Settings (Admin)
 
-Navigation items must respect permissions.
+Navigation items must respect permissions. Dashboard is always present for an assigned member
+because it has no permission of its own. Action List appears whenever Productions is viewable.
 
 ### Mobile
 
@@ -295,6 +296,11 @@ If the user has None:
 - remove module from normal navigation,
 - direct URL should show a clear permission-denied state or redirect safely.
 
+On the Dashboard, hide any summary card whose underlying module is not viewable rather than
+showing an error or a zero. A member with no viewable module sees a deliberate empty state.
+
+An Unassigned member never reaches these screens at all; they see the waiting state instead.
+
 ## 15. AI UX
 
 AI must look integrated into the workflow, not like a floating chatbot.
@@ -347,6 +353,7 @@ Do not spend MVP time on:
 - advanced chart libraries,
 - elaborate illustrations,
 - complex theme switching,
-- dark mode unless it is nearly free from the chosen component system.
+- dark mode unless it is nearly free from the chosen component system,
+- item photo galleries, QR labels, or any interface for features excluded from the MVP.
 
 Focus on clarity and completion.

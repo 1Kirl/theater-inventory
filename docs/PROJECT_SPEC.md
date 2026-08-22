@@ -92,7 +92,14 @@ When a user joins using a valid organization code:
 
 - they become a member of that organization,
 - their initial membership status is `unassigned`,
-- they receive no normal operational access until an Admin assigns teams/permissions.
+- they receive no normal operational access until an Admin assigns teams/permissions,
+- assignment is what promotes them: saving at least one team together with at least one module
+  permission at View or Edit changes the role to Member automatically, and a membership that stops
+  meeting both conditions returns to Unassigned.
+
+Creating an organization, joining by code, regenerating a code, and transferring Admin are
+privileged operations and run in trusted Cloud Functions. The organization code itself is stored
+separately from the organization record and is readable only by the Admin.
 
 ## 6. Roles
 
@@ -196,6 +203,9 @@ Condition categories:
 - Needs Repair
 - Unusable
 
+Available quantity is maintained by hand and is the authoritative figure. The quantity currently
+out for service is computed from repair records and displayed beside it, without changing it.
+
 ### 7.5 Maintenance and Repair
 
 The system must store repair history including:
@@ -226,16 +236,17 @@ Users can create theater productions such as:
 
 A production contains production requirements.
 
-Each requirement may contain:
+Each requirement stores:
 
 - item/material name,
 - optional linked inventory item,
 - required quantity,
-- available quantity,
-- shortage quantity,
 - responsible team,
 - intended shortage action,
 - notes.
+
+Available quantity and shortage quantity are shown on screen but are **not stored**. They are
+recomputed from the linked inventory item each time the requirement is displayed.
 
 Exact shortage calculation:
 
@@ -243,15 +254,23 @@ Exact shortage calculation:
 
 This calculation must be deterministic application logic, not AI output.
 
+A requirement with no linked inventory item is Not Matched: available quantity is null rather than
+zero, and no shortage is calculated until a real item is linked.
+
 ### 7.7 Action List
 
-When production shortages require work, the system supports action types such as:
+When production shortages require work, the system supports these action types:
 
 - Buy
 - Rent
 - Build
 - Repair
-- Already Available
+
+Already Available is not an action type. It is the derived state of a requirement whose shortage
+is zero, and it produces no task.
+
+Each requirement has at most one action item, created or updated when the user chooses an action
+type. Access to the Action List follows the Productions permission.
 
 An actionable task may contain:
 
@@ -280,7 +299,10 @@ Examples:
 Events may target:
 
 - all teams,
-- or a specific team.
+- or one or more specific teams.
+
+Team targeting drives filtering and labelling in the interface. It is not a read restriction:
+anyone who may view the calendar sees the whole organization's schedule.
 
 Events may optionally link to:
 
@@ -300,13 +322,27 @@ Examples:
 - Costume
 - Stage Management
 
-Admins assign users to one or more teams and configure what modules they can view or edit.
+Admins assign users to one or more teams and configure what modules they can view or edit. A
+member holding at least one team and at least one module at View or Edit is a Member; a membership
+that does not meet both conditions is an Unassigned Member.
+
+Permission modules:
+
+- Inventory
+- Maintenance
+- Productions
+- Calendar
 
 Permission levels:
 
 - none
 - view
 - edit
+
+The Dashboard and the Action List have no permission of their own. Dashboard cards follow the
+module each card summarizes, and the Action List follows Productions. Team assignment scopes
+editing within inventory, maintenance, production requirements, and action items; productions,
+calendar events, and teams are organization-level.
 
 ### 7.10 Required AI Features
 
@@ -360,6 +396,12 @@ AI:
 
 - Firebase AI Logic with Gemini
 - AI access wrapped behind an internal application service
+- Zod for runtime validation of all model output
+
+Testing:
+
+- Vitest
+- @firebase/rules-unit-testing with the Firebase Emulator Suite for Security Rules
 
 ## 9. MVP Non-Goals
 

@@ -184,6 +184,16 @@ Additional content:
 
 The exact visual content of cards is a UI design decision, but all values must be derived from organization-scoped real data.
 
+Dashboard has no permission of its own. Each card renders only when the user can view the module
+it summarizes:
+
+- inventory totals require `inventory` view,
+- needs-repair and in-service figures require `maintenance` view,
+- active productions and unresolved actions require `productions` view,
+- upcoming events require `calendar` view.
+
+A user with no viewable module sees an empty-state dashboard, not a broken one.
+
 ## 5. Inventory
 
 ### 5.1 Inventory List
@@ -228,8 +238,9 @@ Fields:
 - condition counts,
 - storage location,
 - last inspection date,
-- notes,
-- optional photo later.
+- notes.
+
+Item photos are not part of the MVP.
 
 Condition counts:
 
@@ -245,6 +256,8 @@ Validation:
 - condition-count total cannot exceed total quantity,
 - organization ID is taken from active organization context, not user input.
 
+Available quantity is entered and maintained by hand. No other screen changes it automatically.
+
 ### 5.3 Inventory Item Detail
 
 Purpose: Serve as the central record for one inventory item.
@@ -258,8 +271,11 @@ Content:
 - notes,
 - edit button if permitted,
 - maintenance / repair history,
-- linked production requirements,
-- optional QR link later.
+- linked production requirements.
+
+The condition summary shown here is derived from the condition counts, not stored: the worst
+state holding at least one unit, with any remainder shown as Unclassified. QR links are not part
+of the MVP.
 
 ### 5.4 AI Smart Search
 
@@ -286,7 +302,10 @@ Rules:
 - AI only interprets intent,
 - Firestore provides actual records,
 - organization/permission scope applies before results are shown,
-- AI must not invent records.
+- AI must not invent records,
+- AI must not emit Firestore document IDs. It returns a team **name**, which the application
+  resolves against the organization's real teams,
+- interpreted conditions are always a list, so queries such as "damaged or unusable" work.
 
 ## 6. Maintenance & Repair
 
@@ -314,6 +333,9 @@ Repair statuses:
 - returned,
 - cancelled.
 
+Quantity currently in service is computed by summing quantity sent across `sent`, `in_service`,
+and `ready` records. It is displayed next to the item's available quantity and never modifies it.
+
 ### 6.2 Repair / Service Record
 
 Purpose: Create or edit a permanent repair/service history entry.
@@ -337,7 +359,9 @@ Fields:
 Rules:
 
 - returned records remain in history,
-- when status becomes Returned, prompt the user to review inventory condition/availability.
+- when status becomes Returned, prompt the user to review inventory condition/availability. The
+  application does not change either value on its own,
+- the record stores its own owning team, copied from the inventory item when it is created.
 
 ## 7. Productions
 
@@ -384,7 +408,13 @@ Rules:
 
 `shortage_qty = max(required_qty - available_qty, 0)`
 
-If shortage is zero, the state may be shown as Already Available.
+Available quantity and shortage are computed from the linked inventory item every time the page
+loads. Neither is stored on the requirement.
+
+If shortage is zero, the state is shown as Already Available.
+
+A requirement with no linked inventory item is **Not Matched**: available quantity is null rather
+than zero, no shortage is calculated, and no action item can be created from it.
 
 ### 7.3 AI Requirement Generator
 
@@ -403,9 +433,12 @@ AI output may suggest:
 - item/material name,
 - suggested quantity,
 - category,
-- likely responsible team,
-- possible inventory match,
+- likely responsible team, as a **name**,
+- a possible inventory match, as a **search keyword**,
 - short rationale.
+
+The model never returns a team ID or an inventory item ID. The application resolves both against
+real organization data and shows the proposed match for the user to confirm or correct.
 
 User actions:
 
@@ -440,13 +473,17 @@ Fields:
 
 Purpose: Convert production shortages into practical tasks.
 
+The Action List has no permission of its own; it follows the `productions` permission.
+
 Action types:
 
 - buy,
 - rent,
 - build,
-- repair,
-- already_available.
+- repair.
+
+`already_available` is not an action type. It is the derived state of a requirement whose
+shortage is zero, and it produces no action item.
 
 Content:
 
@@ -461,12 +498,21 @@ Content:
 - task status,
 - notes.
 
-Suggested task statuses:
+Task statuses:
 
 - todo,
 - in_progress,
 - done,
 - cancelled.
+
+Rules:
+
+- one action item per requirement at most; the action item's document ID is the requirement ID,
+- an action item is created or updated only when the user chooses a shortage action type,
+- nothing is created for a Not Matched requirement, a zero shortage, or an Already Available
+  state,
+- if a shortage later drops to zero, mark the action item done or cancelled rather than deleting
+  it.
 
 ## 9. Calendar
 
@@ -478,8 +524,12 @@ Content:
 
 - month view,
 - upcoming-event list on mobile or secondary panel,
-- filters for all teams / specific team,
+- filters by team and event type,
 - Create Event button if permitted.
+
+An event may be addressed to all teams or to several specific teams. Team visibility is a display
+filter, not a security boundary: anyone with calendar view permission can read every event in the
+organization.
 
 Event examples:
 
@@ -498,10 +548,16 @@ Fields:
 - optional start time,
 - optional end time,
 - event type,
-- visibility: all teams or selected team,
+- visibility: all teams, or one or more selected teams,
 - optional linked production,
 - optional linked repair record,
 - memo/notes.
+
+Date and time are separate. Leaving both times empty makes the event an all-day item such as a
+build day. Recurring events are not part of the MVP.
+
+Events may be edited and deleted by Admins and by users with calendar edit permission. Linked
+records must belong to the active organization.
 
 ## 10. Team & Member Management
 
@@ -519,6 +575,9 @@ Content:
 - member team summary,
 - open Member Detail.
 
+There is no Add Member flow. Members appear here only after joining with the organization code.
+Teams have no delete action in the MVP.
+
 ### 10.2 Member Detail
 
 Purpose: Manage one user's membership inside the active organization.
@@ -531,8 +590,16 @@ Content:
 - membership role/status,
 - team memberships,
 - module permissions,
-- deactivate/remove membership if implemented,
-- make Admin / transfer Admin through the approved flow.
+- deactivate membership.
+
+Rules:
+
+- saving at least one team together with at least one module permission at View or Edit promotes
+  an Unassigned member to Member automatically, and removing them drops the member back to
+  Unassigned. There is no manual role control for this,
+- Admin is not granted here. Use Transfer Admin in Organization Settings,
+- removal is deactivation, not deletion: `is_active` becomes false, preserving the member's
+  historical references. The current Admin's membership cannot be deactivated.
 
 ### 10.3 Permission Matrix
 
@@ -546,12 +613,18 @@ Permission levels:
 
 Modules:
 
-- Dashboard
 - Inventory
 - Maintenance
 - Productions
-- Action List
 - Calendar
+
+Dashboard and Action List are deliberately absent. Dashboard cards follow the module each card
+summarizes; the Action List follows Productions.
+
+Team assignment is a separate control on the same screen. Permission decides which module and
+whether the user may write; team decides which records inside the team-scoped modules —
+inventory, maintenance, production requirements, and action items. Productions, calendar events,
+and teams are organization-level and are not team-scoped.
 
 Administrative modules remain Admin-only unless explicitly expanded later.
 
@@ -571,6 +644,11 @@ Content:
 - current Admin information,
 - Transfer Admin entry.
 
+The join code is not stored on the organization record; it is read from the join-code collection
+and is visible to the Admin only — members and unassigned users cannot read it anywhere in the
+application. Only an Admin may regenerate it, through a trusted backend operation that invalidates
+the previous code.
+
 ### 11.2 Transfer Admin
 
 Purpose: Transfer Admin responsibility without leaving the organization without an Admin.
@@ -584,9 +662,15 @@ Content:
 
 Rules:
 
-- target must already be a member of the organization,
+- target must already be an active member of the organization,
 - transfer must be atomic,
-- previous Admin becomes a normal Member unless multiple-Admin support is intentionally introduced later,
+- the new Admin keeps their existing teams and permissions; admin access takes precedence while
+  they hold the role,
+- the previous Admin's role is resolved from the teams and permissions their membership already
+  carries — Member if they have at least one team and at least one module at View or Edit,
+  otherwise Unassigned Member,
+- this screen has no controls for configuring the outgoing Admin's teams or permissions; that is
+  done afterwards in Member Detail if needed,
 - organization must always retain an Admin.
 
 ### 11.3 Profile / Account Settings
@@ -607,4 +691,5 @@ Content:
 
 Purpose: Let a technician scan a QR code attached to equipment and immediately open the corresponding Inventory Item Detail page.
 
-This is not part of the required MVP and must not delay core features.
+This is not part of the required MVP and must not delay core features. Neither are item photos,
+equipment checkout/check-in, notifications, advanced analytics, or recurring calendar events.

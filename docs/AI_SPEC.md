@@ -58,7 +58,13 @@ interface InventorySearchFilters {
 }
 ```
 
-If team name must be converted to a team ID, do that through application data after AI parsing.
+The model returns `team_name`, never `team_id`. It has no access to real document IDs, so any ID
+it produced would be invented. The application resolves the name against the active
+organization's teams after parsing; an unresolvable name is dropped from the filter set and
+surfaced in the interpreted-filter summary rather than guessed at.
+
+`conditions` is always an array, so a query such as "damaged or unusable equipment" is
+expressible.
 
 ### 3.4 Example
 
@@ -88,7 +94,8 @@ Application then:
 
 - Never fabricate inventory records.
 - Never claim that an item exists unless Firestore returned it.
-- Never return an `organization_id` from the model.
+- Never return any Firestore document ID from the model — not an `organization_id`, `team_id`,
+  `item_id`, or any other identifier. Identifiers are resolved by application code from real data.
 - Never accept an arbitrary Firestore field name from the model.
 - Only allow fields defined in the approved schema.
 - Invalid output must be rejected.
@@ -141,7 +148,11 @@ interface AIRequirementSuggestion {
 }
 ```
 
-The model may suggest a possible inventory match keyword, but the application must resolve actual inventory IDs using real data.
+The model returns names and keywords only. `suggested_team_name` is a team name, not a
+`team_id`; `inventory_match_keyword` is a search hint, not an `inventory_item_id`. The
+application resolves both against real organization data. A model-produced document ID would be a
+fabricated record reference and could point outside the active organization, so the schema does
+not admit one.
 
 ### 4.4 Example Input
 
@@ -219,7 +230,9 @@ Use actual inventory availability.
 - Do not write AI suggestions directly to Firestore.
 - Do not delete existing requirements because the AI produced a different list.
 - Do not invent inventory availability.
-- Do not create action items automatically before the approved requirement exists.
+- Do not return Firestore document IDs; return names and keywords the application can resolve.
+- Do not create action items at all. Action items are created only when a user chooses a shortage
+  action type on a saved requirement that is linked to inventory and has a shortage above zero.
 - If model output is malformed, preserve the user's production description and allow retry.
 - Manual requirement entry must always remain available.
 
@@ -239,11 +252,12 @@ System prompts should tell the model:
 
 Use runtime schema validation before consuming model output.
 
-Recommended approach:
+Zod is approved as a project dependency and is the validator for both AI contracts. Parse every
+model response before any of it reaches application state:
 
-- Zod or equivalent small schema validator if already approved as a dependency.
-
-If adding Zod only for AI structured validation, explain the dependency before installation.
+- reject unknown fields rather than ignoring them,
+- reject any field carrying something that looks like a document ID,
+- reject out-of-range or non-integer quantities.
 
 Validation failures should result in a safe retry/error state.
 
@@ -258,7 +272,9 @@ AI Smart Search:
 AI Requirement Generator:
 
 - may be viewed with Productions View permission,
-- saving approved suggestions requires Productions Edit permission.
+- saving approved suggestions requires Productions Edit permission,
+- resolving a suggested team name or inventory keyword reads only data the user is already
+  permitted to read.
 
 AI features must never be used to bypass Firestore Security Rules.
 

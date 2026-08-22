@@ -25,24 +25,42 @@ Use the following stack unless the project owner explicitly approves a change:
 - Firebase AI Logic with Gemini for the two required AI features
 - Git for version control
 
+Approved additional dependencies:
+
+- Zod — runtime validation of AI model output
+- Vitest — unit tests for domain logic
+- @firebase/rules-unit-testing with the Firebase Emulator Suite — Security Rules tests
+
 Do not introduce a large state-management framework, SSR framework, SQL database, or additional backend platform unless there is a clear need and the project owner approves it.
 
 ## 3. Source of Truth
 
 Before implementing any feature, read the relevant files in `/docs`.
 
+Two kinds of authority apply, and they do not compete:
+
+- `references/Theater_Inventory_Tracker_IA_v3.xlsm` is the current source for **what the product
+  does** — pages, contents, components, and user-facing flows.
+- `docs/DECISIONS.md` is the current source for **how it is built** — data shapes, permission
+  model, and backend structure. Where the spreadsheet and the technical documents disagreed, the
+  decisions in that file resolved the conflict, and `/docs` has been updated to match.
+
 Priority order when documents appear to conflict:
 
 1. `CLAUDE.md`
-2. `docs/PROJECT_SPEC.md`
-3. `docs/IA.md`
-4. `docs/USER_FLOWS.md`
-5. `docs/DATA_MODEL.md`
-6. `docs/PERMISSIONS.md`
-7. `docs/AI_SPEC.md`
-8. `docs/DESIGN_SYSTEM.md`
-9. `docs/MVP_CHECKLIST.md`
-10. `/references/Theater_Inventory_Tracker_IA_v3.xlsx`
+2. `docs/DECISIONS.md`
+3. `docs/PROJECT_SPEC.md`
+4. `docs/IA.md`
+5. `docs/USER_FLOWS.md`
+6. `docs/DATA_MODEL.md`
+7. `docs/PERMISSIONS.md`
+8. `docs/AI_SPEC.md`
+9. `docs/DESIGN_SYSTEM.md`
+10. `docs/MVP_CHECKLIST.md`
+11. `references/Theater_Inventory_Tracker_IA_v3.xlsm`
+
+The spreadsheet sits last only as a tie-breaker for implementation detail. For a question about
+product behavior that `/docs` does not answer, it is the reference to consult.
 
 If there is a conflict or ambiguity, do not silently choose a new product direction. Explain the issue and propose the smallest reasonable resolution.
 
@@ -62,6 +80,15 @@ These rules must remain true throughout the application:
 10. The application must never allow an organization to end up with zero Admins.
 11. Admin transfer must be explicit and safe.
 12. Team membership and permissions are organization-specific.
+13. A membership is a Member when it holds at least one team **and** at least one module
+    permission at `view` or `edit`. This assignment condition is evaluated automatically on saving
+    a membership and on completing a Transfer Admin; a membership that fails it is `unassigned`.
+    Admin access ignores `team_ids` and `permissions`, but those fields are retained rather than
+    cleared, because they are what the assignment condition reads after a transfer.
+14. Memberships are deactivated, never deleted. The MVP has no hard delete for memberships,
+    inventory items, or teams.
+15. Derivable values are computed, not stored. Shortage quantity, condition summary, overdue
+    state, and dashboard totals are always calculated from stored data.
 
 ## 5. Authentication Rule
 
@@ -91,9 +118,21 @@ Use Firebase as the backend platform.
 
 - Authentication: Firebase Authentication
 - Persistent application data: Cloud Firestore
-- Privileged organization operations: callable Cloud Functions when client-side trust would be unsafe
 - Hosting: Firebase Hosting
-- File uploads: Firebase Storage only if the optional photo feature is implemented
+- File uploads: not used in the MVP
+
+Privileged organization operations run in callable Cloud Functions. There are exactly four:
+
+- `createOrganization`
+- `joinOrganizationByCode`
+- `regenerateOrganizationCode`
+- `transferAdmin`
+
+These require the Blaze plan. Tell the project owner before the step that needs Firebase billing
+configured; do not attempt to work around it silently.
+
+The organization join code is never stored on the organization document. It lives in
+`organization_join_codes` with the code as the document ID, and only an Admin can read it.
 
 Keep Firebase access code outside page components. Use dedicated service/repository modules and typed interfaces.
 
@@ -108,11 +147,28 @@ Permissions must be enforced in two places:
 1. React UI/route guards for user experience.
 2. Firestore Security Rules and/or trusted Cloud Functions for real authorization.
 
+Permissions live inside `organization_memberships` as `team_ids[]` plus a `permissions` map.
+There is no separate `team_permissions` collection.
+
+The MVP has exactly four permission modules:
+
+- `inventory`
+- `maintenance`
+- `productions`
+- `calendar`
+
+Dashboard has no permission of its own; each summary card follows the module it summarizes. The
+Action List has no permission of its own; it follows `productions`.
+
 Effective permission levels:
 
 - `none`
 - `view`
 - `edit`
+
+Team scope applies to `inventory_items`, `maintenance_records`, `production_requirements`, and
+`action_items`. It does not apply to `productions`, `calendar_events`, or `teams`, which are
+organization-level and need only the module permission.
 
 Admin bypasses normal member permission checks inside the current organization and receives full organization access.
 
@@ -130,6 +186,8 @@ Read `docs/AI_SPEC.md` before implementing either feature.
 Critical rules:
 
 - AI must not invent inventory records.
+- AI must never produce a Firestore document ID. It returns team names and inventory match
+  keywords; application code resolves them against real organization data.
 - AI must not directly edit Firestore production requirements.
 - AI Requirement Generator produces suggestions only.
 - A user must review and approve AI-generated requirements before saving them.
@@ -205,7 +263,7 @@ Do not add features just because they are common in commercial inventory product
 
 MVP priorities are defined in `docs/MVP_CHECKLIST.md`.
 
-Examples of non-MVP features unless explicitly approved:
+Excluded from the MVP:
 
 - QR scanning
 - inventory photos
@@ -215,8 +273,10 @@ Examples of non-MVP features unless explicitly approved:
 - notifications
 - real-time chat
 - social login
-- complex recurring calendar rules
+- recurring calendar events
 - public organization discovery
+- hard deletion of members, inventory items, or teams
+- per-production inventory allocation or reservation
 
 ## 14. Completion Definition
 

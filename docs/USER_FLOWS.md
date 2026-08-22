@@ -66,11 +66,16 @@ At no point may Organization A records remain visible after the switch.
 2. Admin sees Unassigned Members.
 3. Admin selects a user.
 4. Member Detail opens.
-5. Admin changes membership status from `unassigned` to `member`.
-6. Admin assigns one or more teams.
-7. Admin assigns module permission levels.
-8. Admin saves.
+5. Admin assigns one or more teams.
+6. Admin assigns module permission levels for inventory, maintenance, productions, and calendar.
+7. Admin saves.
+8. Because the saved membership has at least one team and at least one module at `view` or
+   `edit`, the role changes from `unassigned` to `member` automatically. There is no manual status
+   control.
 9. User now receives access according to the new membership configuration.
+
+If the Admin later removes every team or returns every module to `none`, the membership no longer
+satisfies the assignment condition and returns to `unassigned`.
 
 ## 6. Admin — Create a Team
 
@@ -118,8 +123,10 @@ At no point may Organization A records remain visible after the switch.
 1. User opens Inventory.
 2. User selects AI Smart Search or focuses the AI search input.
 3. User enters a natural-language question.
-4. AI converts the request into supported structured filters.
-5. App validates/sanitizes AI output.
+4. AI converts the request into supported structured filters, using team **names** rather than
+   IDs and returning conditions as a list.
+5. App validates AI output against the approved schema and resolves any team name to a real team
+   ID within the active organization.
 6. App displays the interpreted filters.
 7. Firestore query runs using:
    - active organization,
@@ -159,7 +166,9 @@ Possible AI interpretation:
 4. App prompts user to review:
    - item condition,
    - available quantity.
-5. Repair history remains visible permanently.
+5. The user decides whether to change those values. The application never adjusts available
+   quantity by itself; the quantity shown as currently in service is a separate derived figure.
+6. Repair history remains visible permanently.
 
 ## 12. Production — Create a Production
 
@@ -176,22 +185,27 @@ Possible AI interpretation:
 3. User enters a free-text need or links an existing inventory item.
 4. User sets required quantity.
 5. User assigns responsible team.
-6. App obtains actual available quantity from linked inventory when applicable.
+6. App obtains actual available quantity from the linked inventory item.
 7. App calculates:
 
 `shortage_qty = max(required_qty - available_qty, 0)`
 
-8. Requirement is saved.
-9. If shortage is zero, show Already Available.
-10. If shortage is greater than zero, user may select an action type.
+8. Requirement is saved. Available quantity and shortage are not saved with it; they are
+   recomputed whenever the requirement is displayed.
+9. If the requirement has no linked inventory item, it is Not Matched: available quantity is null,
+   no shortage is calculated, and no action type can be chosen yet.
+10. If shortage is zero, show Already Available.
+11. If shortage is greater than zero, user may select an action type.
 
 ## 14. Production — AI Requirement Generator
 
 1. User opens a production.
 2. User selects Generate Requirements with AI.
 3. App supplies production context to the AI service.
-4. AI returns structured suggestions.
-5. App attempts safe inventory matching using real organization inventory candidates.
+4. AI returns structured suggestions containing a team **name** and an inventory match
+   **keyword**, never document IDs.
+5. App resolves those against real organization data and attempts safe inventory matching, leaving
+   low-confidence matches unlinked for the user to decide.
 6. Suggestions are displayed as a review list.
 7. User may:
    - Accept
@@ -206,44 +220,55 @@ Possible AI interpretation:
 
 ## 15. Action List — Resolve a Shortage
 
-1. Production requirement has a shortage.
+1. Production requirement is linked to an inventory item and has a shortage greater than zero.
 2. User selects an action type:
    - Buy
    - Rent
    - Build
    - Repair
-3. Action item is created or updated for the related requirement.
-4. User may assign:
+3. Action item is created or updated at `action_items/{requirement_id}`. Because the requirement
+   ID is the document ID, one requirement can never accumulate more than one action item.
+4. Quantity defaults to the current shortage and remains editable afterwards.
+5. User may assign:
    - team,
    - assignee,
    - due date,
    - status,
    - notes.
-5. Action appears in the Production Action List and global Action List.
-6. When complete, user marks it Done.
+6. Action appears in the Production Action List and global Action List. Access to both follows the
+   productions permission.
+7. When complete, user marks it Done.
+
+No action item is created when the requirement is Not Matched, when the shortage is zero, or when
+the requirement is Already Available. If a shortage later drops to zero, mark the existing action
+item Done or Cancelled rather than deleting it.
 
 ## 16. Calendar — Create an Event
 
 1. Authorized user opens Calendar.
 2. User selects Create Event.
-3. User enters title and date/time.
+3. User enters title, date, and optionally a start and end time. Leaving the times empty makes it
+   an all-day event.
 4. User selects visibility:
    - All Teams
-   - Specific Team
+   - One or more specific teams
 5. User may link a production or repair record.
 6. User adds notes.
 7. Event is saved.
-8. Calendar shows the event to users with appropriate access.
+8. Calendar shows the event to every user with calendar view permission in the organization.
+   Team visibility drives filtering and labelling in the UI; it is not a read restriction.
 
 ## 17. Admin — Regenerate Organization Code
 
-1. Admin opens Organization Settings.
-2. Admin selects Regenerate Code.
+1. Admin opens Organization Settings. The join code is visible to the Admin only; members and
+   unassigned users cannot read it anywhere in the application.
+2. Admin selects Regenerate Code. Only an Admin may run this operation.
 3. UI warns that the old code will stop working.
 4. Admin confirms.
-5. Trusted backend invalidates old code and creates a new code.
+5. The `regenerateOrganizationCode` Cloud Function deactivates the old code document and creates
+   a new one.
 6. Existing memberships remain unchanged.
-7. New join code is displayed to Admin.
+7. New join code is displayed to the Admin, who is the only role that can read it.
 
 ## 18. Admin — Transfer Admin Role
 
@@ -252,10 +277,16 @@ Possible AI interpretation:
 3. Admin selects an eligible existing member.
 4. UI clearly explains the effect.
 5. Admin confirms.
-6. Trusted backend performs an atomic transfer.
-7. Target user becomes Admin.
-8. Previous Admin becomes Member unless the approved product model later supports multiple Admins.
-9. Organization never exists without an Admin.
+6. The `transferAdmin` Cloud Function performs an atomic transfer.
+7. Target user becomes Admin, keeping their existing teams and permissions untouched. Admin access
+   takes precedence over those values while they hold the role.
+8. The previous Admin's role is resolved from the teams and permissions their membership already
+   carries:
+   - at least one team and at least one module at View or Edit → Member,
+   - otherwise → Unassigned Member.
+9. No extra step asks the transferring Admin to configure their own future permissions. If they
+   land in Unassigned, the new Admin assigns them through the normal Member Detail flow.
+10. Organization never exists without an Admin.
 
 ## 19. Permission-Denied Flow
 
