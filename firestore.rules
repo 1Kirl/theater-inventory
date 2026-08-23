@@ -2,39 +2,129 @@ rules_version = '2';
 
 // Theater Inventory Tracker — Firestore Security Rules
 //
-// Phase 1 covers the users collection only. Organization, membership, and the
-// operational collections are added in later phases, alongside the code that
-// uses them. Everything not explicitly allowed is denied by the final rule.
+// This project runs on the Firebase Spark plan. There are no Cloud Functions and
+// no Admin SDK, so every write originates in the browser and these rules are the
+// only authorization boundary. An invariant that is not expressed here is not
+// enforced anywhere.
+//
+// Everything not explicitly allowed is denied by the final rule.
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------- helpers
 
     function isSignedIn() {
       return request.auth != null;
     }
 
-    function isSelf(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+    function uid() {
+      return request.auth.uid;
     }
 
-    // users/{uid} — personal profile, independent from any organization.
-    match /users/{uid} {
+    function orgPath(organizationId) {
+      return /databases/$(database)/documents/organizations/$(organizationId);
+    }
 
-      // Single-document read by a signed-in user who already knows the uid.
-      // Member lists and assignee pickers need display names from Phase 3, and
-      // a profile holds no sensitive data: no email, no credentials.
+    function membershipPath(organizationId, memberUid) {
+      return /databases/$(database)/documents/organization_memberships/$(organizationId + '_' + memberUid);
+    }
+
+    function codePath(code) {
+      return /databases/$(database)/documents/organization_join_codes/$(code);
+    }
+
+    function settingsPath(organizationId) {
+      return /databases/$(database)/documents/organization_admin_settings/$(organizationId);
+    }
+
+    function proofPath(organizationId, memberUid) {
+      return /databases/$(database)/documents/organization_membership_join_proofs/$(organizationId + '_' + memberUid);
+    }
+
+    // A code is interpolated into a document path, so its shape is checked
+    // first. Without this, a crafted value could change which document a get()
+    // resolves to. Mirrors JOIN_CODE_ALPHABET in src/domain/join-code.ts.
+    function isCodeShape(code) {
+      return code is string && code.matches('^[A-HJ-NP-Z2-9]{16}$');
+    }
+
+    function changedOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // Reject documents carrying fields the model does not define. Unknown fields
+    // are how a schema quietly drifts away from what the rules actually check.
+    function hasExactly(required, optional) {
+      return request.resource.data.keys().hasAll(required)
+        && request.resource.data.keys().hasOnly(required.concat(optional));
+    }
+
+    // Path B — the organization already exists and names the caller as Admin.
+    function isAdminOf(organizationId) {
+      return isSignedIn()
+        && exists(orgPath(organizationId))
+        && get(orgPath(organizationId)).data.admin_uid == uid();
+    }
+
+    // Path A — the organization is being created in this same atomic write and
+    // will name the caller as Admin. At this moment there is no Admin yet, so
+    // there is nothing for isAdminOf() to read.
+    function isCreatingOrganization(organizationId) {
+      return isSignedIn()
+        && existsAfter(orgPath(organizationId))
+        && getAfter(orgPath(organizationId)).data.admin_uid == uid()
+        && getAfter(orgPath(organizationId)).data.created_by_uid == uid();
+    }
+
+    function isActiveMemberOf(organizationId) {
+      return isSignedIn()
+        && exists(membershipPath(organizationId, uid()))
+        && get(membershipPath(organizationId, uid())).data.is_active == true;
+    }
+
+    function hasActiveMembership(organizationId, memberUid) {
+      return exists(membershipPath(organizationId, memberUid))
+        && get(membershipPath(organizationId, memberUid)).data.is_active == true;
+    }
+
+    function permissionKeysExact(permissions) {
+      return permissions.keys().hasOnly(['inventory', 'maintenance', 'productions', 'calendar'])
+        && permissions.keys().hasAll(['inventory', 'maintenance', 'productions', 'calendar']);
+    }
+
+    function permissionsAllNone(permissions) {
+      return permissionKeysExact(permissions)
+        && permissions.inventory == 'none'
+        && permissions.maintenance == 'none'
+        && permissions.productions == 'none'
+        && permissions.calendar == 'none';
+    }
+
+    function permissionsValid(permissions) {
+      return permissionKeysExact(permissions)
+        && permissions.inventory in ['none', 'view', 'edit']
+        && permissions.maintenance in ['none', 'view', 'edit']
+        && permissions.productions in ['none', 'view', 'edit']
+        && permissions.calendar in ['none', 'view', 'edit'];
+    }
+
+    // ------------------------------------------------------------------ users
+
+    match /users/{userUid} {
+
+      // Member lists and assignee pickers need display names. A profile holds
+      // no sensitive data: no email, no credentials.
       allow get: if isSignedIn();
 
-      // Enumeration is denied. Without this, any signed-in user could query the
-      // whole collection and harvest every account in the system. Reaching a
-      // profile requires already holding the uid, which comes from a membership
-      // record the caller is authorized to read.
+      // Enumeration is denied. Reaching a profile requires already holding the
+      // uid, which comes from a membership the caller is authorized to read.
       allow list: if false;
 
-      // A user creates only their own profile. The document must agree with the
-      // authenticated uid, so a profile cannot be planted under another user.
-      allow create: if isSelf(uid)
-        && request.resource.data.uid == uid
+      allow create: if isSignedIn()
+        && hasExactly(['uid', 'user_id', 'display_name', 'created_at', 'updated_at'], [])
+        && userUid == uid()
+        && request.resource.data.uid == userUid
         && request.resource.data.user_id is string
         && request.resource.data.user_id.size() > 0
         && request.resource.data.display_name is string
@@ -42,21 +132,269 @@ service cloud.firestore {
         && request.resource.data.created_at == request.time
         && request.resource.data.updated_at == request.time;
 
-      // A user updates only their own profile, and only the display name.
-      // uid, user_id, and created_at are immutable in the MVP.
-      allow update: if isSelf(uid)
+      allow update: if isSignedIn()
+        && userUid == uid()
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.user_id == resource.data.user_id
         && request.resource.data.created_at == resource.data.created_at
         && request.resource.data.display_name is string
         && request.resource.data.display_name.size() > 0;
 
-      // Profiles are never deleted from the client. Historical references such
-      // as created_by_uid depend on them surviving.
       allow delete: if false;
     }
 
-    // Deny everything else until the phase that introduces it.
+    // ---------------------------------------------------------- organizations
+
+    match /organizations/{organizationId} {
+
+      // Unassigned members read this too — the waiting screen names the
+      // organization. Membership, not assignment, is what grants the read.
+      allow get: if isActiveMemberOf(organizationId);
+
+      allow list: if false;
+
+      // Path A. The creator names themselves as Admin and must bring the rest
+      // of the batch with them; a lone organization document is rejected.
+      allow create: if isSignedIn()
+        && hasExactly(
+             ['organization_id', 'name', 'admin_uid', 'created_by_uid', 'created_at', 'updated_at'],
+             ['description'])
+        && request.resource.data.organization_id == organizationId
+        && request.resource.data.admin_uid == uid()
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.created_at == request.time
+        && request.resource.data.updated_at == request.time
+        && existsAfter(membershipPath(organizationId, uid()))
+        && existsAfter(settingsPath(organizationId));
+
+      // Exactly two shapes of update are allowed, and never both at once.
+      allow update: if isAdminOf(organizationId)
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        && request.resource.data.updated_at == request.time
+        && (
+          isAdminTransfer(organizationId)
+          || isRename(organizationId)
+        );
+
+      allow delete: if false;
+    }
+
+    // Transfer writes admin_uid and nothing else. The incoming Admin must
+    // already hold an active membership, so an organization can never be handed
+    // to someone who is not in it.
+    function isAdminTransfer(organizationId) {
+      return changedOnly(['admin_uid', 'updated_at'])
+        && request.resource.data.admin_uid is string
+        && request.resource.data.admin_uid != resource.data.admin_uid
+        && hasActiveMembership(organizationId, request.resource.data.admin_uid);
+    }
+
+    // A rename must carry the active join code's snapshot with it, because a
+    // user validating a code is not yet a member and cannot read this document.
+    function isRename(organizationId) {
+      return changedOnly(['name', 'updated_at'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && exists(settingsPath(organizationId))
+        && isCodeShape(get(settingsPath(organizationId)).data.current_join_code_id)
+        && getAfter(codePath(get(settingsPath(organizationId)).data.current_join_code_id)).data.organization_name_snapshot
+             == request.resource.data.name;
+    }
+
+    // --------------------------------------------- organization_memberships
+
+    match /organization_memberships/{membershipId} {
+
+      allow get: if isSignedIn() && (
+        resource.data.uid == uid()
+        || isActiveMemberOf(resource.data.organization_id)
+      );
+
+      // Rules are not filters: a query is rejected outright if any candidate
+      // document fails, so the client must constrain it to match. The cheap
+      // self clause comes first, then the member directory, then the Admin
+      // view which alone may include deactivated members.
+      allow list: if isSignedIn() && (
+        resource.data.uid == uid()
+        || (resource.data.is_active == true && isActiveMemberOf(resource.data.organization_id))
+        || isAdminOf(resource.data.organization_id)
+      );
+
+      // A new membership always starts empty. Pinning these values here is what
+      // stops a joining user from granting themselves access on the way in.
+      allow create: if isSignedIn()
+        && hasExactly(
+             ['organization_id', 'uid', 'team_ids', 'permissions', 'is_active', 'joined_at', 'updated_at'],
+             [])
+        && membershipId == request.resource.data.organization_id + '_' + request.resource.data.uid
+        && request.resource.data.uid == uid()
+        && request.resource.data.team_ids == []
+        && permissionsAllNone(request.resource.data.permissions)
+        && request.resource.data.is_active == true
+        && request.resource.data.joined_at == request.time
+        && request.resource.data.updated_at == request.time
+        && (
+          isCreatingOrganization(request.resource.data.organization_id)
+          || hasValidJoinProof(request.resource.data.organization_id)
+        );
+
+      // Only the Admin assigns. A member cannot edit their own membership, and
+      // the current Admin's membership cannot be deactivated — administration
+      // has to be transferred first, so the organization is never left without
+      // an Admin.
+      allow update: if isAdminOf(resource.data.organization_id)
+        && changedOnly(['team_ids', 'permissions', 'is_active', 'updated_at'])
+        && request.resource.data.team_ids is list
+        && request.resource.data.is_active is bool
+        && permissionsValid(request.resource.data.permissions)
+        && request.resource.data.updated_at == request.time
+        && (
+          request.resource.data.is_active == true
+          || resource.data.uid != get(orgPath(resource.data.organization_id)).data.admin_uid
+        );
+
+      allow delete: if false;
+    }
+
+    // The proof is what lets this rule see which code was used. The membership
+    // itself never stores it, so a colleague reading the directory learns
+    // nothing about how anyone joined.
+    function hasValidJoinProof(organizationId) {
+      return existsAfter(proofPath(organizationId, uid()))
+        && proofIsSound(organizationId, getAfter(proofPath(organizationId, uid())).data);
+    }
+
+    function proofIsSound(organizationId, proof) {
+      return proof.organization_id == organizationId
+        && proof.uid == uid()
+        && isCodeShape(proof.join_code_id)
+        && exists(codePath(proof.join_code_id))
+        && get(codePath(proof.join_code_id)).data.active == true
+        && get(codePath(proof.join_code_id)).data.organization_id == organizationId;
+    }
+
+    // ----------------------------------------------- organization_join_codes
+
+    match /organization_join_codes/{code} {
+
+      // The joining client has to read this document; there is no server to
+      // read it for them. The code is a bearer secret, sized at 2^80. Holding
+      // one grants no access on its own: the membership it creates is empty.
+      allow get: if isSignedIn();
+
+      // Denied for everyone, which is what prevents codes and organizations
+      // from being enumerated.
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && hasExactly(
+             ['organization_id', 'organization_name_snapshot', 'active', 'created_by_uid', 'created_at'],
+             [])
+        && isCodeShape(code)
+        && request.resource.data.organization_id is string
+        && request.resource.data.organization_name_snapshot is string
+        && request.resource.data.organization_name_snapshot.size() > 0
+        && request.resource.data.active == true
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time
+        && !('revoked_at' in request.resource.data)
+        && (
+          isCreatingOrganization(request.resource.data.organization_id)
+          || isAdminOf(request.resource.data.organization_id)
+        );
+
+      allow update: if isAdminOf(resource.data.organization_id)
+        && resource.data.active == true
+        && (
+          isRevocation()
+          || isSnapshotFollowingRename(resource.data.organization_id)
+        );
+
+      // Revoked codes are kept, so a superseded code fails validation for a
+      // clear reason instead of looking like a typo.
+      allow delete: if false;
+    }
+
+    function isRevocation() {
+      return changedOnly(['active', 'revoked_at'])
+        && request.resource.data.active == false
+        && request.resource.data.revoked_at == request.time;
+    }
+
+    function isSnapshotFollowingRename(organizationId) {
+      return changedOnly(['organization_name_snapshot'])
+        && request.resource.data.organization_name_snapshot
+             == getAfter(orgPath(organizationId)).data.name;
+    }
+
+    // ------------------------------------------ organization_admin_settings
+
+    match /organization_admin_settings/{organizationId} {
+
+      // Admin-only. This document exists solely to hold something ordinary
+      // members must not see, because Firestore cannot restrict reads per field.
+      allow get: if isAdminOf(organizationId);
+      allow list: if false;
+
+      // Path A only. This document is never created any other way.
+      allow create: if isSignedIn()
+        && hasExactly(['organization_id', 'current_join_code_id', 'updated_at'], [])
+        && request.resource.data.organization_id == organizationId
+        && isCodeShape(request.resource.data.current_join_code_id)
+        && request.resource.data.updated_at == request.time
+        && isCreatingOrganization(organizationId)
+        && pointsAtLiveCode(organizationId, request.resource.data.current_join_code_id);
+
+      allow update: if isAdminOf(organizationId)
+        && changedOnly(['current_join_code_id', 'updated_at'])
+        && isCodeShape(request.resource.data.current_join_code_id)
+        && request.resource.data.updated_at == request.time
+        && pointsAtLiveCode(organizationId, request.resource.data.current_join_code_id);
+
+      allow delete: if false;
+    }
+
+    function pointsAtLiveCode(organizationId, code) {
+      return existsAfter(codePath(code))
+        && getAfter(codePath(code)).data.organization_id == organizationId
+        && getAfter(codePath(code)).data.active == true;
+    }
+
+    // ------------------------- organization_membership_join_proofs
+
+    match /organization_membership_join_proofs/{proofId} {
+
+      allow get: if isSignedIn() && (
+        resource.data.uid == uid()
+        || isAdminOf(resource.data.organization_id)
+      );
+
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && hasExactly(['organization_id', 'uid', 'join_code_id', 'created_at'], [])
+        && proofId == request.resource.data.organization_id + '_' + request.resource.data.uid
+        && request.resource.data.uid == uid()
+        && isCodeShape(request.resource.data.join_code_id)
+        && request.resource.data.created_at == request.time
+        && exists(codePath(request.resource.data.join_code_id))
+        && get(codePath(request.resource.data.join_code_id)).data.active == true
+        && get(codePath(request.resource.data.join_code_id)).data.organization_id
+             == request.resource.data.organization_id
+        && existsAfter(membershipPath(request.resource.data.organization_id, uid()));
+
+      // A proof is a historical fact.
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------- default
+
     match /{document=**} {
       allow read, write: if false;
     }

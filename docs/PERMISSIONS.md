@@ -467,6 +467,25 @@ Rules evaluate each write in a batch independently. A batch is validated as a un
 Any value used as a path segment must first be shape-checked. A `join_code_id` is validated with
 `matches('^[A-HJ-NP-Z2-9]{16}$')` before it is interpolated into a `get()` path.
 
+### Running the suite
+
+```
+npm run test:rules
+```
+
+`firebase-tools` is a project-local devDependency; nothing is installed globally. The Firestore
+emulator it starts is a Java program, so **JDK 21 or newer is required** — `firebase-tools` refuses
+to start on anything older.
+
+The script asks macOS's `/usr/libexec/java_home -v 21+` for the newest installed JDK at or above
+21, and falls back to whatever `JAVA_HOME` already holds when that lookup is unavailable — on Linux,
+in CI, or on a machine with no JDK 21+ installed.
+
+The lookup comes first deliberately. A developer machine often has `JAVA_HOME` pointing at an older
+JDK for unrelated work, and honouring it would break this suite for a reason that has nothing to do
+with the rules. No absolute path is hardcoded, and nothing is installed globally. If no suitable
+runtime is found, `firebase-tools` reports the version problem directly.
+
 ### Rules test plan
 
 Tested with `@firebase/rules-unit-testing` against the Firestore emulator, in **Phase 2A, before
@@ -534,14 +553,30 @@ any Phase 2B interface work begins**.
 
 ### Directory query scale test
 
-The member directory rule calls `get()` per candidate document. Whether those calls collapse to one
-depends on Firestore caching identical paths across a query evaluation, which this project does not
-treat as settled. Run the directory query in the emulator against organizations holding **1, 5, 10,
-and 20 members**, as both Admin and non-Admin.
+The member directory rule calls `get()` per candidate document. Firebase documents that some
+document access calls are cached and that cached calls do not count against the access-call limit,
+but it does not promise caching across an entire query evaluation in every situation. This project
+therefore does **not** treat that behaviour as a guaranteed architecture invariant.
 
-If any size fails on the access-call limit, or the query and the rule turn out to be incompatible in
-some other way, **stop and report before building any interface on top of it.** Do not relax the
-rule, widen a `list` permission, or drop a required filter to make a query pass.
+The suite runs the directory query in the emulator against organizations holding **1, 5, 10, and 20
+members**, as both Admin and non-Admin.
+
+**Measured result.** All four sizes pass in the Firebase Emulator, for both roles, including the
+Admin variant that omits the `is_active` filter. The current implementation does not reproduce an
+access-call limit problem at any tested size.
+
+What that result does and does not establish:
+
+- It is sufficient evidence to proceed to Phase 2B.
+- It is **not** a guarantee. Caching remains an implementation behaviour, not a contract this design
+  is entitled to rely on, and the emulator is not production Firestore.
+- If `permission-denied` or a size-related failure appears against real Firestore, revisit the
+  member directory authorization structure — for example by restricting the directory to Admins and
+  denormalizing the display names that assignee pickers need.
+
+Whatever the outcome, do not relax the rule, widen a `list` permission, or drop a required query
+filter to make something pass. If a size fails, **stop and report before building any interface on
+top of it.**
 
 ## 11. Route Guards
 

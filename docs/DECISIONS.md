@@ -565,7 +565,15 @@ The Spark-only constraint in decision 0 stands unchanged.
 
 Risks R1 and R2 — whether Firestore caches identical document access calls across a query
 evaluation, and how the access-call budget is counted across a batched write — are **not treated as
-resolved**. Architecture correctness does not rest on either being favourable.
+guaranteed**. Architecture correctness does not rest on either being favourable.
+
+**Phase 2A outcome.** The emulator suite passes at 1, 5, 10, and 20 members for both Admin and
+non-Admin, and the four-document create batch commits within the access-call budget. That is enough
+evidence to proceed to Phase 2B. It is not a promise: Firebase documents that some access calls are
+cached and that cached calls do not count toward the limit, but it does not contract that behaviour
+across a whole query evaluation, and the emulator is not production Firestore. If real Firestore
+returns `permission-denied` or fails at scale, revisit the member directory authorization structure
+rather than weakening the rule.
 
 **Phase 2A — foundation, no interface**
 

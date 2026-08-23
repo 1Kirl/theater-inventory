@@ -17,6 +17,8 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Vitest configured
 - [ ] Zod configured for AI output validation
 - [ ] @firebase/rules-unit-testing configured
+- [ ] firebase-tools installed as a project-local devDependency, never globally
+- [ ] JDK 21 or newer available for the Firestore emulator
 - [ ] Spark plan only — no Cloud Functions, Admin SDK, or Cloud Run anywhere in the project
 - [ ] App Check deliberately excluded from the MVP
 - [ ] Environment/config handling documented

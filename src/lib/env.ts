@@ -2,7 +2,8 @@ import { z } from 'zod'
 
 /**
  * Firebase web config values are public by design and ship in the client bundle.
- * They are not secrets; access control lives in Security Rules and Cloud Functions.
+ * They are not secrets. Firestore Security Rules are the only authorization boundary; this
+ * project runs on the Spark plan and has no server code behind them.
  */
 const firebaseEnvSchema = z.object({
   VITE_FIREBASE_API_KEY: z.string().min(1),
