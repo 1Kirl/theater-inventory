@@ -18,6 +18,9 @@ export const paths = {
   // Authenticated, inside the application shell
   dashboard: '/',
   inventory: '/inventory',
+  inventoryNew: '/inventory/new',
+  inventoryItem: (itemId: string) => `/inventory/${itemId}`,
+  inventoryItemEdit: (itemId: string) => `/inventory/${itemId}/edit`,
   maintenance: '/maintenance',
   productions: '/productions',
   actionList: '/action-list',
@@ -27,4 +30,5 @@ export const paths = {
   account: '/account',
 } as const
 
-export type AppPath = (typeof paths)[keyof typeof paths]
+/** Static paths only; the inventory helpers above are functions. */
+export type AppPath = Extract<(typeof paths)[keyof typeof paths], string>

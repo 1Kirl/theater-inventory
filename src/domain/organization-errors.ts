@@ -14,6 +14,7 @@ export type OrganizationErrorCode =
   | 'cannot-deactivate-admin'
   | 'invalid-organization-name'
   | 'invalid-team-name'
+  | 'invalid-inventory-item'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

@@ -424,6 +424,145 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // -------------------------------------------------------- inventory_items
+
+    // Team scope is an editing boundary, not a reading one. The product exists
+    // to answer what the organization owns, and an answer limited to one crew's
+    // own team would not be an answer. What team scope protects is authorship.
+
+    function membershipData(organizationId) {
+      return get(membershipPath(organizationId, uid())).data;
+    }
+
+    function inventoryLevel(organizationId) {
+      return membershipData(organizationId).permissions.inventory;
+    }
+
+    function canViewInventory(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && inventoryLevel(organizationId) in ['view', 'edit'])
+      );
+    }
+
+    // Writing needs the module permission and the record's team. Admin skips the
+    // team check; a member is held to their own teams, on both the team the item
+    // has now and the team they are moving it to.
+    function canWriteInventoryForTeam(organizationId, teamId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && inventoryLevel(organizationId) == 'edit'
+            && teamId in membershipData(organizationId).team_ids)
+      );
+    }
+
+    // team_id is required, and the team has to be one of this organization's.
+    // Without this an item could name a team from somewhere else and land
+    // outside every crew's reach.
+    function teamBelongsToOrganization(organizationId, teamId) {
+      return teamId is string
+        && teamId.size() > 0
+        && exists(/databases/$(database)/documents/teams/$(teamId))
+        && get(/databases/$(database)/documents/teams/$(teamId)).data.organization_id
+             == organizationId;
+    }
+
+    function isCount(value) {
+      return value is int && value >= 0;
+    }
+
+    // The twelve MVP categories from PROJECT_SPEC section 7.4. Free text would
+    // defeat the category filter this list exists to serve, so anything outside
+    // it is rejected rather than quietly stored. Kept in step with
+    // INVENTORY_CATEGORIES in src/types/inventory.ts.
+    function isAllowedCategory(category) {
+      return category in [
+        'Lighting Instruments',
+        'Cables',
+        'Lighting Accessories',
+        'Sound Equipment',
+        'Microphones',
+        'Tools',
+        'Set-Building Materials',
+        'Platforms / Flats',
+        'Props',
+        'Costumes',
+        'Hardware',
+        'Miscellaneous Technical Equipment'
+      ];
+    }
+
+    function conditionCountsValid(counts, quantityTotal) {
+      return counts.keys().hasOnly(['excellent', 'good', 'fair', 'needs_repair', 'unusable'])
+        && counts.keys().hasAll(['excellent', 'good', 'fair', 'needs_repair', 'unusable'])
+        && isCount(counts.excellent)
+        && isCount(counts.good)
+        && isCount(counts.fair)
+        && isCount(counts.needs_repair)
+        && isCount(counts.unusable)
+        && counts.excellent + counts.good + counts.fair + counts.needs_repair + counts.unusable
+             <= quantityTotal;
+    }
+
+    function inventoryFieldsValid(itemId) {
+      return hasExactly(
+               ['item_id', 'organization_id', 'name', 'category', 'team_id', 'quantity_total',
+                'quantity_available', 'condition_counts', 'location', 'created_by_uid',
+                'created_at', 'updated_at'],
+               ['last_inspected_at', 'notes'])
+        && request.resource.data.item_id == itemId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.category is string
+        && isAllowedCategory(request.resource.data.category)
+        && request.resource.data.location is string
+        && request.resource.data.location.size() > 0
+        && request.resource.data.location.size() <= 120
+        && isCount(request.resource.data.quantity_total)
+        && isCount(request.resource.data.quantity_available)
+        && request.resource.data.quantity_available <= request.resource.data.quantity_total
+        && conditionCountsValid(request.resource.data.condition_counts,
+                                request.resource.data.quantity_total)
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && (!('last_inspected_at' in request.resource.data)
+            || request.resource.data.last_inspected_at is timestamp)
+        && request.resource.data.updated_at == request.time
+        && teamBelongsToOrganization(request.resource.data.organization_id,
+                                     request.resource.data.team_id);
+    }
+
+    match /inventory_items/{itemId} {
+
+      // Organization-wide read for anyone with the module, Admin included.
+      allow get, list: if canViewInventory(resource.data.organization_id);
+
+      allow create: if inventoryFieldsValid(itemId)
+        && canWriteInventoryForTeam(request.resource.data.organization_id,
+                                    request.resource.data.team_id)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if inventoryFieldsValid(itemId)
+        // Identity, organization, and authorship never change.
+        && request.resource.data.item_id == resource.data.item_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        // Editable as it stands, and editable where it is going.
+        && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
+        && canWriteInventoryForTeam(resource.data.organization_id,
+                                    request.resource.data.team_id);
+
+      // No delete flow in the MVP. Maintenance history and, from Phase 5,
+      // production requirements reference these items.
+      allow delete: if false;
+    }
+
     // ---------------------------------------------------------------- default
 
     match /{document=**} {

@@ -106,6 +106,66 @@ export async function seedOrganization(
   })
 }
 
+export const TEAM_LIGHTING = 'teamLIGHTINGAAAAAAAA'
+export const TEAM_COSTUME = 'teamCOSTUMEBBBBBBBBB'
+export const TEAM_OTHER_ORG = 'teamOTHERORGCCCCCCCC'
+
+export const VIEW_INVENTORY = {
+  inventory: 'view',
+  maintenance: 'none',
+  productions: 'none',
+  calendar: 'none',
+} as const
+
+export const EDIT_INVENTORY = {
+  inventory: 'edit',
+  maintenance: 'none',
+  productions: 'none',
+  calendar: 'none',
+} as const
+
+/** Seeds teams so inventory rules can verify a team belongs to the organization. */
+export async function seedTeam(
+  environment: RulesTestEnvironment,
+  options: { teamId: string; organizationId: string; name?: string },
+): Promise<void> {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore() as unknown as Firestore
+    await setDoc(doc(db, 'teams', options.teamId), {
+      team_id: options.teamId,
+      organization_id: options.organizationId,
+      name: options.name ?? 'Team',
+      created_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    })
+  })
+}
+
+/** Sets one membership's teams and permissions directly, bypassing rules. */
+export async function seedMembership(
+  environment: RulesTestEnvironment,
+  options: {
+    organizationId: string
+    uid: string
+    teamIds?: string[]
+    permissions?: Record<string, string>
+    isActive?: boolean
+  },
+): Promise<void> {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore() as unknown as Firestore
+    await setDoc(doc(db, 'organization_memberships', membershipId(options.organizationId, options.uid)), {
+      organization_id: options.organizationId,
+      uid: options.uid,
+      team_ids: options.teamIds ?? [],
+      permissions: options.permissions ?? NO_PERMISSIONS,
+      is_active: options.isActive !== false,
+      joined_at: serverTimestamp(),
+      updated_at: serverTimestamp(),
+    })
+  })
+}
+
 export function newMembership(organizationId: string, uid: string) {
   return {
     organization_id: organizationId,

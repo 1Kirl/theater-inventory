@@ -181,20 +181,21 @@ Users with permission can:
 - view linked repair history,
 - view linked production requirements.
 
-Inventory categories may include:
+Inventory categories — the MVP set. These twelve values are the complete allowed list, not
+examples, and Security Rules reject anything else:
 
-- lighting instruments,
-- cables,
-- lighting accessories,
-- sound equipment,
-- microphones,
-- tools,
-- set-building materials,
-- platforms / flats,
-- props,
-- costumes,
-- hardware,
-- miscellaneous technical equipment.
+- Lighting Instruments
+- Cables
+- Lighting Accessories
+- Sound Equipment
+- Microphones
+- Tools
+- Set-Building Materials
+- Platforms / Flats
+- Props
+- Costumes
+- Hardware
+- Miscellaneous Technical Equipment
 
 Condition categories:
 

@@ -177,8 +177,17 @@ MVP rules:
   user's assigned teams.
 - `edit` permission on an organization-level collection allows editing any record of that module
   inside the organization.
-- A team-scoped record with no team assigned is editable by Admin only.
 - Admin can view and edit everything in the active organization, across all teams.
+
+**Team scope is an editing boundary, not a reading one.** The product exists to answer "what
+equipment and materials do we own?", and an answer limited to one's own team would not be an
+answer. A stage manager planning a production has to see lighting and costume stock to plan
+against it, and from Phase 5 production requirements link to inventory items across every team.
+What team scope prevents is one crew quietly changing another crew's records.
+
+Team-scoped records carry a required team. Inventory items must name a team in the same
+organization, so the question of who may edit an unowned record does not arise; an organization
+that keeps shared equipment creates a team for it.
 
 This keeps the permission model understandable while preventing one technical team from casually editing another team's records.
 
@@ -377,6 +386,8 @@ Collection-specific requirements:
 | `organization_join_codes` | any signed-in user | denied | path A batch, or Admin of an existing org | Admin, revocation only | denied |
 | `organization_admin_settings` | Admin | denied | path A batch only | Admin | denied |
 | `organization_membership_join_proofs` | self or Admin | denied | valid join batch | denied | denied |
+| `teams` | active member | active member, own organization | Admin | Admin, name and description | denied |
+| `inventory_items` | Admin, or member with `inventory` view/edit | same, own organization | Admin any team, member `edit` own teams | same, and may not move an item outside their teams | denied |
 
 ### Two creation paths
 

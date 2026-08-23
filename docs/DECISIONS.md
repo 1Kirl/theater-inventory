@@ -596,6 +596,61 @@ access-call limit, or a query and its rule turn out to be incompatible, stop and
 building any interface on top of it. Do not relax a rule, widen a `list` permission, or drop a
 required query filter to make something pass.
 
+## 40. Inventory Team Scope Is an Editing Boundary
+
+Reading and editing are scoped differently, and deliberately so.
+
+| Effective role | Read | Create / update |
+|---|---|---|
+| Admin | every item in the organization | every item, any team |
+| `inventory: edit` | every item in the organization | only items whose team is one of theirs |
+| `inventory: view` | every item in the organization | nothing |
+| `inventory: none` | nothing | nothing |
+
+The product's first question is "what equipment and materials do we own?", and an answer limited
+to the reader's own team would not be an answer. A stage manager on one team has to see lighting
+and costume stock to plan against it, and from Phase 5 production requirements link to inventory
+items across every team — a team-scoped read would make those links impossible to create.
+
+What team scope protects is authorship: one crew cannot quietly change another crew's records.
+That property is fully delivered by scoping writes alone.
+
+Consequences for the implementation:
+
+- The member list query and the Admin list query are the same:
+  `where('organization_id', '==', activeOrganizationId)`. No `in` filter on teams, no composite
+  index, and no exposure to the 30-value limit on `in`.
+- `PermissionGuard` decides module access only. Team scope is enforced in the write rules and
+  mirrored in the interface, which hides edit controls on other teams' items.
+
+## 41. Inventory Items Require a Team
+
+`inventory_items.team_id` is required, not optional.
+
+An item with no owning team would be editable by nobody but the Admin, which makes it useless to
+the crew that actually handles it. Creating an item requires choosing a team that exists in the
+same organization, and Security Rules verify both.
+
+An organization holding shared equipment creates a team for it — General, or Shared Equipment —
+rather than leaving the field empty. No nullable or team-less inventory model is added for that
+case in the MVP.
+
+## 42. Inventory Category Uses a Fixed Set
+
+`inventory_items.category` is one of the twelve MVP categories in `PROJECT_SPEC.md` section 7.4:
+
+Lighting Instruments · Cables · Lighting Accessories · Sound Equipment · Microphones · Tools ·
+Set-Building Materials · Platforms / Flats · Props · Costumes · Hardware ·
+Miscellaneous Technical Equipment
+
+Free text would defeat the category filter it exists to serve: two people typing "Lighting" and
+"lighting instruments" for the same shelf split the inventory in a way no filter can rejoin.
+
+The list is held in three places and they must agree: `PROJECT_SPEC.md` section 7.4,
+`INVENTORY_CATEGORIES` in the application, and the Security Rules that reject anything else.
+Adding a category later means editing all three; because Rules only compare against the list,
+no migration of existing documents is involved.
+
 ---
 
 ## IA v3 ↔ /docs Conflict Resolutions

@@ -103,7 +103,8 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Condition summary derived, not stored, with an Unclassified remainder
 - [ ] Available quantity manually maintained and never auto-adjusted
 - [ ] Organization scope enforced
-- [ ] Team edit scope enforced
+- [ ] Team edit scope enforced — reading stays organization-wide
+- [ ] team_id required and validated against the organization's teams
 
 ### AI Smart Search — REQUIRED AI FEATURE
 

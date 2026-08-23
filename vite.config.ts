@@ -15,6 +15,6 @@ export default defineConfig({
     // Domain logic arrives in Phase 4; the runner is configured now so later
     // phases can add tests without touching build configuration.
     passWithNoTests: true,
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/unit/**/*.test.ts'],
   },
 })

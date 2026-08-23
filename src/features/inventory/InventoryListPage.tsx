@@ -1,0 +1,293 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { Plus, Search } from 'lucide-react'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useOrganization } from '@/features/organizations/useOrganization'
+import { hasModuleAccess } from '@/domain/module-access'
+import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
+import {
+  EMPTY_FILTERS,
+  conditionSummaryLabel,
+  conditionTone,
+  filterInventoryItems,
+  teamNameOf,
+  type InventoryFilters,
+} from '@/features/inventory/inventory-view'
+import { listInventoryItems } from '@/services/inventory-service'
+import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
+import { INVENTORY_CATEGORIES, type InventoryItem } from '@/types/inventory'
+import { paths } from '@/routes/paths'
+
+function ConditionBadge({ item }: { item: InventoryItem }) {
+  const tone = conditionTone(item)
+  return (
+    <Badge
+      variant={tone === 'destructive' ? 'destructive' : tone === 'neutral' ? 'secondary' : 'outline'}
+    >
+      {conditionSummaryLabel(item)}
+    </Badge>
+  )
+}
+
+function formatDate(item: InventoryItem): string {
+  const stamp = item.last_inspected_at
+  if (!stamp) return 'Never'
+  return stamp.toDate().toLocaleDateString()
+}
+
+export function InventoryListPage() {
+  const navigate = useNavigate()
+  const { organization, membership, role, teams } = useOrganization()
+  const organizationId = organization?.organization_id ?? null
+
+  const [items, setItems] = useState<InventoryItem[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [filters, setFilters] = useState<InventoryFilters>(EMPTY_FILTERS)
+
+  const canCreate = hasModuleAccess(role, membership?.permissions ?? null, 'inventory', 'edit')
+
+  const load = useCallback(async () => {
+    if (!organizationId) return
+    setError(null)
+    try {
+      setItems(await listInventoryItems(organizationId))
+    } catch (caught) {
+      setError(toOrganizationErrorMessage(caught))
+      setItems([])
+    }
+  }, [organizationId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const visible = useMemo(
+    () => (items ? filterInventoryItems(items, filters, teams) : []),
+    [items, filters, teams],
+  )
+
+  function setFilter<K extends keyof InventoryFilters>(key: K, value: InventoryFilters[K]) {
+    setFilters((current) => ({ ...current, [key]: value }))
+  }
+
+  const filtersActive = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS)
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Inventory</h1>
+          <p className="text-muted-foreground text-sm">
+            Everything this organization owns. Editing is limited to your own teams.
+          </p>
+        </div>
+        {canCreate ? (
+          <Button asChild size="sm">
+            <Link to={paths.inventoryNew}>
+              <Plus className="size-4" aria-hidden="true" />
+              Add item
+            </Link>
+          </Button>
+        ) : null}
+      </div>
+
+      <Card>
+        <CardContent className="space-y-3 pt-6">
+          <div className="relative">
+            <Search
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden="true"
+            />
+            <Input
+              value={filters.text}
+              onChange={(event) => setFilter('text', event.target.value)}
+              placeholder="Search name, category, location, notes"
+              className="pl-9"
+              aria-label="Search inventory"
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Category</Label>
+              <Select value={filters.category} onValueChange={(value) => setFilter('category', value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {INVENTORY_CATEGORIES.map((category) => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Team</Label>
+              <Select value={filters.teamId} onValueChange={(value) => setFilter('teamId', value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All teams</SelectItem>
+                  {teams.map((team) => (
+                    <SelectItem key={team.team_id} value={team.team_id}>{team.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Condition</Label>
+              <Select value={filters.condition} onValueChange={(value) => setFilter('condition', value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any condition</SelectItem>
+                  {CONDITION_KEYS.map((key) => (
+                    <SelectItem key={key} value={key}>{CONDITION_LABELS[key]}</SelectItem>
+                  ))}
+                  <SelectItem value="unclassified">Unclassified</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Availability</Label>
+              <Select
+                value={filters.availability}
+                onValueChange={(value) => setFilter('availability', value)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any availability</SelectItem>
+                  <SelectItem value="available">Some available</SelectItem>
+                  <SelectItem value="unavailable">None available</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {filtersActive ? (
+            <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
+              Clear filters
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {error ? (
+        <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
+      ) : null}
+
+      {items === null ? (
+        <p className="text-muted-foreground text-sm">Loading inventory…</p>
+      ) : items.length === 0 ? (
+        <Card>
+          <CardContent className="space-y-3 pt-6">
+            <p className="text-sm font-medium">No inventory items have been added yet.</p>
+            <p className="text-muted-foreground text-sm">
+              {canCreate
+                ? 'Add your first item to start tracking what the organization owns.'
+                : 'Someone with edit access can add the first item.'}
+            </p>
+            {canCreate ? (
+              <Button asChild size="sm"><Link to={paths.inventoryNew}>Add item</Link></Button>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : visible.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-sm">
+              No items match these filters. Try clearing them.
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Desktop: a table, because comparing quantities across rows is the point. */}
+          <div className="hidden overflow-x-auto md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Team</TableHead>
+                  <TableHead className="text-right">Available</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Condition</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Last inspected</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((item) => (
+                  <TableRow
+                    key={item.item_id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(paths.inventoryItem(item.item_id))}
+                  >
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.category}</TableCell>
+                    <TableCell className="text-muted-foreground">{teamNameOf(item, teams)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{item.quantity_available}</TableCell>
+                    <TableCell className="text-right tabular-nums">{item.quantity_total}</TableCell>
+                    <TableCell><ConditionBadge item={item} /></TableCell>
+                    <TableCell className="text-muted-foreground">{item.location}</TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(item)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Mobile: cards, showing what a technician checks first. */}
+          <ul className="space-y-3 md:hidden">
+            {visible.map((item) => (
+              <li key={item.item_id}>
+                <Link to={paths.inventoryItem(item.item_id)} className="block">
+                  <Card>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 flex-1 font-medium">{item.name}</span>
+                        <ConditionBadge item={item} />
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {item.category} · {teamNameOf(item, teams)}
+                      </p>
+                      <p className="text-sm tabular-nums">
+                        {item.quantity_available} of {item.quantity_total} available
+                      </p>
+                      <p className="text-muted-foreground text-xs">{item.location}</p>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-muted-foreground text-xs">
+            {visible.length} of {items.length} item{items.length === 1 ? '' : 's'}
+          </p>
+        </>
+      )}
+    </div>
+  )
+}

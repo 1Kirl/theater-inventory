@@ -10,18 +10,20 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { paths } from '@/routes/paths'
+import type { PermissionModule } from '@/types/organization'
 
 export interface NavItem {
   label: string
   path: string
   icon: LucideIcon
-  /** Admin-only items are marked here; permission gating arrives in Phase 3. */
   adminOnly: boolean
+  /** Hidden unless the user can view this module. Absent means always shown. */
+  module?: PermissionModule
 }
 
 export const navItems: readonly NavItem[] = [
   { label: 'Dashboard', path: paths.dashboard, icon: LayoutDashboard, adminOnly: false },
-  { label: 'Inventory', path: paths.inventory, icon: Package, adminOnly: false },
+  { label: 'Inventory', path: paths.inventory, icon: Package, adminOnly: false, module: 'inventory' },
   { label: 'Maintenance', path: paths.maintenance, icon: Wrench, adminOnly: false },
   { label: 'Productions', path: paths.productions, icon: Theater, adminOnly: false },
   { label: 'Action List', path: paths.actionList, icon: ClipboardList, adminOnly: false },

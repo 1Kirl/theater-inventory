@@ -8,7 +8,10 @@ import { CreateOrganizationPage } from '@/features/organizations/CreateOrganizat
 import { JoinOrganizationPage } from '@/features/organizations/JoinOrganizationPage'
 import { OrganizationSelectionPage } from '@/features/organizations/OrganizationSelectionPage'
 import { OrganizationSettingsPage } from '@/features/organizations/settings/OrganizationSettingsPage'
-import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard } from '@/routes/guards'
+import { InventoryItemDetailPage } from '@/features/inventory/InventoryItemDetailPage'
+import { InventoryItemFormPage } from '@/features/inventory/InventoryItemFormPage'
+import { InventoryListPage } from '@/features/inventory/InventoryListPage'
+import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
 import { DashboardPlaceholder } from '@/routes/DashboardPlaceholder'
 import { NotFound } from '@/routes/NotFound'
 import { PlaceholderPage } from '@/routes/PlaceholderPage'
@@ -51,8 +54,21 @@ export const router = createBrowserRouter([
               { index: true, element: <DashboardPlaceholder /> },
               { path: paths.account, element: <AccountPage /> },
               {
-                path: paths.inventory,
-                element: <PlaceholderPage title="Inventory" phase="Phase 3" />,
+                element: <PermissionGuard module="inventory" level="view" />,
+                children: [
+                  { path: paths.inventory, element: <InventoryListPage /> },
+                  {
+                    element: <PermissionGuard module="inventory" level="edit" />,
+                    children: [
+                      { path: paths.inventoryNew, element: <InventoryItemFormPage mode="create" /> },
+                      {
+                        path: '/inventory/:itemId/edit',
+                        element: <InventoryItemFormPage mode="edit" />,
+                      },
+                    ],
+                  },
+                  { path: '/inventory/:itemId', element: <InventoryItemDetailPage /> },
+                ],
               },
               {
                 path: paths.maintenance,

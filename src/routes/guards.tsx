@@ -3,7 +3,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useAuth } from '@/features/auth/useAuth'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { UnassignedPage } from '@/features/organizations/UnassignedPage'
+import { hasModuleAccess, type RequiredLevel } from '@/domain/module-access'
 import { paths } from '@/routes/paths'
+import type { PermissionModule } from '@/types/organization'
 
 function FullPageMessage({ children }: { children: React.ReactNode }) {
   return (
@@ -75,6 +77,47 @@ export function OrganizationGuard() {
 
   if (role === 'unassigned') {
     return <UnassignedPage />
+  }
+
+  return <Outlet />
+}
+
+/**
+ * Requires a module permission. Nests inside OrganizationGuard, so an
+ * Unassigned member never reaches it.
+ *
+ * This decides module access only. Team scope is a separate axis, applied to
+ * individual records by the services, the interface, and — authoritatively —
+ * Security Rules.
+ */
+export function PermissionGuard({
+  module,
+  level,
+}: {
+  module: PermissionModule
+  level: RequiredLevel
+}) {
+  const { loading, organization, role, membership } = useOrganization()
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  if (!organization) {
+    return <Navigate to={paths.organizations} replace />
+  }
+
+  if (!hasModuleAccess(role, membership?.permissions ?? null, module, level)) {
+    return (
+      <FullPageMessage>
+        <Alert variant="destructive">
+          <AlertTitle>No access to this module</AlertTitle>
+          <AlertDescription>
+            Your Admin has not given you access here. Ask them if you need it.
+          </AlertDescription>
+        </Alert>
+      </FullPageMessage>
+    )
   }
 
   return <Outlet />

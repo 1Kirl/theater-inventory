@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { navItems } from '@/components/layout/nav-items'
+import { hasModuleAccess } from '@/domain/module-access'
+import { useOrganization } from '@/features/organizations/useOrganization'
 
 interface SidebarNavProps {
   onNavigate?: (() => void) | undefined
@@ -8,9 +10,17 @@ interface SidebarNavProps {
 }
 
 export function SidebarNav({ onNavigate, isAdmin = false }: SidebarNavProps) {
-  // Admin-only entries are hidden rather than shown disabled. Hiding is a
-  // convenience; AdminGuard and Security Rules are what actually stop access.
-  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin)
+  const { role, membership } = useOrganization()
+
+  // Entries are hidden rather than shown disabled. Hiding is a convenience;
+  // the guards and Security Rules are what actually stop access.
+  const visibleItems = navItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false
+    if (item.module) {
+      return hasModuleAccess(role, membership?.permissions ?? null, item.module, 'view')
+    }
+    return true
+  })
 
   return (
     <nav className="flex flex-col gap-1" aria-label="Main">

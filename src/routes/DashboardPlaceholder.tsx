@@ -43,14 +43,19 @@ export function DashboardPlaceholder() {
         </CardHeader>
         <CardContent>
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            {PERMISSION_MODULES.map((module) => (
-              <div key={module}>
-                <dt className="text-muted-foreground">{MODULE_LABELS[module]}</dt>
-                <dd className="font-medium">
-                  {isAdmin ? 'Full access' : PERMISSION_LABELS[membership?.permissions[module] ?? 'none']}
-                </dd>
-              </div>
-            ))}
+            {PERMISSION_MODULES.map((module) => {
+              const level = membership?.permissions[module] ?? 'none'
+              // A module the user has no access to is listed as such, and never
+              // carries data from it.
+              return (
+                <div key={module}>
+                  <dt className="text-muted-foreground">{MODULE_LABELS[module]}</dt>
+                  <dd className="font-medium">
+                    {isAdmin ? 'Full access' : PERMISSION_LABELS[level]}
+                  </dd>
+                </div>
+              )
+            })}
           </dl>
         </CardContent>
       </Card>

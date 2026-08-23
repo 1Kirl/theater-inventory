@@ -397,8 +397,9 @@ interface InventoryItem {
   item_id: string;
   organization_id: string;
   name: string;
+  /** One of the twelve MVP categories in PROJECT_SPEC section 7.4. */
   category: string;
-  team_id?: string;
+  team_id: string;            // required — every item has an owning team
   quantity_total: number;
   quantity_available: number;
   condition_counts: ConditionCounts;
@@ -416,7 +417,19 @@ Validation:
 
 - all quantities are non-negative integers,
 - `quantity_available <= quantity_total`,
-- sum of condition counts must not exceed `quantity_total`.
+- sum of condition counts must not exceed `quantity_total`,
+- `team_id` is required and must name a team in the same organization,
+- `category` must be one of the twelve MVP categories listed in `PROJECT_SPEC.md` section 7.4.
+
+`category` is a fixed set rather than free text. The category filter needs a stable list to offer,
+and two people typing "Lighting" and "lighting instruments" for the same shelf would split the
+inventory in a way no filter could put back together. Security Rules hold the same list, so an
+unsupported value is rejected rather than quietly stored.
+
+`team_id` is **required**. An item with no owning team would be editable by nobody but the Admin,
+which makes it useless to the crew that actually handles it. An organization that keeps shared
+equipment creates a team for it — General or Shared Equipment — rather than leaving the field
+empty. There is no team-less inventory model in the MVP.
 
 `quantity_available` is a **manually maintained authoritative value**. No other feature writes to
 it. In particular, creating or returning a maintenance record does not change it automatically;
