@@ -10,7 +10,13 @@ import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS, membershipId } from '@/domain/organization-ids'
 import { generateJoinCode } from '@/domain/join-code'
 import { OrganizationError } from '@/domain/organization-errors'
-import { EMPTY_PERMISSIONS, type Organization } from '@/types/organization'
+import {
+  buildAdminSettingsDocument,
+  buildJoinCodeDocument,
+  buildMembershipDocument,
+  buildOrganizationDocument,
+} from '@/domain/organization-payloads'
+import type { Organization } from '@/types/organization'
 
 const MAX_ORGANIZATION_NAME_LENGTH = 100
 
@@ -63,39 +69,31 @@ export async function createOrganization(params: {
 
   const batch = writeBatch(db)
 
-  batch.set(organizationRef, {
-    organization_id: organizationId,
-    name,
-    ...(params.description?.trim() ? { description: params.description.trim() } : {}),
-    admin_uid: uid,
-    created_by_uid: uid,
-    created_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-  })
+  batch.set(
+    organizationRef,
+    buildOrganizationDocument({
+      organizationId,
+      name,
+      description: params.description,
+      uid,
+      now: serverTimestamp,
+    }),
+  )
 
-  batch.set(doc(db, COLLECTIONS.memberships, membershipId(organizationId, uid)), {
-    organization_id: organizationId,
-    uid,
-    team_ids: [],
-    permissions: EMPTY_PERMISSIONS,
-    is_active: true,
-    joined_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-  })
+  batch.set(
+    doc(db, COLLECTIONS.memberships, membershipId(organizationId, uid)),
+    buildMembershipDocument({ organizationId, uid, now: serverTimestamp }),
+  )
 
-  batch.set(doc(db, COLLECTIONS.joinCodes, joinCode), {
-    organization_id: organizationId,
-    organization_name_snapshot: name,
-    active: true,
-    created_by_uid: uid,
-    created_at: serverTimestamp(),
-  })
+  batch.set(
+    doc(db, COLLECTIONS.joinCodes, joinCode),
+    buildJoinCodeDocument({ organizationId, organizationName: name, uid, now: serverTimestamp }),
+  )
 
-  batch.set(doc(db, COLLECTIONS.adminSettings, organizationId), {
-    organization_id: organizationId,
-    current_join_code_id: joinCode,
-    updated_at: serverTimestamp(),
-  })
+  batch.set(
+    doc(db, COLLECTIONS.adminSettings, organizationId),
+    buildAdminSettingsDocument({ organizationId, joinCode, now: serverTimestamp }),
+  )
 
   await batch.commit()
 

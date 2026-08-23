@@ -1,12 +1,24 @@
-import { doc, getDoc, runTransaction, serverTimestamp, writeBatch } from 'firebase/firestore'
+import {
+  doc,
+  getDoc,
+  runTransaction,
+  serverTimestamp,
+  writeBatch,
+  type DocumentReference,
+} from 'firebase/firestore'
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS, joinProofId, membershipId } from '@/domain/organization-ids'
 import { generateJoinCode, isValidJoinCode, normalizeJoinCode } from '@/domain/join-code'
 import { OrganizationError } from '@/domain/organization-errors'
 import {
-  EMPTY_PERMISSIONS,
-  type OrganizationAdminSettings,
-  type OrganizationJoinCode,
+  buildJoinCodeDocument,
+  buildJoinProofDocument,
+  buildMembershipDocument,
+} from '@/domain/organization-payloads'
+import type {
+  OrganizationAdminSettings,
+  OrganizationJoinCode,
+  OrganizationMembership,
 } from '@/types/organization'
 
 function requireUid(): string {
@@ -84,9 +96,9 @@ export async function joinOrganization(rawCode: string): Promise<{ organizationI
     membershipId(inspection.organizationId, uid),
   )
 
-  const existing = await getDoc(membershipRef)
-  if (existing.exists()) {
-    throw existing.data().is_active === true
+  const existing = await readOwnMembership(membershipRef)
+  if (existing) {
+    throw existing.is_active
       ? new OrganizationError('already-a-member', 'You already belong to this organization.')
       : new OrganizationError(
           'membership-deactivated',
@@ -96,29 +108,52 @@ export async function joinOrganization(rawCode: string): Promise<{ organizationI
 
   const batch = writeBatch(db)
 
-  batch.set(membershipRef, {
-    organization_id: inspection.organizationId,
-    uid,
-    team_ids: [],
-    permissions: EMPTY_PERMISSIONS,
-    is_active: true,
-    joined_at: serverTimestamp(),
-    updated_at: serverTimestamp(),
-  })
+  batch.set(
+    membershipRef,
+    buildMembershipDocument({
+      organizationId: inspection.organizationId,
+      uid,
+      now: serverTimestamp,
+    }),
+  )
 
   batch.set(
     doc(db, COLLECTIONS.joinProofs, joinProofId(inspection.organizationId, uid)),
-    {
-      organization_id: inspection.organizationId,
+    buildJoinProofDocument({
+      organizationId: inspection.organizationId,
       uid,
-      join_code_id: inspection.code,
-      created_at: serverTimestamp(),
-    },
+      joinCode: inspection.code,
+      now: serverTimestamp,
+    }),
   )
 
   await batch.commit()
 
   return { organizationId: inspection.organizationId }
+}
+
+/**
+ * Read the caller's own membership, treating a denied read as "no membership".
+ *
+ * Security Rules evaluate `resource.data.uid` to authorize this read, and for a
+ * document that does not exist yet `resource` is null, so the expression errors
+ * and the read comes back permission-denied rather than empty. That is exactly
+ * the case a first-time joiner is in.
+ *
+ * Both outcomes mean the same thing here, because the document ID contains the
+ * caller's uid: if the membership exists it is theirs and the read succeeds, and
+ * if the read is refused there is nothing to read. Proceeding lets the batch —
+ * and the Rules that validate it — decide, which is where that decision belongs.
+ */
+async function readOwnMembership(
+  membershipRef: DocumentReference,
+): Promise<OrganizationMembership | null> {
+  try {
+    const snapshot = await getDoc(membershipRef)
+    return snapshot.exists() ? (snapshot.data() as OrganizationMembership) : null
+  } catch {
+    return null
+  }
 }
 
 export async function getCurrentJoinCode(organizationId: string): Promise<string | null> {
@@ -156,13 +191,15 @@ export async function regenerateJoinCode(organizationId: string): Promise<{ join
     const settings = settingsSnapshot.data() as OrganizationAdminSettings
     const organizationName = organizationSnapshot.data().name as string
 
-    transaction.set(doc(db, COLLECTIONS.joinCodes, newCode), {
-      organization_id: organizationId,
-      organization_name_snapshot: organizationName,
-      active: true,
-      created_by_uid: requireUid(),
-      created_at: serverTimestamp(),
-    })
+    transaction.set(
+      doc(db, COLLECTIONS.joinCodes, newCode),
+      buildJoinCodeDocument({
+        organizationId,
+        organizationName,
+        uid: requireUid(),
+        now: serverTimestamp,
+      }),
+    )
 
     transaction.update(doc(db, COLLECTIONS.joinCodes, settings.current_join_code_id), {
       active: false,

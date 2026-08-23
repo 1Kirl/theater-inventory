@@ -55,6 +55,16 @@ export interface OrganizationJoinCode {
   revoked_at?: Timestamp
 }
 
+/** Path: teams/{teamId} — organization-level, not scoped to a member. */
+export interface TheaterTeam {
+  team_id: string
+  organization_id: string
+  name: string
+  description?: string
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
 /** Path: organization_admin_settings/{organizationId} — Admin-only. */
 export interface OrganizationAdminSettings {
   organization_id: string

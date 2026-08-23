@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { AuthProvider } from '@/features/auth/AuthProvider'
+import { OrganizationProvider } from '@/features/organizations/OrganizationProvider'
 import { router } from '@/routes/router'
 import '@/index.css'
 
@@ -13,7 +14,9 @@ if (!rootElement) {
 createRoot(rootElement).render(
   <StrictMode>
     <AuthProvider>
-      <RouterProvider router={router} />
+      <OrganizationProvider>
+        <RouterProvider router={router} />
+      </OrganizationProvider>
     </AuthProvider>
   </StrictMode>,
 )

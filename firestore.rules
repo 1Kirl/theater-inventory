@@ -393,6 +393,37 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ------------------------------------------------------------------ teams
+
+    match /teams/{teamId} {
+
+      // Every member reads teams: names appear on membership badges and in the
+      // assignment interface. Teams are organization-level, so membership alone
+      // grants the read.
+      allow get, list: if isActiveMemberOf(resource.data.organization_id);
+
+      allow create: if isAdminOf(request.resource.data.organization_id)
+        && hasExactly(['team_id', 'organization_id', 'name', 'created_at', 'updated_at'],
+                      ['description'])
+        && request.resource.data.team_id == teamId
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.created_at == request.time
+        && request.resource.data.updated_at == request.time;
+
+      allow update: if isAdminOf(resource.data.organization_id)
+        && changedOnly(['name', 'description', 'updated_at'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 60
+        && request.resource.data.updated_at == request.time;
+
+      // No hard delete in the MVP: membership.team_ids and, from Phase 3,
+      // inventory and maintenance records would be left pointing at nothing.
+      allow delete: if false;
+    }
+
     // ---------------------------------------------------------------- default
 
     match /{document=**} {

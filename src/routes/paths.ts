@@ -12,6 +12,8 @@ export const paths = {
 
   // Authenticated, before an organization is chosen
   organizations: '/organizations',
+  createOrganization: '/organizations/create',
+  joinOrganization: '/organizations/join',
 
   // Authenticated, inside the application shell
   dashboard: '/',

@@ -13,6 +13,7 @@ export type OrganizationErrorCode =
   | 'already-admin'
   | 'cannot-deactivate-admin'
   | 'invalid-organization-name'
+  | 'invalid-team-name'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

@@ -3,13 +3,18 @@ import { cn } from '@/lib/utils'
 import { navItems } from '@/components/layout/nav-items'
 
 interface SidebarNavProps {
-  onNavigate?: () => void
+  onNavigate?: (() => void) | undefined
+  isAdmin?: boolean | undefined
 }
 
-export function SidebarNav({ onNavigate }: SidebarNavProps) {
+export function SidebarNav({ onNavigate, isAdmin = false }: SidebarNavProps) {
+  // Admin-only entries are hidden rather than shown disabled. Hiding is a
+  // convenience; AdminGuard and Security Rules are what actually stop access.
+  const visibleItems = navItems.filter((item) => !item.adminOnly || isAdmin)
+
   return (
     <nav className="flex flex-col gap-1" aria-label="Main">
-      {navItems.map((item) => {
+      {visibleItems.map((item) => {
         const Icon = item.icon
         return (
           <NavLink

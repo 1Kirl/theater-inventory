@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Link, Outlet } from 'react-router-dom'
-import { Menu } from 'lucide-react'
+import { Link, Outlet, useNavigate } from 'react-router-dom'
+import { Building2, Menu } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { SidebarNav } from '@/components/layout/SidebarNav'
 import { SignOutButton } from '@/features/auth/SignOutButton'
 import { useAuth } from '@/features/auth/useAuth'
+import { useOrganization } from '@/features/organizations/useOrganization'
+import { ROLE_LABELS } from '@/domain/organization-view'
 import { paths } from '@/routes/paths'
 
 const APP_NAME = 'Theater Inventory Tracker'
@@ -15,17 +18,39 @@ const APP_NAME = 'Theater Inventory Tracker'
  * with a navigation Sheet, per the design system.
  */
 export function AppShell() {
+  const navigate = useNavigate()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const { profile } = useAuth()
+  const { organization, role, clearOrganization } = useOrganization()
+
+  function switchOrganization() {
+    clearOrganization()
+    navigate(paths.organizations)
+  }
+
+  const organizationBlock = (
+    <div className="min-w-0 space-y-1">
+      <div className="flex min-w-0 items-center gap-2">
+        <Building2 className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
+        <span className="truncate text-sm font-semibold">{organization?.name ?? APP_NAME}</span>
+      </div>
+      {role ? (
+        <Badge variant={role === 'admin' ? 'default' : 'secondary'}>{ROLE_LABELS[role]}</Badge>
+      ) : null}
+    </div>
+  )
 
   return (
     <div className="bg-background text-foreground min-h-svh">
       <aside className="border-border bg-card hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col md:border-r">
-        <div className="border-border flex h-14 items-center border-b px-4">
-          <span className="truncate text-sm font-semibold">{APP_NAME}</span>
+        <div className="border-border space-y-2 border-b px-4 py-3">
+          {organizationBlock}
+          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={switchOrganization}>
+            Switch organization
+          </Button>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
-          <SidebarNav />
+          <SidebarNav isAdmin={role === 'admin'} />
         </div>
       </aside>
 
@@ -39,15 +64,28 @@ export function AppShell() {
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="border-border border-b">
-                <SheetTitle className="text-sm">{APP_NAME}</SheetTitle>
+                <SheetTitle className="text-sm">{organization?.name ?? APP_NAME}</SheetTitle>
               </SheetHeader>
-              <div className="p-3">
-                <SidebarNav onNavigate={() => setMobileNavOpen(false)} />
+              <div className="space-y-3 p-3">
+                <SidebarNav isAdmin={role === 'admin'} onNavigate={() => setMobileNavOpen(false)} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setMobileNavOpen(false)
+                    switchOrganization()
+                  }}
+                >
+                  Switch organization
+                </Button>
               </div>
             </SheetContent>
           </Sheet>
 
-          <span className="truncate text-sm font-semibold md:hidden">{APP_NAME}</span>
+          <span className="truncate text-sm font-semibold md:hidden">
+            {organization?.name ?? APP_NAME}
+          </span>
 
           <div className="ml-auto flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">

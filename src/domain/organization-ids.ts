@@ -21,4 +21,5 @@ export const COLLECTIONS = {
   joinCodes: 'organization_join_codes',
   adminSettings: 'organization_admin_settings',
   joinProofs: 'organization_membership_join_proofs',
+  teams: 'teams',
 } as const
