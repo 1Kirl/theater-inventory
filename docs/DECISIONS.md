@@ -5,6 +5,31 @@ This file records the settled technical decisions for the MVP and the resolution
 
 Approved by the project owner. Do not reverse any entry here without an explicit new decision.
 
+---
+
+## 0. Platform Constraint — Firebase Spark Plan Only
+
+> **Firebase Spark plan only. Do not introduce Cloud Functions, Admin SDK, Cloud Run,
+> Agent Platform Gemini API, or any feature that requires Blaze without explicit user approval.**
+
+This constraint outranks every other entry in this file. When a design would need a paid Firebase
+capability, stop and raise it rather than adopting it.
+
+Consequences that shape the whole architecture:
+
+- There is **no trusted server**. Every write originates in the browser.
+- **Firestore Security Rules are the only authorization boundary.** They are not a second line of
+  defence behind server code; they are the line.
+- Multi-document consistency comes from **client-side transactions and batched writes**, validated
+  in Rules with `getAfter()` and `existsAfter()`.
+- AI runs through **Firebase AI Logic with the Gemini Developer API**, which has a Spark-compatible
+  free tier. The Vertex AI / Agent Platform path is not used.
+
+Decisions 25 through 32 record the architecture this produces. Decisions 5 and 20 are superseded by
+it; decisions 4, 11, 23, and 24 are amended.
+
+---
+
 ## 1. Document Authority
 
 `Theater_Inventory_Tracker_IA_v3.xlsm` is the current source for user-facing features and flows —
@@ -49,16 +74,18 @@ organization name.
 The code lives in `organization_join_codes/{code}` with the normalized code as the document ID.
 That is also what guarantees uniqueness, since Firestore cannot enforce it on a field.
 
-## 5. Privileged Operations
+**Amended by decision 0.** Without a Cloud Function to validate codes server-side, the client must
+read the code document directly. Access is therefore `get` for any signed-in user, `list` denied to
+everyone. The code becomes a bearer secret and is sized accordingly. See decisions 28 and 29.
 
-Four callable Cloud Functions, on the Blaze plan:
+## 5. Privileged Operations — SUPERSEDED by decision 0
 
-- `createOrganization`
-- `joinOrganizationByCode`
-- `regenerateOrganizationCode`
-- `transferAdmin`
+~~Four callable Cloud Functions, on the Blaze plan: `createOrganization`,
+`joinOrganizationByCode`, `regenerateOrganizationCode`, `transferAdmin`.~~
 
-The project owner is notified before the step that requires Firebase billing to be configured.
+Cloud Functions are not available on the Spark plan. These four operations are implemented in the
+React client as Firestore transactions or batched writes, authorized entirely by Security Rules.
+See decisions 30 through 32 for the flows and decision 33 for the Rules plan.
 
 ## 6. Team Scope
 
@@ -121,6 +148,10 @@ satisfies it — every team removed, or every module returned to `none` — `rol
 The assignment condition is evaluated in exactly two places: on saving a membership, and on
 completing a Transfer Admin (decision 24). It is one rule, not two.
 
+**Amended by decision 26.** `role` is no longer a stored field. The assignment condition is now
+evaluated at runtime to derive the effective role, which produces the same user-visible behaviour
+without a field that can drift from the data it summarizes.
+
 ## 12. Member Removal
 
 No hard delete in the MVP. Removal sets `is_active = false`, preserving every `created_by_uid`,
@@ -181,14 +212,20 @@ When `condition_counts` sum to less than `quantity_total`, the remainder is disp
 
 Derived in application logic, never stored in Firestore.
 
-## 20. Join Code Access
+## 20. Join Code Access — SUPERSEDED by decisions 28 and 29
 
-- Members and Unassigned members cannot read the join code at all.
-- Joining is possible only through `joinOrganizationByCode`.
-- An Admin can read the current join code for their own organization.
-- Only an Admin can call `regenerateOrganizationCode`.
-- A client cannot `get` an arbitrary join-code document, so codes cannot be probed to discover
-  organizations.
+~~Members and Unassigned members cannot read the join code at all. Joining is possible only through
+`joinOrganizationByCode`. A client cannot `get` an arbitrary join-code document.~~
+
+Without a Cloud Function, the joining client must read the code document itself. The replacement
+policy keeps the property that matters — a member cannot discover their own organization's current
+code — by moving that pointer into an Admin-only collection. See decisions 28 and 29.
+
+What still holds:
+
+- A member or Unassigned user cannot learn their organization's current join code.
+- Only an Admin can regenerate a code.
+- Nobody can enumerate codes or organizations.
 
 ## 21. Calendar Date and Time
 
@@ -211,9 +248,14 @@ The action item quantity is never overwritten by a later shortage recalculation.
 
 ## 23. Admin Access Overrides the Permission Map
 
-While `role === 'admin'`, the user has full access to the organization regardless of `team_ids`
-and `permissions`. The membership's `team_ids` and `permissions` are **kept, not cleared**, when a
-user becomes Admin; they are simply not consulted while the admin role is in effect.
+While a user is Admin, they have full access to the organization regardless of `team_ids` and
+`permissions`. Those fields are **kept, not cleared**; they are simply not consulted while the user
+is Admin.
+
+**Mechanism amended by decision 26.** Admin is now `organizations.admin_uid == uid` rather than a
+stored `role`. The behaviour is identical, and preserving `team_ids` and `permissions` matters more
+than before: they are the only input the effective-role computation has once administration moves
+away.
 
 ## 24. Transfer Admin Outcome
 
@@ -221,15 +263,330 @@ Because a promoted Admin keeps their `team_ids` and `permissions` (decision 23),
 Admin already carries the data needed to determine their new role. `transferAdmin` therefore
 resolves it by applying the assignment condition from decision 11:
 
-- satisfies the assignment condition → `role = 'member'`
-- does not satisfy it → `role = 'unassigned'`
+- satisfies the assignment condition → reads as Member
+- does not satisfy it → reads as Unassigned
 
 The new Admin keeps their own `team_ids` and `permissions` unchanged; admin access takes
 precedence while they hold the role.
 
+**Mechanism amended by decision 26.** No membership is rewritten at all. The transfer writes
+`organizations.admin_uid` and nothing else; both users' roles change because the computation reads a
+different value, not because a field was updated on them.
+
 The Transfer Admin screen builds **no additional UI** for configuring the outgoing Admin's teams
 or permissions. If the outgoing Admin lands in `unassigned`, the existing Member Detail flow is
 how an Admin assigns them again.
+
+## 25. No Trusted Server
+
+Organization operations run in the React client as Firestore transactions or batched writes.
+Security Rules are the authorization boundary and the final source of truth. The Admin SDK is not
+used anywhere in the project.
+
+Two consequences follow, and both are load-bearing:
+
+- Any invariant that must hold has to be expressible in Rules. If it cannot be, it is not enforced.
+- Every multi-document operation must be atomic and validated as a unit with `getAfter()` /
+  `existsAfter()`, because Rules evaluate each write in a batch independently.
+
+## 26. Effective Role Is Computed, Never Stored
+
+`organization_memberships` has no `role` field. The effective role is derived at runtime:
+
+```
+if organizations/{orgId}.admin_uid == uid
+  -> Admin
+else if membership.is_active == true
+     && membership.team_ids.size() > 0
+     && at least one of inventory/maintenance/productions/calendar is 'view' or 'edit'
+  -> Member
+else
+  -> Unassigned
+```
+
+Administration is identified by a single field on the organization — `admin_uid` — rather than by a
+role written onto a membership. That makes "exactly one Admin per organization" a structural
+property instead of an invariant two documents have to agree on.
+
+The user-visible behaviour is unchanged from decisions 11, 23, and 24:
+
+- Admin has full access regardless of `team_ids` and `permissions`.
+- Those fields are preserved while a user is Admin, because they are what the computation reads
+  once administration moves away.
+- After a transfer, the outgoing Admin becomes Member or Unassigned according to the same
+  assignment condition — now evaluated, not written.
+
+## 27. Organization and Membership Documents
+
+`organizations/{orgId}`
+
+| Field | Notes |
+|---|---|
+| `name` | |
+| `admin_uid` | the single current Admin |
+| `created_by_uid` | |
+| `created_at`, `updated_at` | |
+
+No join code and no member list live here.
+
+`organization_memberships/{orgId}_{uid}`
+
+| Field | Notes |
+|---|---|
+| `organization_id`, `uid` | must match the document ID |
+| `team_ids[]` | |
+| `permissions` | `inventory`, `maintenance`, `productions`, `calendar`, each `none`/`view`/`edit` |
+| `is_active` | |
+| `joined_at`, `updated_at` | |
+
+No `role` field. The deterministic document ID makes a second membership for the same user in the
+same organization impossible, which is also what prevents a deactivated member from re-joining with
+a code: the create fails because the document already exists.
+
+Hard delete is denied. Deactivation sets `is_active = false`. The current Admin's membership cannot
+be deactivated; administration must be transferred first.
+
+## 28. Join Code Format and Generation
+
+`organization_join_codes/{code}`, with the normalized code as the document ID.
+
+| Field | Notes |
+|---|---|
+| `organization_id` | |
+| `organization_name_snapshot` | shown in the join preview |
+| `active` | |
+| `created_by_uid`, `created_at` | |
+| `revoked_at` | set when superseded |
+
+The code is **not** repeated as a field. The document ID is the canonical value; a second copy could
+disagree with it.
+
+Generation uses `crypto.getRandomValues()`. `Math.random()` is never used for a code.
+
+- Alphabet: `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — 32 characters, with `I`, `O`, `0`, and `1` removed
+- Length: 16 characters, so 32^16 = 2^80 possible codes
+
+Display may group the code as `K7PF-N4XQ-T3WM-H9RC`. The document ID is always the normalized form
+with no hyphens. Input is trimmed, uppercased, and stripped of hyphens and whitespace before lookup.
+
+Rules validate the shape of any code used as a path segment with `matches('^[A-HJ-NP-Z2-9]{16}$')`,
+which is exactly this alphabet. Without that guard, a crafted `join_code_id` could alter the path a
+Rules `get()` resolves to.
+
+## 29. Join Code Is a Bearer Secret
+
+`organization_join_codes/{code}`:
+
+- `get` — any signed-in user. The joining client has to read the document, and there is no server
+  to read it for them.
+- `list` — denied to everyone, so codes and organizations cannot be enumerated.
+- `create` / `update` — Admin of the referenced organization.
+- `delete` — denied. Revoked codes are kept as history.
+
+Holding a code is what proves a user may request membership. A code grants no operational access:
+the membership it creates has no teams and no permissions.
+
+`organization_admin_settings/{orgId}` keeps the pointer to the current code:
+
+| Field | Notes |
+|---|---|
+| `organization_id` | |
+| `current_join_code_id` | the active code |
+| `updated_at` | |
+
+`get` and `update` are Admin-only; `list` and `delete` are denied to everyone. This is what keeps
+an ordinary member from learning their own organization's current code, which is the property the
+superseded decision 20 protected by denying reads outright.
+
+## 30. Join Proof
+
+`organization_membership_join_proofs/{orgId}_{uid}`
+
+| Field | Notes |
+|---|---|
+| `organization_id`, `uid` | must match the document ID |
+| `join_code_id` | the code actually used |
+| `created_at` | |
+
+Its only purpose is to let Rules verify, inside the same atomic write, that a membership was
+created with a real and active code for that organization. The membership document does not carry
+the code, so an ordinary member reading a colleague's membership learns nothing about it.
+
+- `get` — the subject or the Admin of that organization.
+- `list` — denied to everyone.
+- `create` — only as part of a valid join batch.
+- `update` / `delete` — denied.
+
+## 31. Create Organization — Client Batch
+
+The client generates the organization ID and the join code, then commits one batch containing four
+documents:
+
+- `organizations/{orgId}` — `admin_uid` and `created_by_uid` both the caller
+- `organization_memberships/{orgId}_{creatorUid}` — `team_ids: []`, all permissions `none`,
+  `is_active: true`
+- `organization_admin_settings/{orgId}` — `current_join_code_id` set to the new code
+- `organization_join_codes/{code}` — `active: true`, `organization_id` matching
+
+The creator's effective role is Admin because `admin_uid` names them, not because their membership
+says so. Their empty membership is what they fall back to if administration is ever transferred
+away.
+
+Rules validate the batch as a unit: each write checks with `getAfter()` / `existsAfter()` that its
+counterparts exist and agree after the commit. A partial or mismatched batch is rejected.
+
+## 32. Join, Transfer, and Regenerate — Client Operations
+
+**Join** — the client normalizes the code, does a single `get` on
+`organization_join_codes/{code}`, checks `active == true`, shows
+`organization_name_snapshot` for confirmation, then commits one batch:
+
+- `organization_memberships/{orgId}_{uid}` — `team_ids: []`, all permissions `none`,
+  `is_active: true`
+- `organization_membership_join_proofs/{orgId}_{uid}` — naming the code used
+
+Effective role is therefore Unassigned. An existing membership — active or not — makes the create
+fail; a deactivated member is told to contact their Admin rather than being silently reactivated.
+
+**Assignment** — only the Admin may change `team_ids`, `permissions`, or `is_active`. A member
+cannot edit their own membership. Effective role is recomputed from the result.
+
+**Transfer Admin** — a transaction reads the organization and the target membership, confirms the
+caller is the current Admin and the target membership is active, and writes `admin_uid`. No
+membership is rewritten, because no membership carries a role.
+
+**Regenerate join code** — one batch: create the new code document, set the old one to
+`active: false` with `revoked_at`, and repoint `organization_admin_settings.current_join_code_id`.
+Old code documents are never deleted.
+
+## 33. Security Rules Plan
+
+Phase 1 `users` rules stand unchanged.
+
+| Collection | get | list | create | update | delete |
+|---|---|---|---|---|---|
+| `organizations` | active member | denied | authenticated creator, `admin_uid == self`, valid batch | Admin, `admin_uid` transfer only | denied |
+| `organization_memberships` | self, or active member of same org | self's own, or same-org active directory | org-creation batch or valid join batch | Admin only | denied |
+| `organization_join_codes` | any signed-in user | denied | Admin of the org | Admin, revocation only | denied |
+| `organization_admin_settings` | Admin | denied | org-creation batch | Admin | denied |
+| `organization_membership_join_proofs` | self or Admin | denied | valid join batch | denied | denied |
+
+**Rules are not filters.** A `list` rule is evaluated against candidate documents, and the whole
+query is rejected if any candidate would fail. Two client queries must therefore be written to
+match the rules exactly:
+
+- Organization Selection: `where('uid','==',auth.uid).where('is_active','==',true)`
+- Member directory for a non-Admin: `where('organization_id','==',activeOrgId).where('is_active','==',true)`
+
+An Admin may drop the `is_active` filter to see deactivated members; a non-Admin may not, and
+omitting it rejects the query rather than filtering the results.
+
+Rules are tested with `@firebase/rules-unit-testing` against the Firestore emulator. The suite must
+cover, at minimum: cross-organization isolation, enumeration attempts on every `list`-denied
+collection, self-assignment of permissions during join, membership creation without a valid proof,
+join with a revoked code, admin transfer by a non-Admin, admin transfer to an inactive member,
+deactivating the current Admin, and re-joining with a code after deactivation.
+
+## 34. Field Naming — `organization_id` Everywhere
+
+Every document that references an organization uses `organization_id`. `org_id` is not used
+anywhere in the project.
+
+This matches the collections designed earlier — `inventory_items`, `maintenance_records`,
+`production_requirements`, `action_items`, `calendar_events`, `teams` — so a single name means the
+same thing in every collection and in every Security Rule.
+
+Document ID patterns are unchanged: `organization_memberships/{organizationId}_{uid}`,
+`organization_membership_join_proofs/{organizationId}_{uid}`.
+
+## 35. Join Code Document Holds No `code` Field
+
+`organization_join_codes/{code}` stores `organization_id`, `organization_name_snapshot`, `active`,
+`created_by_uid`, `created_at`, and `revoked_at`. The document ID is the canonical join code and is
+not duplicated as a field, because a second copy could disagree with the ID and Rules would then
+have to decide which one is authoritative.
+
+## 36. Organization Rename Is Atomic Across Two Documents
+
+`organization_name_snapshot` stays. A user validating a join code is not yet a member and cannot
+read `organizations/{organizationId}`, so the snapshot is the only way the join preview can name
+the organization.
+
+Renaming an organization therefore writes two documents in one batch:
+
+- `organizations/{organizationId}.name`
+- the **currently active** join code's `organization_name_snapshot`
+
+Security Rules verify the pair with `getAfter()`: an update to `name` is rejected unless the active
+code's snapshot matches the new name after the commit. The current code ID comes from
+`organization_admin_settings` and is shape-checked before use as a path segment.
+
+Revoked and inactive codes keep their old snapshot. They cannot be used to join, so a stale name on
+them is inert, and rewriting history on every rename would grow the batch without bound.
+
+## 37. Two Creation Paths, Because the First Organization Has No Admin Yet
+
+At the moment an organization is created there is no Admin to authorize anything, so rules that read
+`organizations.admin_uid` cannot cover the first join code or the first admin settings document.
+
+**Path A — initial organization creation.** Authorized by what the batch will produce.
+`getAfter(/organizations/{organizationId})` must exist with `admin_uid == request.auth.uid` and
+`created_by_uid == request.auth.uid`. The caller earns the right to create the first membership,
+admin settings, and join code by becoming the organization's Admin in the same atomic write. Path A
+is the only way `organization_admin_settings` is ever created.
+
+**Path B — existing organization.** Authorized by what already exists.
+`get(/organizations/{organizationId}).data.admin_uid == request.auth.uid`. This covers regenerating
+a join code, updating admin settings, assigning memberships, renaming, and transferring
+administration.
+
+Keeping the paths separate keeps each condition minimal and makes the intent legible in the rules
+file.
+
+## 38. App Check Is Optional Post-MVP Hardening
+
+App Check is not a prerequisite for any phase and is not part of the MVP.
+
+It is **not** an authorization mechanism and does **not** provide rate limiting. No document may
+describe it as standing in for either. Authorization is Firestore Security Rules, and nothing else.
+
+MVP security rests on:
+
+1. Firebase Authentication
+2. Firestore Security Rules
+3. A secure 80-bit join code from `crypto.getRandomValues()`
+4. `get` / `list` separation, so nothing can be enumerated
+5. Strict schema validation on every write
+6. Rules tests against the Firestore emulator
+
+The Spark-only constraint in decision 0 stands unchanged.
+
+## 39. Phase 2 Splits Into 2A and 2B
+
+Risks R1 and R2 — whether Firestore caches identical document access calls across a query
+evaluation, and how the access-call budget is counted across a batched write — are **not treated as
+resolved**. Architecture correctness does not rest on either being favourable.
+
+**Phase 2A — foundation, no interface**
+
+- domain types
+- organization services (create, join, assign, transfer, regenerate, rename)
+- `firestore.rules`
+- Firestore indexes, if the queries require any
+- `@firebase/rules-unit-testing` suite
+- transaction and batch validation, including the directory query at 1, 5, 10, and 20 members
+
+**Phase 2B — interface**
+
+- Organization Selection
+- Create Organization
+- Join Organization
+- Admin organization management
+
+**Phase 2B does not begin until the Phase 2A rules tests pass.** If the directory query hits the
+access-call limit, or a query and its rule turn out to be incompatible, stop and report before
+building any interface on top of it. Do not relax a rule, widen a `list` permission, or drop a
+required query filter to make something pass.
 
 ---
 
@@ -242,7 +599,7 @@ how an Admin assigns them again.
 | Membership state fields | `role` + `status` | `role` only | `role` only; two fields would drift |
 | Member promotion | automatic on permission assignment | manual status change | Automatic (decision 11) |
 | Join code location | field on `organizations` | `organization_join_codes` collection | Separate collection (decision 4) |
-| Admin identity | `admin_uid` on `organizations` | derived from membership role | Derived from membership; no `admin_uid` field |
+| Admin identity | `admin_uid` on `organizations` | derived from membership role | **`admin_uid` on `organizations`** (decision 26). The IA v3 shape was adopted after the Spark change: with no stored role, one field on one document is what makes a single Admin structural |
 | Action item status | `open, in_progress, completed` | `todo, in_progress, done, cancelled` | `/docs` enum; IA v3 lacks a cancelled state its own rules require |
 | Action item ID / fields | `action_id`, `quantity_needed` | `action_item_id`, `quantity` | `/docs` names; document ID is `requirement_id` |
 | Action item creation | "automatically generated from shortages" | created when user picks action type | User-triggered (decision 10) |

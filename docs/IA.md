@@ -116,7 +116,8 @@ Rules:
 
 - current user becomes the first Admin,
 - join code is generated automatically,
-- organization and Admin membership should be created atomically or through a trusted backend operation.
+- the organization, the creator's membership, the admin settings, and the join code are created
+  in one atomic batched write from the client, validated as a unit by Security Rules.
 
 ### 3.3 Organization Created / Invite Code
 
@@ -646,8 +647,8 @@ Content:
 
 The join code is not stored on the organization record; it is read from the join-code collection
 and is visible to the Admin only — members and unassigned users cannot read it anywhere in the
-application. Only an Admin may regenerate it, through a trusted backend operation that invalidates
-the previous code.
+application. Only an Admin may regenerate it, through an atomic batched write that revokes the
+previous code and repoints the organization's current-code setting.
 
 ### 11.2 Transfer Admin
 

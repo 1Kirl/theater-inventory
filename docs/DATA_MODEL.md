@@ -10,9 +10,13 @@
 6. All timestamps should use Firestore Timestamp/server timestamps where appropriate.
 7. All client models should have TypeScript interfaces.
 8. Derivable values are not stored. Shortage quantity, condition summary, overdue state,
-   requirement counts, and dashboard totals are computed by application logic from stored
-   data. The only sanctioned exceptions are the explicit denormalizations listed in this
-   document.
+   requirement counts, dashboard totals, and effective role are computed by application logic
+   from stored data. The only sanctioned exceptions are the explicit denormalizations listed in
+   this document.
+9. There is no trusted server. Every write comes from the client, so every multi-document
+   operation is a transaction or a batched write, and every invariant that must hold is expressed
+   in Security Rules. Rules evaluate each write in a batch independently, so a batch is validated
+   as a unit with `getAfter()` and `existsAfter()`.
 
 ## 2. Collection Overview
 
@@ -22,6 +26,8 @@ Recommended top-level collections:
 - `organizations`
 - `organization_memberships`
 - `organization_join_codes`
+- `organization_admin_settings`
+- `organization_membership_join_proofs`
 - `teams`
 - `inventory_items`
 - `maintenance_records`
@@ -78,6 +84,7 @@ interface Organization {
   organization_id: string;
   name: string;
   description?: string;
+  admin_uid: string;          // the single current Admin
   created_by_uid: string;
   created_at: Timestamp;
   updated_at: Timestamp;
@@ -87,12 +94,15 @@ interface Organization {
 Notes:
 
 - The organization document does **not** store the join code. Firestore cannot restrict reads
-  at field level, and every member — including `unassigned` members — must read this document
+  at field level, and every member — including Unassigned members — must read this document
   to display the organization name. Storing the code here would expose it to all members.
-- The active join code lives only in `organization_join_codes` (see section 6).
-- The current Admin is derived from `organization_memberships` where `role === 'admin'`.
-  Do not denormalize an `admin_uid` field onto the organization document; a second source of
-  truth for administration can drift from the membership record.
+- The active join code lives in `organization_join_codes`, and the pointer to the current one
+  lives in `organization_admin_settings` (sections 6 and 6b).
+- `admin_uid` **is** the record of who administers the organization. It is not a denormalization
+  of a membership field, because membership documents carry no role at all. Keeping
+  administration in one field on one document makes "exactly one Admin" a structural property
+  rather than an invariant that two documents have to agree on.
+- Transfer Admin writes `admin_uid` and `updated_at`, and nothing else.
 
 ## 5. organization_memberships
 
@@ -105,7 +115,6 @@ Path:
 `organization_memberships/{organizationId}_{uid}`
 
 ```ts
-type MembershipRole = 'admin' | 'member' | 'unassigned';
 type PermissionLevel = 'none' | 'view' | 'edit';
 
 interface ModulePermissions {
@@ -116,17 +125,17 @@ interface ModulePermissions {
 }
 
 interface OrganizationMembership {
-  organization_id: string;
-  uid: string;
-  role: MembershipRole;
+  organization_id: string;             // must equal the first segment of the document ID
+  uid: string;                // must equal the second segment of the document ID
   team_ids: string[];
   permissions: ModulePermissions;
-  joined_at: Timestamp;
-  assigned_at?: Timestamp;
-  assigned_by_uid?: string;
   is_active: boolean;
+  joined_at: Timestamp;
+  updated_at: Timestamp;
 }
 ```
+
+There is deliberately **no `role` field**. See section 5b.
 
 Module notes:
 
@@ -138,23 +147,57 @@ Module notes:
 
 Rules:
 
-- Admin receives effective full access regardless of the permission map.
-- New join-by-code memberships use:
-  - role = `unassigned`
-  - team_ids = `[]`
-  - all permissions = `none`
-- A membership satisfies the **assignment condition** when `team_ids` holds at least one team
-  **and** at least one of the four module permissions is `view` or `edit`.
-- Role transition is automatic. Saving a membership that satisfies the assignment condition sets
-  `role = 'member'` along with `assigned_at` / `assigned_by_uid`. There is no manual role dropdown
-  for this transition; `member` is never set independently of a valid assignment.
-- Saving a membership that no longer satisfies it — every team removed, or every module back to
-  `none` — returns `role` to `'unassigned'`.
-- `team_ids` and `permissions` are **retained, not cleared, when a user becomes Admin.** While
-  `role === 'admin'` those fields are not consulted, but they are what the assignment condition
-  reads to resolve the outgoing Admin's role after a Transfer Admin.
+- New memberships — created either by joining with a code or by creating the organization — use
+  `team_ids: []`, all permissions `none`, and `is_active: true`. Security Rules pin these values on
+  create, so a joining user cannot grant themselves access on the way in.
+- Only the Admin may change `team_ids`, `permissions`, or `is_active`. A member cannot edit their
+  own membership.
+- `organization_id` and `uid` are immutable and must match the document ID.
+- `team_ids` and `permissions` are **retained, not cleared, when a user becomes Admin.** They are
+  not consulted while the user is Admin, but they are the only input the effective-role computation
+  has once administration is transferred away.
 - `is_active: false` deactivates a membership without deleting it. A deactivated membership is
   treated as no access at all. See section 17.
+- The deterministic document ID is what prevents a second membership for the same user in the same
+  organization. It is also what stops a deactivated member from re-joining with a code: the create
+  fails because the document already exists, and only the Admin can reactivate.
+
+## 5b. Effective Role
+
+`role` is **not stored**. It is computed wherever it is needed, from two documents the caller can
+already read:
+
+```ts
+type EffectiveRole = 'admin' | 'member' | 'unassigned';
+
+function effectiveRole(
+  organization: Organization,
+  membership: OrganizationMembership | null,
+  uid: string,
+): EffectiveRole {
+  if (organization.admin_uid === uid) return 'admin';
+  if (!membership || !membership.is_active) return 'unassigned';
+  if (membership.team_ids.length === 0) return 'unassigned';
+
+  const levels = Object.values(membership.permissions);
+  const hasModuleAccess = levels.some((level) => level === 'view' || level === 'edit');
+
+  return hasModuleAccess ? 'member' : 'unassigned';
+}
+```
+
+Why it is derived rather than stored:
+
+- A stored role is a summary of `admin_uid`, `is_active`, `team_ids`, and `permissions`. Any write
+  that changes one of those without also rewriting the role leaves the two disagreeing, and Security
+  Rules would have to re-derive the role anyway to detect it.
+- Transfer Admin becomes a single-field write. Both users' roles change because the computation
+  reads a different `admin_uid`, not because anything was written to their memberships.
+- Security Rules evaluate the same expression, so the UI and the authorization boundary cannot drift
+  apart.
+
+Admin bypasses the permission map entirely. Every other decision about module and team access reads
+the membership as before.
 
 ## 6. organization_join_codes
 
@@ -166,51 +209,148 @@ Document ID is the actual normalized join code.
 
 ```ts
 interface OrganizationJoinCode {
-  code: string;
   organization_id: string;
-  organization_name: string;
-  is_active: boolean;
-  created_at: Timestamp;
+  organization_name_snapshot: string;  // shown in the join preview
+  active: boolean;
   created_by_uid: string;
+  created_at: Timestamp;
+  revoked_at?: Timestamp;              // set when a newer code supersedes this one
 }
 ```
 
-Recommended format:
+The document ID **is** the canonical join code. It is not repeated as a field: a second copy could
+disagree with the ID, and Rules would then have to decide which one is authoritative.
 
-- 8 characters
-- uppercase letters and digits
-- avoid visually confusing characters when possible
+Format and generation:
 
-Example:
+- Alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — 32 characters, with `I`, `O`, `0`, and `1` removed
+  so a code can be read aloud or copied from a whiteboard without ambiguity.
+- Length 16, giving 32^16 = 2^80 possible codes.
+- Generated with `crypto.getRandomValues()`. `Math.random()` is never used for a code; it is not a
+  cryptographic source and a predictable code is a way into an organization.
 
-`HTR7K29Q`
+Example: `K7PFN4XQT3WMH9RC`
+
+The UI may group the code for readability as `K7PF-N4XQ-T3WM-H9RC`. The document ID is always the
+normalized form: trimmed, uppercased, with hyphens and whitespace removed. Input is normalized the
+same way before lookup.
 
 Why the code is the document ID:
 
 Firestore cannot enforce uniqueness on a field. Using the normalized code as the document ID is
-what structurally guarantees that two organizations can never hold the same active code.
+what structurally guarantees that two organizations can never hold the same active code. It also
+makes validation a single `get` rather than a query, which matters because queries on this
+collection are denied.
 
-Required Cloud Functions:
+Why `organization_name_snapshot` exists:
 
-The following operations run in callable Cloud Functions, never in the client:
+A user checking a join code is not yet a member, so they cannot read
+`organizations/{organizationId}` — that document is readable only by active members. The snapshot
+is what lets the join preview show which organization the code belongs to before the user commits
+to joining.
 
-- `createOrganization` — organization + first Admin membership + join code, atomically,
-- `joinOrganizationByCode` — validate code, prevent duplicate membership, create the
-  `unassigned` membership,
-- `regenerateOrganizationCode` — deactivate the current code and issue a new one,
-- `transferAdmin` — atomic demote/promote.
+**Renaming an organization is therefore an atomic two-document write.** A rename must update
+`organizations/{organizationId}.name` and the `organization_name_snapshot` of the **currently
+active** join code in the same batch. Security Rules verify the pair with `getAfter()`: an update
+to the organization name is rejected unless the active code's snapshot matches after the commit.
 
-Client access rules for this collection:
+Revoked and inactive codes keep whatever snapshot they had. They cannot be used to join, so a
+stale name on them is harmless, and rewriting historical documents on every rename would grow the
+batch without bound.
 
-- Members and Unassigned members cannot read a join code at all.
-- `get` by document ID is **denied** to every client. Allowing it would let anyone probe whether
-  an arbitrary code exists and discover organizations. Code validation happens only inside
-  `joinOrganizationByCode`.
-- `list` is allowed only for an Admin, and only when the query constrains `organization_id` to an
-  organization where the caller is Admin. This is how Organization Settings shows the current code
-  without exposing any other organization's code.
-- Only an Admin of the organization may call `regenerateOrganizationCode`.
-- Clients never write to this collection.
+Client access:
+
+- `get` — any signed-in user. Without a server, the joining client has to read this document
+  itself. The code is therefore a **bearer secret**: holding it is what proves a user may request
+  membership. It grants no operational access, because the membership it creates has no teams and
+  no permissions.
+- `list` — denied to everyone. This is what prevents enumeration of codes and of organizations.
+- `create` — two distinct paths, see below.
+- `update` — the Admin of the referenced organization, and only to revoke: `active` to `false` with
+  `revoked_at`.
+- `delete` — denied. Revoked codes are kept so that a code is never silently reused.
+
+**Two creation paths, because at initial creation there is no Admin yet.**
+
+*Path A — initial organization creation.* The organization does not exist before the batch, so
+there is nobody to be its Admin at the moment the rule runs. The rule instead requires that
+`organizations/{organizationId}` is created **in the same batch** with
+`admin_uid == request.auth.uid` and `created_by_uid == request.auth.uid`, checked with
+`getAfter()`. The caller earns the right to create the first code by becoming the Admin in the same
+atomic operation.
+
+*Path B — existing organization.* The organization already exists, so the rule reads
+`organizations/{organizationId}.admin_uid` and requires it to equal the caller. This is the
+regenerate path.
+
+Writing this as one rule with a `get()` would fail for path A, because the organization is not yet
+readable. Writing it with only `getAfter()` would be loose for path B, since `getAfter()` on an
+untouched document returns its current state and would still work — but keeping the paths separate
+makes the intent explicit and keeps each condition minimal.
+
+The same A/B split applies to `organization_admin_settings` creation.
+
+A member cannot discover their own organization's current code from this collection, because
+finding it would require a query. The pointer lives in `organization_admin_settings`.
+
+Any code value used as a path segment in Security Rules must first be checked against
+`matches('^[A-HJ-NP-Z2-9]{16}$')`, which is exactly this alphabet and length. Without that guard a
+crafted value could change which document a Rules `get()` resolves to.
+
+## 6b. organization_admin_settings
+
+Path:
+
+`organization_admin_settings/{organizationId}`
+
+```ts
+interface OrganizationAdminSettings {
+  organization_id: string;
+  current_join_code_id: string;   // the active code
+  updated_at: Timestamp;
+}
+```
+
+This collection exists for one reason: to hold data that the Admin may see and ordinary members may
+not. Firestore cannot restrict reads at field level, so anything Admin-only needs its own document.
+
+Client access:
+
+- `get` and `update` — the Admin of that organization only. At update time the organization already
+  exists, so the rule reads `admin_uid` directly.
+- `create` — only in the initial-creation batch (path A above): the organization must be created in
+  the same batch naming the caller as `admin_uid`, and `current_join_code_id` must point at a join
+  code created in that same batch for the same organization.
+- `list` and `delete` — denied to everyone.
+
+## 6c. organization_membership_join_proofs
+
+Path:
+
+`organization_membership_join_proofs/{organizationId}_{uid}`
+
+```ts
+interface MembershipJoinProof {
+  organization_id: string;
+  uid: string;
+  join_code_id: string;
+  created_at: Timestamp;
+}
+```
+
+Its only purpose is to let Security Rules verify, inside the same atomic write, that a membership
+was created with a real and active code for that organization. Without it, the membership create
+rule would have nothing to check: the code the user typed leaves no trace on the membership itself.
+
+The code is kept here rather than on the membership so that a colleague reading a member directory
+entry learns nothing about how that member joined.
+
+Client access:
+
+- `get` — the subject, or the Admin of that organization.
+- `list` — denied to everyone.
+- `create` — only as part of a valid join batch, alongside the membership it proves.
+- `update` and `delete` — denied. A proof is a historical fact.
 
 ## 7. teams
 
@@ -591,9 +731,12 @@ Likely query patterns include:
 - productions by organization + status,
 - action items by organization + status,
 - calendar events by organization + date range,
-- memberships by organization + role,
-- memberships by uid,
-- join codes by organization + is_active (Admin-only, for Organization Settings).
+- memberships by uid + is_active (Organization Selection),
+- memberships by organization_id + is_active (member directory).
+
+Two collections are never queried, only fetched by document ID, and therefore need no index:
+`organization_join_codes` and `organization_admin_settings`. That is a security property, not an
+optimization — see sections 6 and 6b.
 
 Do not create speculative indexes before Firestore requests them or before query design is confirmed.
 
@@ -615,3 +758,9 @@ the organization never reaches zero Admins.
 
 Inventory items and teams have no delete flow in the MVP either. Deleting a team would orphan
 `membership.team_ids`, `inventory_items.team_id`, and `maintenance_records.team_id`.
+
+Join codes are never deleted. A superseded code keeps its document with `active: false` and a
+`revoked_at` timestamp, so a code is never silently reused and a revoked code fails validation for
+a clear reason rather than looking like a typo.
+
+Join proofs are never deleted or updated. They record a historical fact.

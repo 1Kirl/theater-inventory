@@ -20,10 +20,15 @@ Use the following stack unless the project owner explicitly approves a change:
 - shadcn/ui
 - Firebase Authentication
 - Cloud Firestore
-- Firebase Cloud Functions only for privileged operations that should not be trusted to the client
 - Firebase Hosting
-- Firebase AI Logic with Gemini for the two required AI features
+- Firebase AI Logic with the Gemini Developer API for the two required AI features
 - Git for version control
+
+**Firebase Spark plan only. Do not introduce Cloud Functions, Admin SDK, Cloud Run, Agent Platform
+Gemini API, or any feature that requires Blaze without explicit user approval.**
+
+There is no trusted server. Every write comes from the browser, and Firestore Security Rules are
+the authorization boundary rather than a second line of defence behind server code.
 
 Approved additional dependencies:
 
@@ -80,11 +85,12 @@ These rules must remain true throughout the application:
 10. The application must never allow an organization to end up with zero Admins.
 11. Admin transfer must be explicit and safe.
 12. Team membership and permissions are organization-specific.
-13. A membership is a Member when it holds at least one team **and** at least one module
-    permission at `view` or `edit`. This assignment condition is evaluated automatically on saving
-    a membership and on completing a Transfer Admin; a membership that fails it is `unassigned`.
+13. Role is computed, never stored. A user is Admin when `organizations.admin_uid` names them.
+    Otherwise they are a Member when their membership is active, holds at least one team, **and**
+    has at least one module permission at `view` or `edit`; failing that, they are Unassigned.
     Admin access ignores `team_ids` and `permissions`, but those fields are retained rather than
-    cleared, because they are what the assignment condition reads after a transfer.
+    cleared, because they are the only input the computation has once administration is
+    transferred away.
 14. Memberships are deactivated, never deleted. The MVP has no hard delete for memberships,
     inventory items, or teams.
 15. Derivable values are computed, not stored. Shortage quantity, condition summary, overdue
@@ -120,19 +126,20 @@ Use Firebase as the backend platform.
 - Persistent application data: Cloud Firestore
 - Hosting: Firebase Hosting
 - File uploads: not used in the MVP
+- Server code: none. No Cloud Functions, no Admin SDK, no Cloud Run.
 
-Privileged organization operations run in callable Cloud Functions. There are exactly four:
+Organization operations that would otherwise deserve a server — creating an organization, joining
+by code, regenerating a code, transferring administration — run in the client as Firestore
+transactions or batched writes. Their correctness rests entirely on Security Rules.
 
-- `createOrganization`
-- `joinOrganizationByCode`
-- `regenerateOrganizationCode`
-- `transferAdmin`
-
-These require the Blaze plan. Tell the project owner before the step that needs Firebase billing
-configured; do not attempt to work around it silently.
+Because Rules evaluate each write in a batch independently, any multi-document operation must be
+validated as a unit with `getAfter()` and `existsAfter()`. An invariant that cannot be expressed in
+Rules is not enforced at all; say so rather than assuming application code will hold the line.
 
 The organization join code is never stored on the organization document. It lives in
-`organization_join_codes` with the code as the document ID, and only an Admin can read it.
+`organization_join_codes` with the code as the document ID. Any signed-in user may `get` a code
+they already hold; nobody may list the collection. The pointer to an organization's current code
+lives in `organization_admin_settings`, which only its Admin can read.
 
 Keep Firebase access code outside page components. Use dedicated service/repository modules and typed interfaces.
 
@@ -145,10 +152,10 @@ Do not rely on hidden buttons as security.
 Permissions must be enforced in two places:
 
 1. React UI/route guards for user experience.
-2. Firestore Security Rules and/or trusted Cloud Functions for real authorization.
+2. Firestore Security Rules for real authorization. There is no server to fall back on.
 
 Permissions live inside `organization_memberships` as `team_ids[]` plus a `permissions` map.
-There is no separate `team_permissions` collection.
+There is no separate `team_permissions` collection and no stored `role` field.
 
 The MVP has exactly four permission modules:
 
@@ -182,6 +189,9 @@ The application has exactly two required AI features for the MVP:
 2. AI Requirement Generator
 
 Read `docs/AI_SPEC.md` before implementing either feature.
+
+Provider: Firebase AI Logic with the **Gemini Developer API**, model **gemini-3.5-flash**. The
+Vertex AI / Agent Platform path requires Blaze and is not used.
 
 Critical rules:
 

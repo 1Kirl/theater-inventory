@@ -15,14 +15,27 @@ AI assists the user, but deterministic application code remains responsible for 
 
 ## 2. Provider
 
-Preferred implementation:
+Required implementation:
 
 - Firebase AI Logic
-- Gemini model supported by Firebase AI Logic
+- Gemini API provider: **Gemini Developer API**
+- Model: **gemini-3.5-flash**
+
+The Vertex AI / Agent Platform Gemini API requires the Blaze plan and is not used. This project runs
+on the Spark plan, and the Gemini Developer API path through Firebase AI Logic is the one with a
+Spark-compatible free tier.
 
 Wrap provider-specific code behind an internal `aiService` interface so the UI does not depend directly on a specific model SDK.
 
-Do not expose private server API keys in client code.
+Do not expose private server API keys in client code. Firebase AI Logic calls Gemini from the
+browser using the project's own configuration; there is no private key to leak.
+
+Both features remain client-side. Neither may be moved to a server without lifting the Spark
+constraint.
+
+App Check is **not** part of the MVP and is not a prerequisite for any phase. It is optional
+post-MVP hardening. It is not an authorization mechanism and does not provide rate limiting;
+authorization is Firestore Security Rules, and nothing else stands in for them.
 
 ## 3. AI Smart Search
 

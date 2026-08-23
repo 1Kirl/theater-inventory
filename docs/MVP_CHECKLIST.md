@@ -17,7 +17,8 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Vitest configured
 - [ ] Zod configured for AI output validation
 - [ ] @firebase/rules-unit-testing configured
-- [ ] Blaze plan enabled for Cloud Functions
+- [ ] Spark plan only — no Cloud Functions, Admin SDK, or Cloud Run anywhere in the project
+- [ ] App Check deliberately excluded from the MVP
 - [ ] Environment/config handling documented
 - [ ] Git repository initialized
 - [ ] Production build succeeds
@@ -36,14 +37,16 @@ This document defines what must be finished before optional stretch work begins.
 
 - [ ] Organization Selection page
 - [ ] Multiple organization memberships supported
-- [ ] createOrganization Cloud Function
-- [ ] joinOrganizationByCode Cloud Function
-- [ ] regenerateOrganizationCode Cloud Function
-- [ ] transferAdmin Cloud Function
-- [ ] Create Organization
-- [ ] Creator becomes Admin
-- [ ] Join code generated in organization_join_codes with the code as document ID
+- [ ] Create Organization as a single client batched write of four documents
+- [ ] Join Organization as a single client batched write of membership plus join proof
+- [ ] Regenerate join code as a single client batched write
+- [ ] Transfer Admin as a client Firestore transaction
+- [ ] Creator becomes Admin via organizations.admin_uid
+- [ ] Join code generated with crypto.getRandomValues, 16 characters, no Math.random
+- [ ] Join code stored in organization_join_codes with the code as document ID
 - [ ] Join code never stored on the organization document
+- [ ] Current join code pointer readable only by the Admin
+- [ ] Effective role computed at runtime, never stored
 - [ ] Organization Created / code screen
 - [ ] Join Organization by code
 - [ ] Duplicate membership prevented
@@ -68,9 +71,10 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Member Detail
 - [ ] Assign one or more teams
 - [ ] Assign the four module permissions (inventory, maintenance, productions, calendar)
-- [ ] Automatic promotion to Member when a team plus a module at View or Edit is saved
-- [ ] Fallback to Unassigned when teams or permissions no longer meet both conditions
+- [ ] Effective role reads as Member once a team plus a module at View or Edit is saved
+- [ ] Effective role falls back to Unassigned when either condition stops holding
 - [ ] team_ids and permissions retained when a user becomes Admin
+- [ ] Members cannot edit their own membership
 - [ ] Deactivate membership with is_active = false
 - [ ] Current Admin's membership cannot be deactivated
 - [ ] Admin full-access behavior
@@ -215,8 +219,11 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Regenerate join code
 - [ ] Old code becomes invalid
 - [ ] Existing members remain unaffected
-- [ ] Join code readable by Admin only
+- [ ] Current join code readable by Admin only
 - [ ] Regenerate restricted to Admin
+- [ ] Revoked codes retained with active false and revoked_at
+- [ ] Organization rename updates the active code snapshot in the same batch
+- [ ] Rename touching only organizations.name is rejected
 - [ ] Transfer Admin
 - [ ] New Admin keeps existing teams and permissions
 - [ ] Outgoing Admin resolved to Member or Unassigned by the assignment condition
@@ -235,9 +242,17 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Deactivated membership blocked
 - [ ] Team editing scope tested on the four team-scoped collections
 - [ ] Organization-level collections editable without a team check
-- [ ] Join code documents cannot be read by document ID
-- [ ] Admin can list only their own organization's join code
-- [ ] Privileged Cloud Functions verify caller authorization
+- [ ] Join code get allowed to signed-in users, list denied to everyone
+- [ ] organization_admin_settings readable only by the Admin
+- [ ] Join proofs cannot be listed, updated, or deleted
+- [ ] Joining cannot self-grant teams or permissions
+- [ ] Membership create denied without a valid join proof in the same batch
+- [ ] Re-joining after deactivation is denied
+- [ ] Transfer Admin denied for non-Admins and for inactive targets
+- [ ] Current Admin's membership cannot be deactivated
+- [ ] Member directory query without is_active is rejected, not filtered
+- [ ] Directory query verified at 1, 5, 10, and 20 members
+- [ ] Initial creation path and existing-organization path tested separately
 - [ ] Rules covered by @firebase/rules-unit-testing against the emulator
 
 ### Responsive QA
@@ -300,12 +315,27 @@ This document defines what must be finished before optional stretch work begins.
 - Firebase connection
 - authentication
 
-### Phase 2 — Organization Model
+### Phase 2A — Organization Foundation, No Interface
+
+- correct the stale comment in `src/lib/env.ts`, which still says access control lives in
+  "Security Rules and Cloud Functions"
+- domain types
+- organization services: create, join, assign, transfer, regenerate, rename
+- Security Rules for organizations, memberships, join codes, admin settings, and join proofs
+- Firestore indexes if the queries require any
+- @firebase/rules-unit-testing suite
+- transaction and batch validation
+- directory query tested at 1, 5, 10, and 20 members
+
+### Phase 2B — Organization Interface
 
 - organization selection
-- create/join
+- create / join screens
 - unassigned state
-- team/member permission foundation
+- Admin organization management
+
+Phase 2B does not begin until the Phase 2A rules tests pass. If a query and its rule turn out to be
+incompatible, stop and report rather than relaxing the rule or dropping a required filter.
 
 ### Phase 3 — Core Theater Data
 

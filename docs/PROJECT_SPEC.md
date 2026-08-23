@@ -97,9 +97,10 @@ When a user joins using a valid organization code:
   permission at View or Edit changes the role to Member automatically, and a membership that stops
   meeting both conditions returns to Unassigned.
 
-Creating an organization, joining by code, regenerating a code, and transferring Admin are
-privileged operations and run in trusted Cloud Functions. The organization code itself is stored
-separately from the organization record and is readable only by the Admin.
+Creating an organization, joining by code, regenerating a code, and transferring Admin run in the
+client as Firestore transactions or batched writes, authorized entirely by Security Rules. The
+organization code is stored separately from the organization record, and only the Admin can learn
+which code is currently active.
 
 ## 6. Roles
 
@@ -388,13 +389,15 @@ Backend platform:
 
 - Firebase Authentication
 - Cloud Firestore
-- Firebase Cloud Functions for privileged operations
 - Firebase Hosting
-- Firebase Storage only if inventory photos are later implemented
+- **Firebase Spark plan only.** No Cloud Functions, no Admin SDK, no Cloud Run, and no feature
+  requiring Blaze. There is no trusted server; Firestore Security Rules are the authorization
+  boundary.
 
 AI:
 
-- Firebase AI Logic with Gemini
+- Firebase AI Logic with the **Gemini Developer API**, model **gemini-3.5-flash**
+- The Vertex AI / Agent Platform path requires Blaze and is not used
 - AI access wrapped behind an internal application service
 - Zod for runtime validation of all model output
 

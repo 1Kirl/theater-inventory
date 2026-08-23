@@ -14,9 +14,13 @@
 6. User has no organizations, so the empty state is shown.
 7. User selects Create Organization.
 8. User enters organization name and optional description.
-9. Organization is created.
-10. Current user becomes the first Admin.
-11. System generates an organization join code.
+9. The client generates the organization ID and a join code with `crypto.getRandomValues()`, then
+   commits one batched write containing the organization, the creator's membership, the admin
+   settings, and the join code. Security Rules validate the four documents as a unit.
+10. Current user becomes the first Admin, because the organization names them in `admin_uid`.
+    Their membership starts empty — no teams, no permissions — which is what they fall back to if
+    administration is ever transferred away.
+11. The generated join code is now the organization's active code.
 12. Organization Created screen shows the join code.
 13. User selects Enter Organization.
 14. Dashboard opens for the new organization.
@@ -26,11 +30,15 @@
 1. User creates a personal account or logs in.
 2. User arrives at Organization Selection.
 3. User selects Join Organization.
-4. User enters an organization code.
-5. System validates the code.
-6. System shows organization name for confirmation.
+4. User enters an organization code. The client trims it, uppercases it, and removes hyphens and
+   whitespace before use.
+5. The client reads `organization_join_codes/{code}` directly and checks `active == true`. There is
+   no server step; the code is a bearer secret and reading it is what proves the user holds it.
+6. System shows the organization name from the code's snapshot for confirmation.
 7. User confirms Join.
-8. Membership is created with status `unassigned`.
+8. One batched write creates the membership and its join proof. The membership has no teams and no
+   permissions, so its effective role is Unassigned. Security Rules pin those values, so a joining
+   user cannot grant themselves access on the way in.
 9. User sees Unassigned Member State.
 10. User cannot access normal organization modules yet.
 11. Admin later assigns team(s) and permissions.
@@ -39,7 +47,10 @@
 ## 3. Returning User — Select an Organization
 
 1. User logs in.
-2. Organization Selection displays all memberships.
+2. Organization Selection queries the user's own memberships with
+   `where('uid','==',auth.uid).where('is_active','==',true)`, then reads each organization document
+   by ID. The organizations collection is never listed. Both filters are required: Security Rules
+   are not filters, and dropping one rejects the query rather than widening it.
 3. Each card shows at least:
    - organization name,
    - role/status,
@@ -265,10 +276,14 @@ item Done or Cancelled rather than deleting it.
 2. Admin selects Regenerate Code. Only an Admin may run this operation.
 3. UI warns that the old code will stop working.
 4. Admin confirms.
-5. The `regenerateOrganizationCode` Cloud Function deactivates the old code document and creates
-   a new one.
-6. Existing memberships remain unchanged.
-7. New join code is displayed to the Admin, who is the only role that can read it.
+5. One batched write creates the new code document, sets the old one to `active: false` with a
+   `revoked_at` timestamp, and repoints `organization_admin_settings.current_join_code_id`.
+   Security Rules allow this only for the organization's Admin.
+6. Old code documents are never deleted, so a revoked code fails validation for a clear reason
+   rather than looking like a typo.
+7. Existing memberships remain unchanged.
+8. New join code is displayed to the Admin, who is the only role that can read which code is
+   current.
 
 ## 18. Admin — Transfer Admin Role
 
@@ -277,23 +292,29 @@ item Done or Cancelled rather than deleting it.
 3. Admin selects an eligible existing member.
 4. UI clearly explains the effect.
 5. Admin confirms.
-6. The `transferAdmin` Cloud Function performs an atomic transfer.
+6. A client-side Firestore transaction reads the organization and the target membership, confirms
+   the caller is the current Admin and the target membership is active, then writes `admin_uid`.
+   No membership document is touched, because no membership carries a role.
 7. Target user becomes Admin, keeping their existing teams and permissions untouched. Admin access
-   takes precedence over those values while they hold the role.
-8. The previous Admin's role is resolved from the teams and permissions their membership already
+   takes precedence over those values while they hold administration.
+8. The previous Admin's role resolves from the teams and permissions their membership already
    carries:
    - at least one team and at least one module at View or Edit → Member,
    - otherwise → Unassigned Member.
+   Nothing is written to make this happen; the effective-role computation simply reads a different
+   `admin_uid`.
 9. No extra step asks the transferring Admin to configure their own future permissions. If they
    land in Unassigned, the new Admin assigns them through the normal Member Detail flow.
-10. Organization never exists without an Admin.
+10. Organization never exists without an Admin. Security Rules reject a transfer to a uid without
+    an active membership, and reject deactivating the current Admin's membership.
 
 ## 19. Permission-Denied Flow
 
 If a user navigates directly to a route or attempts an operation without permission:
 
 1. UI route guard blocks the action where possible.
-2. Firestore Security Rules / Cloud Function authorization block unauthorized backend access.
+2. Firestore Security Rules block unauthorized access. They are the only enforcement point; there
+   is no server behind them.
 3. App shows a clear permission-denied message.
 4. Existing data remains unchanged.
 
