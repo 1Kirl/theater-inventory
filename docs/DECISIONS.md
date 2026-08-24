@@ -1204,3 +1204,46 @@ All four now read back with `toDateKey()` from `domain/calendar`, the same local
 calendar has used since Phase 6, and which decision 49 records the reasoning for. Affected:
 production start and end dates, inventory last-inspected, maintenance sent/expected/returned dates,
 and the action item due date.
+
+---
+
+## 60. The Demo Dataset Is Seeded Through the Client, as Two Ordinary Users
+
+The QA and demonstration data is real Firebase data — Auth accounts and Firestore documents — not
+sample arrays rendered by the interface. A seeded record has to behave exactly like one a person
+created, or testing against it proves nothing.
+
+`npm run seed:demo -- --confirm` writes it with the ordinary client SDK, signed in as the demo Admin
+and then as the demo Member. Every document passes the same Security Rules as any other write: the
+organization is created in the same batch shape the application uses, the Member joins with the
+organization code and a join proof, and the Admin assigns teams and permissions afterwards. There is
+no Admin SDK, no service account, and no rule relaxed to make seeding easier.
+
+Whether this was possible at all was established rather than assumed. A read-only probe confirmed
+that App Check enforcement covers Firebase AI Logic only: an unauthenticated sign-in attempt was
+refused on credentials, and an unauthorized Firestore query was refused by Rules — neither by App
+Check. A Node client can therefore authenticate and write normally.
+
+### 60a. Shapes are shared; service wrappers are not
+
+The script imports the application's own payload builders, so a seeded document cannot drift from a
+real one. It does not use the service layer, because those modules read configuration through Vite's
+`import.meta.env`, which does not exist in Node. The script reads `.env.local` itself and builds its
+own Firebase app.
+
+Node 22 strips TypeScript types natively, so the script needs no build step. The project's `@/`
+alias is taught to Node by a small resolver hook in `scripts/`, which is what allows the builders to
+be shared rather than the document shapes copied.
+
+### 60b. Safeguards
+
+Running it takes an explicit `--confirm` flag and a `.env.seed.local` that is gitignored. It refuses
+to run a second time against an organization it already created, found the way the application finds
+organizations — through the caller's own memberships, since listing organizations is denied to
+everyone. It touches nothing outside the organization it creates, and there is no reset or delete
+path: removing the demo data is a deliberate act in the Firebase console.
+
+No password appears in the repository. The dataset itself is described in `src/domain/demo-dataset.ts`
+as plain data with local keys, so its invariants — that the microphone shortage is real, that every
+action refers to a matched and short requirement, that no repair sends more units than exist — are
+unit-tested without touching Firebase.

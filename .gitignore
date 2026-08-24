@@ -27,6 +27,9 @@ dist-ssr
 .env.local
 .env.*.local
 
+# Demo/QA seed credentials. Never committed.
+.env.seed.local
+
 # Firebase emulator
 firestore-debug.log
 firebase-debug.log

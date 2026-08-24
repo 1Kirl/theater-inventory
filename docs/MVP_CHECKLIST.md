@@ -11,9 +11,17 @@ This document defines what must be finished before optional stretch work begins.
   driven it in a browser yet. Unit tests passing is not verification.
 - `[ ]` — not done.
 
-As of Phase 9 the outstanding browser QA is the Dashboard, the two AI features after the data-aware
-redesign, and the 375px responsive pass. The AI cases are blocked on the Gemini free-tier daily
-quota, which was exhausted during the quota investigation.
+The Dashboard, the lazy-route refactor, the 375px responsive pass, and the seeded demo dataset have
+all been verified in a browser, as both demo accounts.
+
+Two things remain outstanding, and only two:
+
+- **AI quality QA.** Both AI features are implemented and unit-tested with the model boundary
+  stubbed, but nobody has judged the answers they give against the seeded data. Blocked on the
+  Gemini free tier's 20 requests per day. The demo *data* for those questions exists; the *answers*
+  have not been assessed.
+- **Deployment.** Firebase Hosting has not been deployed, and the production App Check site key is
+  not configured.
 
 ## P0 — Required for Final Demo
 
@@ -69,12 +77,12 @@ quota, which was exhausted during the quota investigation.
 
 ### Dashboard
 
-- [x] Dashboard loads active organization only — implemented, browser QA pending
-- [x] Core summary cards use real data — implemented, browser QA pending
-- [x] Each card hidden unless its underlying module is viewable — implemented, browser QA pending
-- [x] Upcoming events summary — implemented, browser QA pending
-- [x] Active production summary — implemented, browser QA pending
-- [x] Permission-aware quick actions — implemented, browser QA pending
+- [x] Dashboard loads active organization only
+- [x] Core summary cards use real data
+- [x] Each card hidden unless its underlying module is viewable
+- [x] Upcoming events summary
+- [x] Active production summary
+- [x] Permission-aware quick actions
 
 ### Teams / Members / Permissions
 
@@ -290,30 +298,30 @@ quota, which was exhausted during the quota investigation.
 
 ### Responsive QA
 
-- [x] Sign Up / Login usable on mobile — implemented, browser QA pending
-- [x] Organization Selection usable on mobile — implemented, browser QA pending
-- [x] Dashboard usable on mobile — implemented, browser QA pending
-- [x] Inventory usable on mobile — implemented, browser QA pending
-- [x] Repair form usable on mobile — implemented, browser QA pending
-- [x] Production Requirements usable on mobile — implemented, browser QA pending
-- [x] Calendar usable on mobile — implemented, browser QA pending
-- [x] Member management usable on mobile — implemented, browser QA pending
-- [x] No critical horizontal overflow around 375px — implemented, browser QA pending
+- [x] Sign Up / Login usable on mobile
+- [x] Organization Selection usable on mobile
+- [x] Dashboard usable on mobile
+- [x] Inventory usable on mobile
+- [x] Repair form usable on mobile
+- [x] Production Requirements usable on mobile
+- [x] Calendar usable on mobile
+- [x] Member management usable on mobile
+- [x] No critical horizontal overflow around 375px
 
 ### Final Demo / Delivery
 
-- [ ] Seed/demo organization created
-- [ ] Demo Admin account prepared
-- [ ] Demo Member account prepared
-- [ ] Demo inventory populated
-- [ ] At least one repair history example
-- [ ] At least one production with shortages
-- [ ] At least one action item
-- [ ] Calendar events populated
-- [ ] AI Smart Search demo query prepared
-- [ ] AI Requirement Generator demo production prepared
+- [x] Seed/demo organization created
+- [x] Demo Admin account prepared
+- [x] Demo Member account prepared
+- [x] Demo inventory populated
+- [x] At least one repair history example
+- [x] At least one production with shortages
+- [x] At least one action item
+- [x] Calendar events populated
+- [x] AI Smart Search demo query prepared — data supports the four QA questions; answers not yet judged
+- [x] AI Requirement Generator demo production prepared — 200-seat, 20-vocalist musical seeded; output not yet judged
 - [ ] Firebase Hosting deployment works
-- [ ] README contains local run instructions
+- [x] README contains local run instructions
 - [x] No TypeScript errors
 - [x] Lint succeeds
 - [x] Production build succeeds
