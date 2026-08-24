@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
+import { collection, doc, getDocs, query, serverTimestamp, setDoc, where } from 'firebase/firestore'
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS } from '@/domain/organization-ids'
 import { OrganizationError } from '@/domain/organization-errors'
@@ -71,13 +71,6 @@ export async function listRequirements(organizationId: string): Promise<Producti
     ),
   )
   return snapshot.docs.map((entry) => entry.data() as ProductionRequirement)
-}
-
-export async function getRequirement(requirementId: string): Promise<ProductionRequirement | null> {
-  const snapshot = await getDoc(
-    doc(getFirebaseDb(), COLLECTIONS.productionRequirements, requirementId),
-  )
-  return snapshot.exists() ? (snapshot.data() as ProductionRequirement) : null
 }
 
 export async function createRequirement(params: {

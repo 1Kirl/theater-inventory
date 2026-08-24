@@ -86,7 +86,7 @@ function quotaIdsOf(error: FirebaseError): string[] {
 }
 
 /** A per-day limit rather than a per-minute one. */
-export function isDailyQuota(error: FirebaseError): boolean {
+function isDailyQuota(error: FirebaseError): boolean {
   return quotaIdsOf(error).some((id) => id.toLowerCase().includes('perday'))
 }
 

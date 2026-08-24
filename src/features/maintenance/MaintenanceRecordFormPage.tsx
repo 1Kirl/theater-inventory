@@ -24,6 +24,7 @@ import {
   listMaintenanceRecordsForItem,
   updateMaintenanceRecord,
 } from '@/services/maintenance-service'
+import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import {
   MAINTENANCE_STATUSES,
@@ -71,8 +72,14 @@ function toDate(value: string): Timestamp | null {
   return value ? Timestamp.fromDate(new Date(`${value}T00:00:00`)) : null
 }
 
+/**
+ * The inverse of `toDate` above, which parses the input value as *local*
+ * midnight. `toISOString` would answer in UTC, so a date read back into the
+ * form would land on the previous day for anyone east of Greenwich, and saving
+ * again would walk it back another day.
+ */
 function fromDate(stamp: MaintenanceRecord['sent_at']): string {
-  return stamp ? stamp.toDate().toISOString().slice(0, 10) : ''
+  return stamp ? toDateKey(stamp.toDate()) : ''
 }
 
 export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' }) {
@@ -103,19 +110,36 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
 
   const selectedItem = items.find((item) => item.item_id === state.itemId) ?? null
 
-  const load = useCallback(async () => {
-    if (!organization) return
-    setError(null)
-    try {
-      const loadedItems = await listInventoryItems(organization.organization_id)
-      setItems(loadedItems)
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else.
+  const load = useCallback((): Promise<void> => {
+    if (!organization) return Promise.resolve()
+    const organizationId = organization.organization_id
 
-      if (mode === 'edit' && recordId) {
-        const record = await getMaintenanceRecord(recordId)
-        if (!record || record.organization_id !== organization.organization_id) {
-          setError('That maintenance record was not found in this organization.')
+    async function read() {
+      const items = await listInventoryItems(organizationId)
+
+      if (mode !== 'edit' || !recordId) return { items, record: null }
+
+      const record = await getMaintenanceRecord(recordId)
+      if (!record || record.organization_id !== organizationId) {
+        throw new Error('not-in-organization')
+      }
+
+      return { items, record }
+    }
+
+    return read().then(
+      ({ items, record }) => {
+        setItems(items)
+        setLoading(false)
+
+        if (!record) {
+          const preselected = searchParams.get('item')
+          if (preselected) setState((current) => ({ ...current, itemId: preselected }))
           return
         }
+
         setExisting(record)
         setState({
           itemId: record.item_id,
@@ -132,15 +156,16 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
           cost: typeof record.cost === 'number' ? String(record.cost) : '',
           repairNotes: record.repair_notes ?? '',
         })
-      } else {
-        const preselected = searchParams.get('item')
-        if (preselected) setState((current) => ({ ...current, itemId: preselected }))
-      }
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-    } finally {
-      setLoading(false)
-    }
+      },
+      (caught: unknown) => {
+        setLoading(false)
+        setError(
+          caught instanceof Error && caught.message === 'not-in-organization'
+            ? 'That maintenance record was not found in this organization.'
+            : toOrganizationErrorMessage(caught),
+        )
+      },
+    )
   }, [organization, mode, recordId, searchParams])
 
   useEffect(() => {
@@ -150,16 +175,22 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
   // The item's other records are what the over-capacity warning is measured
   // against. Loaded per item, not for the whole organization.
   useEffect(() => {
-    if (!organization || !state.itemId) {
-      setSiblings([])
-      return
-    }
-    void listMaintenanceRecordsForItem({
-      organizationId: organization.organization_id,
-      itemId: state.itemId,
-    })
-      .then(setSiblings)
-      .catch(() => setSiblings([]))
+    // Resolve to an empty list rather than clearing synchronously, so the
+    // effect only settles state in a continuation.
+    const pending = organization && state.itemId
+      ? listMaintenanceRecordsForItem({
+        organizationId: organization.organization_id,
+        itemId: state.itemId,
+      })
+      : Promise.resolve([])
+
+    let cancelled = false
+    pending.then(
+      (loaded) => { if (!cancelled) setSiblings(loaded) },
+      () => { if (!cancelled) setSiblings([]) },
+    )
+
+    return () => { cancelled = true }
   }, [organization, state.itemId])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -239,7 +270,7 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
   }
 
   if (loading) {
-    return <p className="text-muted-foreground text-sm">Loading…</p>
+    return <p className="text-muted-foreground text-sm">Loading maintenance record…</p>
   }
 
   if (mode === 'edit' && existing && !canEditTeamScopedRecord(role, membership, 'maintenance', existing.team_id)) {

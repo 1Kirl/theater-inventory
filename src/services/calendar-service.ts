@@ -1,5 +1,5 @@
 import {
-  collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, setDoc, where,
+  collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, where,
 } from 'firebase/firestore'
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS } from '@/domain/organization-ids'
@@ -71,11 +71,6 @@ export async function listCalendarEvents(organizationId: string): Promise<Calend
     ),
   )
   return snapshot.docs.map((entry) => entry.data() as CalendarEvent)
-}
-
-export async function getCalendarEvent(eventId: string): Promise<CalendarEvent | null> {
-  const snapshot = await getDoc(doc(getFirebaseDb(), COLLECTIONS.calendarEvents, eventId))
-  return snapshot.exists() ? (snapshot.data() as CalendarEvent) : null
 }
 
 export async function createCalendarEvent(params: {

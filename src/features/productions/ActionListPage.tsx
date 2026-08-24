@@ -41,26 +41,37 @@ export function ActionListPage() {
 
   const canReadInventory = hasModuleAccess(role, membership?.permissions ?? null, 'inventory', 'view')
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
-      const [loadedActions, loadedProductions, loadedRequirements] = await Promise.all([
-        listActionItems(organizationId),
-        listProductions(organizationId),
-        listRequirements(organizationId),
-      ])
-      setActions(loadedActions)
-      setProductions(loadedProductions)
-      setRequirements(loadedRequirements)
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
 
-      if (canReadInventory) {
-        setItems(await listInventoryItems(organizationId).catch(() => []))
-      }
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setActions([])
+    async function read() {
+      const [actions, productions, requirements] = await Promise.all([
+        listActionItems(organizationId as string),
+        listProductions(organizationId as string),
+        listRequirements(organizationId as string),
+      ])
+
+      // Matching needs inventory access; without it the rows stay unmatched.
+      const items = canReadInventory
+        ? await listInventoryItems(organizationId as string).catch(() => [])
+        : []
+
+      return { actions, productions, requirements, items }
     }
+
+    return read().then(
+      (loaded) => {
+        setActions(loaded.actions)
+        setProductions(loaded.productions)
+        setRequirements(loaded.requirements)
+        setItems(loaded.items)
+        setError(null)
+      },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setActions([]) },
+    )
   }, [organizationId, canReadInventory])
 
   useEffect(() => {

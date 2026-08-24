@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useAuth } from '@/features/auth/useAuth'
@@ -37,7 +38,14 @@ function ConfigErrorScreen({ message }: { message: string }) {
   )
 }
 
-/** Requires an authenticated Firebase user. */
+/**
+ * Requires an authenticated Firebase user.
+ *
+ * Also the outer Suspense boundary for the routes that sit outside the
+ * application shell — organization selection, create, and join — whose code is
+ * fetched on demand like every other page. Routes inside the shell have their
+ * own boundary there, so the sidebar stays on screen instead of being replaced.
+ */
 export function AuthGuard() {
   const { loading, user, configError } = useAuth()
   const location = useLocation()
@@ -54,7 +62,11 @@ export function AuthGuard() {
     return <Navigate to={paths.logIn} replace state={{ from: location.pathname }} />
   }
 
-  return <Outlet />
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <Outlet />
+    </Suspense>
+  )
 }
 
 /**

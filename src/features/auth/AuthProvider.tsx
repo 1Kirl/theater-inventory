@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { onAuthStateChanged, type User } from 'firebase/auth'
 import { getFirebaseAuth } from '@/lib/firebase'
+import { readFirebaseEnv } from '@/lib/env'
 import { getUserProfile } from '@/services/user-service'
 import { AuthContext, type AuthState } from '@/features/auth/auth-context'
 import type { UserProfile } from '@/types/user'
@@ -10,22 +11,23 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const [loading, setLoading] = useState(true)
+  // Whether Firebase is configured is a synchronous fact about the build, so it
+  // is settled during the first render rather than discovered in an effect. The
+  // effect below then has nothing to report before it subscribes.
+  const [configError] = useState<string | null>(() => {
+    const result = readFirebaseEnv()
+    if (result.ok) return null
+    return `Firebase is not configured. Missing environment variables: ${result.missing.join(', ')}`
+  })
+
+  const [loading, setLoading] = useState(configError === null)
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [configError, setConfigError] = useState<string | null>(null)
 
   useEffect(() => {
-    let auth
-    try {
-      auth = getFirebaseAuth()
-    } catch (error) {
-      setConfigError(error instanceof Error ? error.message : 'Firebase is not configured.')
-      setLoading(false)
-      return
-    }
+    if (configError !== null) return
 
-    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+    const unsubscribe = onAuthStateChanged(getFirebaseAuth(), (nextUser) => {
       setUser(nextUser)
 
       if (!nextUser) {
@@ -43,7 +45,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     })
 
     return unsubscribe
-  }, [])
+  }, [configError])
 
   const value = useMemo<AuthState>(
     () => ({ loading, user, profile, configError }),

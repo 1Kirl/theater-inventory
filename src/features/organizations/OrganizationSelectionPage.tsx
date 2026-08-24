@@ -31,9 +31,11 @@ export function OrganizationSelectionPage() {
   const [cards, setCards] = useState<MembershipCard[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setError(null)
-    try {
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    async function read() {
       const memberships = await listMyActiveMemberships()
 
       const loaded = await Promise.all(
@@ -46,15 +48,15 @@ export function OrganizationSelectionPage() {
         }),
       )
 
-      setCards(
-        loaded
-          .filter((entry): entry is MembershipCard => entry !== null)
-          .sort((left, right) => left.organization.name.localeCompare(right.organization.name)),
-      )
-    } catch (caught) {
-      setError(toUserFacingMessage(caught))
-      setCards([])
+      return loaded
+        .filter((entry): entry is MembershipCard => entry !== null)
+        .sort((left, right) => left.organization.name.localeCompare(right.organization.name))
     }
+
+    return read().then(
+      (loaded) => { setCards(loaded); setError(null) },
+      (caught: unknown) => { setError(toUserFacingMessage(caught)); setCards([]) },
+    )
   }, [])
 
   useEffect(() => {

@@ -37,10 +37,3 @@ export class OrganizationError extends Error {
   }
 }
 
-export function isOrganizationError(
-  error: unknown,
-  code?: OrganizationErrorCode,
-): error is OrganizationError {
-  if (!(error instanceof OrganizationError)) return false
-  return code === undefined || error.code === code
-}

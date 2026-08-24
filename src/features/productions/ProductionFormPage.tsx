@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { PRODUCTION_STATUS_LABELS } from '@/domain/production'
 import { createProduction, getProduction, updateProduction } from '@/services/production-service'
+import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import { PRODUCTION_STATUSES, type Production, type ProductionStatus } from '@/types/production'
 import { paths } from '@/routes/paths'
@@ -36,26 +37,32 @@ export function ProductionFormPage({ mode }: { mode: 'create' | 'edit' }) {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const load = useCallback(async () => {
-    if (mode !== 'edit' || !productionId) return
-    try {
-      const production = await getProduction(productionId)
-      if (!production || production.organization_id !== organization?.organization_id) {
-        setError('That production was not found in this organization.')
-        return
-      }
-      setExisting(production)
-      setTitle(production.title)
-      setDescription(production.description ?? '')
-      setNotes(production.notes ?? '')
-      setStatus(production.status)
-      setStartDate(production.start_date ? production.start_date.toDate().toISOString().slice(0, 10) : '')
-      setEndDate(production.end_date ? production.end_date.toDate().toISOString().slice(0, 10) : '')
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-    } finally {
-      setLoading(false)
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else.
+  const load = useCallback((): Promise<void> => {
+    if (mode !== 'edit' || !productionId) return Promise.resolve()
+    const organizationId = organization?.organization_id
+
+    return getProduction(productionId).then(
+      (production) => {
+        setLoading(false)
+
+        if (!production || production.organization_id !== organizationId) {
+          setError('That production was not found in this organization.')
+          return
+        }
+
+        setExisting(production)
+        setTitle(production.title)
+        setDescription(production.description ?? '')
+        setNotes(production.notes ?? '')
+        setStatus(production.status)
+        // Local parts, matching how `toTimestamp` reads the input back.
+        setStartDate(production.start_date ? toDateKey(production.start_date.toDate()) : '')
+        setEndDate(production.end_date ? toDateKey(production.end_date.toDate()) : '')
+      },
+      (caught: unknown) => { setLoading(false); setError(toOrganizationErrorMessage(caught)) },
+    )
   }, [mode, productionId, organization])
 
   useEffect(() => {

@@ -1117,3 +1117,90 @@ not read it, and Security Rules would refuse if it tried.
 
 That case reports null and the interface says "shortages need inventory access". Zero would read as
 "nothing is short", which is a different statement and possibly a false one.
+
+---
+
+## 56. Organization Administration Lives in One Place
+
+There is no separate Team & Members page. Teams, member team assignment, module
+permissions, promotion from Unassigned, member deactivation, and Admin transfer are all sections of
+**Organization Settings**, which is where they were already implemented.
+
+`IA.md` section 10 lists Team & Members as its own screen, and the sidebar carried an entry for it
+that led to a placeholder for six phases. Building the page would have meant either splitting the
+existing settings sections across two screens or duplicating them; keeping one screen means one
+place for an Admin to look and one set of guards to reason about.
+
+The sidebar entry is gone. `/team` is kept as a redirect to Organization Settings, so a bookmark
+from an earlier build still lands somewhere useful rather than on a 404. The placeholder component
+is removed, and no Firestore schema, Rules, or permission behaviour changed.
+
+---
+
+## 57. Feature Routes Are Fetched On Demand
+
+Every page behind a guard is a separate chunk, declared in `routes/lazy-routes.ts`. What stays
+eager is what the first paint needs: the shell, the guards, the providers, and the two
+authentication screens.
+
+The entry bundle went from 1,309 kB to 351 kB. The Firebase SDK is pinned to its own `firebase`
+chunk by `manualChunks` for one reason — caching. It is 565 kB and changes only when Firebase is
+upgraded; grouped with application code, editing a button would give the whole thing a new hash and
+every returning user would download it again.
+
+`@firebase/ai` is deliberately excluded from that chunk. The AI panel and the requirement generator
+are themselves lazy, so the AI SDK travels with them: the dashboard, the calendar, maintenance, and
+productions never fetch it, and the requirement generator fetches it only when someone opens it.
+
+Suspense boundaries sit inside `AppShell` and `AuthGuard`, so the sidebar and header stay on screen
+while a page's code arrives rather than the whole window blanking.
+
+---
+
+## 58. Effects Start Work; They Do Not Set State
+
+Every data-loading effect in the application now settles its state in a promise continuation rather
+than synchronously. The pattern is uniform:
+
+```ts
+const load = useCallback((): Promise<void> => {
+  if (!organizationId) return Promise.resolve()
+  return listX(organizationId).then(
+    (loaded) => { setX(loaded); setError(null) },
+    (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setX([]) },
+  )
+}, [organizationId])
+```
+
+Returning the promise keeps `load` awaitable for the dialogs that refresh after a write.
+
+Two providers needed more than that:
+
+- `AuthProvider` decided during an effect whether Firebase was configured. That is a synchronous
+  fact about the build, so it is settled during the first render instead.
+- `OrganizationProvider` cleared its organization from an effect when the user signed out, and
+  reset four pieces of state on every load. It now holds one entry tagged with the organization it
+  belongs to, and the exposed value is derived: an entry for a different organization, or one left
+  from a previous account, simply does not match. Signing out drops the organization during render,
+  where before there was one paint in which the next account could have seen the previous
+  account's organization. `loading` is derived too — an organization we should have, nothing
+  resolved for it, and no error to explain why.
+
+The project's lint policy is now **zero warnings**, not merely zero errors.
+
+---
+
+## 59. Date Inputs Round-Trip Through Local Parts
+
+Four forms wrote a date with `new Date('YYYY-MM-DDT00:00:00')` — parsed as **local** midnight — and
+read it back with `toISOString().slice(0, 10)`, which answers in **UTC**.
+
+East of Greenwich the two disagree by a day. A production starting 2026-09-05 came back into the
+edit form as 2026-09-04, and saving again moved it another day earlier. The displayed date was
+right, because the lists use `toLocaleDateString()`; only editing walked it backwards, which is the
+version of this bug that takes longest to notice.
+
+All four now read back with `toDateKey()` from `domain/calendar`, the same local-parts function the
+calendar has used since Phase 6, and which decision 49 records the reasoning for. Affected:
+production start and end dates, inventory last-inspected, maintenance sent/expected/returned dates,
+and the action item due date.

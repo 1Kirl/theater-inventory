@@ -4,290 +4,301 @@ Target completion: **September 5, 2026**
 
 This document defines what must be finished before optional stretch work begins.
 
+**How to read the boxes**
+
+- `[x]` — implemented, and verified in a real browser by the project owner.
+- `[x] … — implemented, browser QA pending` — built and covered by automated tests, but nobody has
+  driven it in a browser yet. Unit tests passing is not verification.
+- `[ ]` — not done.
+
+As of Phase 9 the outstanding browser QA is the Dashboard, the two AI features after the data-aware
+redesign, and the 375px responsive pass. The AI cases are blocked on the Gemini free-tier daily
+quota, which was exhausted during the quota investigation.
+
 ## P0 — Required for Final Demo
 
 ### Project Foundation
 
-- [ ] React + Vite + TypeScript project initializes correctly
-- [ ] React Router configured
-- [ ] Tailwind CSS configured
-- [ ] shadcn/ui configured
-- [ ] Firebase project connected
-- [ ] Firebase Emulator Suite runs locally
-- [ ] Vitest configured
-- [ ] Zod configured for AI output validation
-- [ ] @firebase/rules-unit-testing configured
-- [ ] firebase-tools installed as a project-local devDependency, never globally
-- [ ] JDK 21 or newer available for the Firestore emulator
-- [ ] Spark plan only — no Cloud Functions, Admin SDK, or Cloud Run anywhere in the project
-- [ ] App Check deliberately excluded from the MVP
-- [ ] Environment/config handling documented
-- [ ] Git repository initialized
-- [ ] Production build succeeds
+- [x] React + Vite + TypeScript project initializes correctly
+- [x] React Router configured
+- [x] Tailwind CSS configured
+- [x] shadcn/ui configured
+- [x] Firebase project connected
+- [x] Firebase Emulator Suite runs locally
+- [x] Vitest configured
+- [x] Zod configured for AI output validation
+- [x] @firebase/rules-unit-testing configured
+- [x] firebase-tools installed as a project-local devDependency, never globally
+- [x] JDK 21 or newer available for the Firestore emulator
+- [x] Spark plan only — no Cloud Functions, Admin SDK, or Cloud Run anywhere in the project
+- [x] App Check enforced for Firebase AI Logic — reCAPTCHA Enterprise in production, debug provider on localhost (supersedes the earlier decision to exclude it)
+- [x] Environment/config handling documented
+- [x] Git repository initialized
+- [x] Production build succeeds
 
 ### Authentication
 
-- [ ] Sign Up with User ID + Password
-- [ ] Log In with User ID + Password
-- [ ] User profile created in Firestore
-- [ ] Duplicate User ID handled
-- [ ] Authentication errors shown cleanly
-- [ ] Sign Out
-- [ ] Change Password
+- [x] Sign Up with User ID + Password
+- [x] Log In with User ID + Password
+- [x] User profile created in Firestore
+- [x] Duplicate User ID handled
+- [x] Authentication errors shown cleanly
+- [x] Sign Out
+- [x] Change Password
 
 ### Organization Onboarding
 
-- [ ] Organization Selection page
-- [ ] Multiple organization memberships supported
-- [ ] Create Organization as a single client batched write of four documents
-- [ ] Join Organization as a single client batched write of membership plus join proof
-- [ ] Regenerate join code as a single client batched write
-- [ ] Transfer Admin as a client Firestore transaction
-- [ ] Creator becomes Admin via organizations.admin_uid
-- [ ] Join code generated with crypto.getRandomValues, 16 characters, no Math.random
-- [ ] Join code stored in organization_join_codes with the code as document ID
-- [ ] Join code never stored on the organization document
-- [ ] Current join code pointer readable only by the Admin
-- [ ] Effective role computed at runtime, never stored
-- [ ] Organization Created / code screen
-- [ ] Join Organization by code
-- [ ] Duplicate membership prevented
-- [ ] New joiner becomes Unassigned
-- [ ] Unassigned waiting state
-- [ ] Organization switching
+- [x] Organization Selection page
+- [x] Multiple organization memberships supported
+- [x] Create Organization as a single client batched write of four documents
+- [x] Join Organization as a single client batched write of membership plus join proof
+- [x] Regenerate join code as a single client batched write
+- [x] Transfer Admin as a client Firestore transaction
+- [x] Creator becomes Admin via organizations.admin_uid
+- [x] Join code generated with crypto.getRandomValues, 16 characters, no Math.random
+- [x] Join code stored in organization_join_codes with the code as document ID
+- [x] Join code never stored on the organization document
+- [x] Current join code pointer readable only by the Admin
+- [x] Effective role computed at runtime, never stored
+- [x] Organization Created / code screen
+- [x] Join Organization by code
+- [x] Duplicate membership prevented
+- [x] New joiner becomes Unassigned
+- [x] Unassigned waiting state
+- [x] Organization switching
 
 ### Dashboard
 
-- [ ] Dashboard loads active organization only
-- [ ] Core summary cards use real data
-- [ ] Each card hidden unless its underlying module is viewable
-- [ ] Upcoming events summary
-- [ ] Active production summary
-- [ ] Permission-aware quick actions
+- [x] Dashboard loads active organization only — implemented, browser QA pending
+- [x] Core summary cards use real data — implemented, browser QA pending
+- [x] Each card hidden unless its underlying module is viewable — implemented, browser QA pending
+- [x] Upcoming events summary — implemented, browser QA pending
+- [x] Active production summary — implemented, browser QA pending
+- [x] Permission-aware quick actions — implemented, browser QA pending
 
 ### Teams / Members / Permissions
 
-- [ ] Create/edit teams
-- [ ] Members list
-- [ ] Unassigned Members section
-- [ ] Member Detail
-- [ ] Assign one or more teams
-- [ ] Assign the four module permissions (inventory, maintenance, productions, calendar)
-- [ ] Effective role reads as Member once a team plus a module at View or Edit is saved
-- [ ] Effective role falls back to Unassigned when either condition stops holding
-- [ ] team_ids and permissions retained when a user becomes Admin
-- [ ] Members cannot edit their own membership
-- [ ] Deactivate membership with is_active = false
-- [ ] Current Admin's membership cannot be deactivated
-- [ ] Admin full-access behavior
-- [ ] Unassigned access restriction
-- [ ] UI route guards
-- [ ] Backend authorization rules
+- [x] Create/edit teams
+- [x] Members list
+- [x] Unassigned Members section
+- [x] Member Detail
+- [x] Assign one or more teams
+- [x] Assign the four module permissions (inventory, maintenance, productions, calendar)
+- [x] Effective role reads as Member once a team plus a module at View or Edit is saved
+- [x] Effective role falls back to Unassigned when either condition stops holding
+- [x] team_ids and permissions retained when a user becomes Admin
+- [x] Members cannot edit their own membership
+- [x] Deactivate membership with is_active = false
+- [x] Current Admin's membership cannot be deactivated
+- [x] Admin full-access behavior
+- [x] Unassigned access restriction
+- [x] UI route guards
+- [x] Backend authorization rules
 
 ### Inventory
 
-- [ ] Inventory List
-- [ ] Desktop table
-- [ ] Mobile card list
-- [ ] Add Inventory Item
-- [ ] Edit Inventory Item
-- [ ] Inventory Item Detail
-- [ ] Category filter
-- [ ] Team filter
-- [ ] Location filter
-- [ ] Condition filter
-- [ ] Availability filter
-- [ ] Standard keyword search
-- [ ] Quantity validation
-- [ ] Condition-count validation
-- [ ] Condition summary derived, not stored, with an Unclassified remainder
-- [ ] Available quantity manually maintained and never auto-adjusted
-- [ ] Organization scope enforced
-- [ ] Team edit scope enforced — reading stays organization-wide
-- [ ] team_id required and validated against the organization's teams
+- [x] Inventory List
+- [x] Desktop table
+- [x] Mobile card list
+- [x] Add Inventory Item
+- [x] Edit Inventory Item
+- [x] Inventory Item Detail
+- [x] Category filter
+- [x] Team filter
+- [x] Location filter
+- [x] Condition filter
+- [x] Availability filter
+- [x] Standard keyword search
+- [x] Quantity validation
+- [x] Condition-count validation
+- [x] Condition summary derived, not stored, with an Unclassified remainder
+- [x] Available quantity manually maintained and never auto-adjusted
+- [x] Organization scope enforced
+- [x] Team edit scope enforced — reading stays organization-wide
+- [x] team_id required and validated against the organization's teams
 
 ### AI Smart Search — REQUIRED AI FEATURE
 
-- [ ] Natural-language input
-- [ ] Structured filter output using team_name, never team_id
-- [ ] Conditions returned as an array
-- [ ] Runtime validation of AI output with Zod
-- [ ] Display interpreted filters
-- [ ] Query real Firestore inventory
-- [ ] No fabricated inventory results
-- [ ] Permission/org scope preserved
-- [ ] Error/retry state
-- [ ] Manual search remains available
-- [ ] Result count and clear/reset action
-- [ ] Interpreted filters land in the manual filter state and stay editable there
-- [ ] An unresolvable team or category is reported, not guessed at
-- [ ] Smart Search hidden from users without Inventory view
-- [ ] AI answers from the accessible inventory, not only from the question
-- [ ] Natural-language answer shown above the real records
-- [ ] Temporary inventory refs validated; an unsupplied ref shows nothing
-- [ ] Never-inspected, condition, and availability questions answered
+- [x] Natural-language input — implemented, browser QA pending
+- [x] Structured filter output using team_name, never team_id — implemented, browser QA pending
+- [x] Conditions returned as an array — implemented, browser QA pending
+- [x] Runtime validation of AI output with Zod — implemented, browser QA pending
+- [x] Display interpreted filters — implemented, browser QA pending
+- [x] Query real Firestore inventory — implemented, browser QA pending
+- [x] No fabricated inventory results — implemented, browser QA pending
+- [x] Permission/org scope preserved — implemented, browser QA pending
+- [x] Error/retry state — implemented, browser QA pending
+- [x] Manual search remains available — implemented, browser QA pending
+- [x] Result count and clear/reset action — implemented, browser QA pending
+- [x] Interpreted filters land in the manual filter state and stay editable there — implemented, browser QA pending
+- [x] An unresolvable team or category is reported, not guessed at — implemented, browser QA pending
+- [x] Smart Search hidden from users without Inventory view — implemented, browser QA pending
+- [x] AI answers from the accessible inventory, not only from the question — implemented, browser QA pending
+- [x] Natural-language answer shown above the real records — implemented, browser QA pending
+- [x] Temporary inventory refs validated; an unsupplied ref shows nothing — implemented, browser QA pending
+- [x] Never-inspected, condition, and availability questions answered — implemented, browser QA pending
 
 ### Maintenance & Repair
 
-- [ ] Maintenance Overview
-- [ ] Repair status filters
-- [ ] Add Repair / Service Record
-- [ ] Edit Repair / Service Record
-- [ ] Issue description
-- [ ] Quantity sent
-- [ ] Sent date
-- [ ] Expected return date
-- [ ] Actual returned date
-- [ ] Pickup/delivery method
-- [ ] Service provider name
-- [ ] Service provider phone
-- [ ] Optional provider email
-- [ ] Optional cost
-- [ ] Repair notes
-- [ ] Overdue state
-- [ ] team_id copied from the inventory item on creation
-- [ ] Currently-in-service quantity derived and shown beside available quantity
-- [ ] Repair history visible from Inventory Item Detail
+- [x] Maintenance Overview
+- [x] Repair status filters
+- [x] Add Repair / Service Record
+- [x] Edit Repair / Service Record
+- [x] Issue description
+- [x] Quantity sent
+- [x] Sent date
+- [x] Expected return date
+- [x] Actual returned date
+- [x] Pickup/delivery method
+- [x] Service provider name
+- [x] Service provider phone
+- [x] Optional provider email
+- [x] Optional cost
+- [x] Repair notes
+- [x] Overdue state
+- [x] team_id copied from the inventory item on creation
+- [x] Currently-in-service quantity derived and shown beside available quantity
+- [x] Repair history visible from Inventory Item Detail
 
 ### Productions
 
-- [ ] Production List
-- [ ] Create Production
-- [ ] Production Detail
-- [ ] Production status
-- [ ] Add/Edit Production Requirement
-- [ ] Link requirement to inventory item
-- [ ] Required quantity
-- [ ] Real available quantity, derived not stored
-- [ ] Deterministic shortage calculation, derived not stored
-- [ ] Not Matched state for requirements with no linked inventory item
-- [ ] Responsible team
-- [ ] Requirement notes
+- [x] Production List
+- [x] Create Production
+- [x] Production Detail
+- [x] Production status
+- [x] Add/Edit Production Requirement
+- [x] Link requirement to inventory item
+- [x] Required quantity
+- [x] Real available quantity, derived not stored
+- [x] Deterministic shortage calculation, derived not stored
+- [x] Not Matched state for requirements with no linked inventory item
+- [x] Responsible team
+- [x] Requirement notes
 
 ### AI Requirement Generator — REQUIRED AI FEATURE
 
-- [ ] Production description input/context
-- [ ] Generate Requirements with AI
-- [ ] Structured suggestion validation with Zod
-- [ ] Suggested item name
-- [ ] Suggested quantity
-- [ ] Suggested category and suggested_team_name when useful
-- [ ] inventory_match_keyword returned instead of an inventory item ID
-- [ ] Application resolves names and keywords to real IDs
-- [ ] Inventory matching suggestions
-- [ ] Accept suggestion
-- [ ] Edit suggestion
-- [ ] Remove suggestion
-- [ ] Regenerate
-- [ ] Save only approved suggestions
-- [ ] No direct AI Firestore writes
-- [ ] Shortages calculated after approval using real data
-- [ ] Error/retry state
-- [ ] Suggestions start unaccepted; generation alone saves nothing
-- [ ] Suggested team name resolved deterministically against real teams
-- [ ] A team the reviewer cannot write to blocks acceptance until they choose another
-- [ ] Approved requirements saved with source = ai_approved
-- [ ] Manual requirement entry still available when AI fails
-- [ ] AI assessment shown above the review list
-- [ ] Available and shortage shown as facts come from the app, not the model
-- [ ] suggested_action stays transient and is never persisted
-- [ ] General guidance mode when the user has no Inventory view
-- [ ] Malformed individual suggestions dropped without losing the rest
+- [x] Production description input/context — implemented, browser QA pending
+- [x] Generate Requirements with AI — implemented, browser QA pending
+- [x] Structured suggestion validation with Zod — implemented, browser QA pending
+- [x] Suggested item name — implemented, browser QA pending
+- [x] Suggested quantity — implemented, browser QA pending
+- [x] Suggested category and suggested_team_name when useful — implemented, browser QA pending
+- [x] inventory_match_keyword returned instead of an inventory item ID — implemented, browser QA pending
+- [x] Application resolves names and keywords to real IDs — implemented, browser QA pending
+- [x] Inventory matching suggestions — implemented, browser QA pending
+- [x] Accept suggestion — implemented, browser QA pending
+- [x] Edit suggestion — implemented, browser QA pending
+- [x] Remove suggestion — implemented, browser QA pending
+- [x] Regenerate — implemented, browser QA pending
+- [x] Save only approved suggestions — implemented, browser QA pending
+- [x] No direct AI Firestore writes — implemented, browser QA pending
+- [x] Shortages calculated after approval using real data — implemented, browser QA pending
+- [x] Error/retry state — implemented, browser QA pending
+- [x] Suggestions start unaccepted; generation alone saves nothing — implemented, browser QA pending
+- [x] Suggested team name resolved deterministically against real teams — implemented, browser QA pending
+- [x] A team the reviewer cannot write to blocks acceptance until they choose another — implemented, browser QA pending
+- [x] Approved requirements saved with source = ai_approved — implemented, browser QA pending
+- [x] Manual requirement entry still available when AI fails — implemented, browser QA pending
+- [x] AI assessment shown above the review list — implemented, browser QA pending
+- [x] Available and shortage shown as facts come from the app, not the model — implemented, browser QA pending
+- [x] suggested_action stays transient and is never persisted — implemented, browser QA pending
+- [x] General guidance mode when the user has no Inventory view — implemented, browser QA pending
+- [x] Malformed individual suggestions dropped without losing the rest — implemented, browser QA pending
 
 ### Action List
 
-- [ ] Action List page, gated by the productions permission
-- [ ] Action item document ID equals requirement_id
-- [ ] Created or updated only when the user chooses an action type
-- [ ] Quantity defaults to the shortage and is never overwritten by later recalculation
-- [ ] Current shortage displayed separately from action item quantity
-- [ ] Never created for Not Matched, zero shortage, or Already Available
-- [ ] Link action to production requirement
-- [ ] Buy
-- [ ] Rent
-- [ ] Build
-- [ ] Repair
-- [ ] Quantity
-- [ ] Responsible team
-- [ ] Optional assignee
-- [ ] Optional due date
-- [ ] Status
-- [ ] Notes
-- [ ] Shortage dropping to zero marks the item done or cancelled instead of deleting it
+- [x] Action List page, gated by the productions permission
+- [x] Action item document ID equals requirement_id
+- [x] Created or updated only when the user chooses an action type
+- [x] Quantity defaults to the shortage and is never overwritten by later recalculation
+- [x] Current shortage displayed separately from action item quantity
+- [x] Never created for Not Matched, zero shortage, or Already Available
+- [x] Link action to production requirement
+- [x] Buy
+- [x] Rent
+- [x] Build
+- [x] Repair
+- [x] Quantity
+- [x] Responsible team
+- [x] Optional assignee
+- [x] Optional due date
+- [x] Status
+- [x] Notes
+- [x] Shortage dropping to zero marks the item done or cancelled instead of deleting it
 
 ### Calendar
 
-- [ ] Calendar view
-- [ ] Create Event
-- [ ] Edit Event
-- [ ] Delete Event, the only delete flow in the MVP
-- [ ] Event title
-- [ ] Date/time
-- [ ] Event type
-- [ ] All Teams visibility
-- [ ] Multiple specific teams via team_ids
-- [ ] Date with optional start and end time
-- [ ] Event with no times treated as all-day
-- [ ] Team visibility treated as a display filter, not a security boundary
-- [ ] Optional linked production
-- [ ] Optional linked repair record
-- [ ] Notes
-- [ ] Mobile usability
+- [x] Calendar view
+- [x] Create Event
+- [x] Edit Event
+- [x] Delete Event, the only delete flow in the MVP
+- [x] Event title
+- [x] Date/time
+- [x] Event type
+- [x] All Teams visibility
+- [x] Multiple specific teams via team_ids
+- [x] Date with optional start and end time
+- [x] Event with no times treated as all-day
+- [x] Team visibility treated as a display filter, not a security boundary
+- [x] Optional linked production
+- [x] Optional linked repair record
+- [x] Notes
+- [x] Mobile usability
 
 ### Organization Settings
 
-- [ ] Edit organization name/description
-- [ ] View/copy current join code
-- [ ] Regenerate join code
-- [ ] Old code becomes invalid
-- [ ] Existing members remain unaffected
-- [ ] Current join code readable by Admin only
-- [ ] Regenerate restricted to Admin
-- [ ] Revoked codes retained with active false and revoked_at
-- [ ] Organization rename updates the active code snapshot in the same batch
-- [ ] Rename touching only organizations.name is rejected
-- [ ] Transfer Admin
-- [ ] New Admin keeps existing teams and permissions
-- [ ] Outgoing Admin resolved to Member or Unassigned by the assignment condition
-- [ ] No extra UI for configuring the outgoing Admin
-- [ ] Organization never has zero Admins
+- [x] Edit organization name/description
+- [x] View/copy current join code
+- [x] Regenerate join code
+- [x] Old code becomes invalid
+- [x] Existing members remain unaffected
+- [x] Current join code readable by Admin only
+- [x] Regenerate restricted to Admin
+- [x] Revoked codes retained with active false and revoked_at
+- [x] Organization rename updates the active code snapshot in the same batch
+- [x] Rename touching only organizations.name is rejected
+- [x] Transfer Admin
+- [x] New Admin keeps existing teams and permissions
+- [x] Outgoing Admin resolved to Member or Unassigned by the assignment condition
+- [x] No extra UI for configuring the outgoing Admin
+- [x] Organization never has zero Admins
 
 ### Security
 
-- [ ] Firestore Security Rules created alongside each collection, not retrofitted
-- [ ] User cannot read unrelated organization data
-- [ ] User cannot write unrelated organization data
-- [ ] View permission cannot write
-- [ ] None permission cannot read module
-- [ ] Admin can access organization data
-- [ ] Unassigned user blocked
-- [ ] Deactivated membership blocked
-- [ ] Team editing scope tested on the four team-scoped collections
-- [ ] Organization-level collections editable without a team check
-- [ ] Join code get allowed to signed-in users, list denied to everyone
-- [ ] organization_admin_settings readable only by the Admin
-- [ ] Join proofs cannot be listed, updated, or deleted
-- [ ] Joining cannot self-grant teams or permissions
-- [ ] Membership create denied without a valid join proof in the same batch
-- [ ] Re-joining after deactivation is denied
-- [ ] Transfer Admin denied for non-Admins and for inactive targets
-- [ ] Current Admin's membership cannot be deactivated
-- [ ] Member directory query without is_active is rejected, not filtered
-- [ ] Directory query verified at 1, 5, 10, and 20 members
-- [ ] Initial creation path and existing-organization path tested separately
-- [ ] Rules covered by @firebase/rules-unit-testing against the emulator
+- [x] Firestore Security Rules created alongside each collection, not retrofitted
+- [x] User cannot read unrelated organization data
+- [x] User cannot write unrelated organization data
+- [x] View permission cannot write
+- [x] None permission cannot read module
+- [x] Admin can access organization data
+- [x] Unassigned user blocked
+- [x] Deactivated membership blocked
+- [x] Team editing scope tested on the four team-scoped collections
+- [x] Organization-level collections editable without a team check
+- [x] Join code get allowed to signed-in users, list denied to everyone
+- [x] organization_admin_settings readable only by the Admin
+- [x] Join proofs cannot be listed, updated, or deleted
+- [x] Joining cannot self-grant teams or permissions
+- [x] Membership create denied without a valid join proof in the same batch
+- [x] Re-joining after deactivation is denied
+- [x] Transfer Admin denied for non-Admins and for inactive targets
+- [x] Current Admin's membership cannot be deactivated
+- [x] Member directory query without is_active is rejected, not filtered
+- [x] Directory query verified at 1, 5, 10, and 20 members
+- [x] Initial creation path and existing-organization path tested separately
+- [x] Rules covered by @firebase/rules-unit-testing against the emulator
 
 ### Responsive QA
 
-- [ ] Sign Up / Login usable on mobile
-- [ ] Organization Selection usable on mobile
-- [ ] Dashboard usable on mobile
-- [ ] Inventory usable on mobile
-- [ ] Repair form usable on mobile
-- [ ] Production Requirements usable on mobile
-- [ ] Calendar usable on mobile
-- [ ] Member management usable on mobile
-- [ ] No critical horizontal overflow around 375px
+- [x] Sign Up / Login usable on mobile — implemented, browser QA pending
+- [x] Organization Selection usable on mobile — implemented, browser QA pending
+- [x] Dashboard usable on mobile — implemented, browser QA pending
+- [x] Inventory usable on mobile — implemented, browser QA pending
+- [x] Repair form usable on mobile — implemented, browser QA pending
+- [x] Production Requirements usable on mobile — implemented, browser QA pending
+- [x] Calendar usable on mobile — implemented, browser QA pending
+- [x] Member management usable on mobile — implemented, browser QA pending
+- [x] No critical horizontal overflow around 375px — implemented, browser QA pending
 
 ### Final Demo / Delivery
 
@@ -303,9 +314,9 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] AI Requirement Generator demo production prepared
 - [ ] Firebase Hosting deployment works
 - [ ] README contains local run instructions
-- [ ] No TypeScript errors
-- [ ] Lint succeeds
-- [ ] Production build succeeds
+- [x] No TypeScript errors
+- [x] Lint succeeds
+- [x] Production build succeeds
 
 ## P1 — Do Only If P0 Is Stable
 

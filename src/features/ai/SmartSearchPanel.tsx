@@ -99,15 +99,19 @@ export function SmartSearchPanel({ items, teams, onAnswer, onClear, active }: Pr
           </Button>
         </form>
 
+        {/* Stacked on a phone, chips on a wider screen. The button base sets
+            `whitespace-nowrap` and `shrink-0`, which together make a long
+            example one unbreakable line wider than the card, so both are
+            overridden below rather than the examples being shortened. */}
         {!active && !running ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap">
             {EXAMPLES.map((example) => (
               <Button
                 key={example}
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-auto py-1 text-xs"
+                className="h-auto min-h-7 w-full shrink justify-start py-1.5 text-left text-xs leading-snug break-words whitespace-normal sm:w-auto"
                 onClick={() => {
                   setQuery(example)
                   void ask(example)

@@ -29,17 +29,16 @@ export function JoinCodeCard() {
   const [copied, setCopied] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setLoading(true)
-    setError(null)
-    try {
-      setCode(await getCurrentJoinCode(organizationId))
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-    } finally {
-      setLoading(false)
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    return getCurrentJoinCode(organizationId).then(
+      (loaded) => { setCode(loaded); setError(null); setLoading(false) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setLoading(false) },
+    )
   }, [organizationId])
 
   useEffect(() => {

@@ -6,8 +6,8 @@
  * as an internal credential. It is never shown to the user.
  */
 
-export const USER_ID_MIN_LENGTH = 3
-export const USER_ID_MAX_LENGTH = 20
+const USER_ID_MIN_LENGTH = 3
+const USER_ID_MAX_LENGTH = 20
 
 /** Reserved domain, per RFC 2606. Mail is never sent to it. */
 export const SYNTHETIC_EMAIL_DOMAIN = 'theater-inventory.example.com'

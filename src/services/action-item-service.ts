@@ -1,5 +1,5 @@
 import {
-  collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
+  collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where,
 } from 'firebase/firestore'
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS } from '@/domain/organization-ids'
@@ -81,14 +81,6 @@ export async function listActionItemsForProduction(params: {
     ),
   )
   return snapshot.docs.map((entry) => entry.data() as ActionItem)
-}
-
-/** The document ID is the requirement ID, so this is also the uniqueness check. */
-export async function getActionItemForRequirement(
-  requirementId: string,
-): Promise<ActionItem | null> {
-  const snapshot = await getDoc(doc(getFirebaseDb(), COLLECTIONS.actionItems, requirementId))
-  return snapshot.exists() ? (snapshot.data() as ActionItem) : null
 }
 
 /**

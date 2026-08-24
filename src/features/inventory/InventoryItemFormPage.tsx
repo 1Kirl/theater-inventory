@@ -24,6 +24,7 @@ import {
   validateInventoryQuantities,
 } from '@/domain/inventory'
 import { createInventoryItem, getInventoryItem, updateInventoryItem } from '@/services/inventory-service'
+import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import { INVENTORY_CATEGORIES, type ConditionCounts, type InventoryItem } from '@/types/inventory'
 import { paths } from '@/routes/paths'
@@ -77,7 +78,8 @@ function fromItem(item: InventoryItem): FormState {
     ),
     location: item.location,
     lastInspected: item.last_inspected_at
-      ? item.last_inspected_at.toDate().toISOString().slice(0, 10)
+      // Local parts: the input value is parsed back as local midnight.
+      ? toDateKey(item.last_inspected_at.toDate())
       : '',
     notes: item.notes ?? '',
   }
@@ -100,22 +102,27 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
     return teams.filter((team) => allowed.includes(team.team_id))
   }, [role, membership, teams])
 
-  const load = useCallback(async () => {
-    if (mode !== 'edit' || !itemId) return
-    setError(null)
-    try {
-      const item = await getInventoryItem(itemId)
-      if (!item || item.organization_id !== organization?.organization_id) {
-        setError('That inventory item was not found in this organization.')
-        return
-      }
-      setExisting(item)
-      setState(fromItem(item))
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-    } finally {
-      setLoading(false)
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else.
+  const load = useCallback((): Promise<void> => {
+    if (mode !== 'edit' || !itemId) return Promise.resolve()
+    const organizationId = organization?.organization_id
+
+    return getInventoryItem(itemId).then(
+      (item) => {
+        setLoading(false)
+
+        if (!item || item.organization_id !== organizationId) {
+          setError('That inventory item was not found in this organization.')
+          return
+        }
+
+        setExisting(item)
+        setState(fromItem(item))
+        setError(null)
+      },
+      (caught: unknown) => { setLoading(false); setError(toOrganizationErrorMessage(caught)) },
+    )
   }, [mode, itemId, organization])
 
   useEffect(() => {

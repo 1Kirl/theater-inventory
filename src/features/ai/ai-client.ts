@@ -14,7 +14,7 @@ import { getFirebaseApp } from '@/lib/firebase'
  * unit tests stub it and never reach the network.
  */
 
-export const AI_MODEL = 'gemini-3.5-flash'
+const AI_MODEL = 'gemini-3.5-flash'
 
 /** Which feature made the call. Keeps the two distinguishable in code. */
 export type AiFeature = 'smart-search' | 'requirement-generator'

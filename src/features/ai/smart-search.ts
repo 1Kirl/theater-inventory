@@ -214,7 +214,7 @@ export function isEmptySmartSearch(resolved: ResolvedSmartSearch): boolean {
  * field for a document ID, and a reference that was not supplied is dropped
  * during resolution rather than trusted.
  */
-export const smartSearchMatchSchema = z.strictObject({
+const smartSearchMatchSchema = z.strictObject({
   inventory_ref: z.string().trim().min(1).max(8),
   reason: z.string().trim().max(200).optional(),
 })

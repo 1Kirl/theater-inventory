@@ -204,7 +204,7 @@ const ALIASES: Record<string, string> = {
  * Nothing here rescues an invented identifier, an unknown reference, an invalid
  * quantity, or a structurally wrong object. The result still has to pass Zod.
  */
-export function normalizeSuggestion(raw: unknown): unknown {
+function normalizeSuggestion(raw: unknown): unknown {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return raw
 
   const source = raw as Record<string, unknown>

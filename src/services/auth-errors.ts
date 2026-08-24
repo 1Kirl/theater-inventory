@@ -36,10 +36,6 @@ export function toUserFacingMessage(error: unknown): string {
   return FALLBACK_MESSAGE
 }
 
-export function isFirebaseErrorWithCode(error: unknown, code: string): boolean {
-  return error instanceof FirebaseError && error.code === code
-}
-
 /**
  * Sign-up needs its own mapping because a failure after the account was created
  * means something different to the user than a failure before it.

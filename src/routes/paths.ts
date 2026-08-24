@@ -31,6 +31,7 @@ export const paths = {
   productionEdit: (productionId: string) => `/productions/${productionId}/edit`,
   actionList: '/action-list',
   calendar: '/calendar',
+  /** Legacy. Redirects to Organization Settings, which owns team and member administration. */
   team: '/team',
   organizationSettings: '/organization-settings',
   account: '/account',

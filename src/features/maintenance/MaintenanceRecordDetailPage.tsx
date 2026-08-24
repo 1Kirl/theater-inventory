@@ -28,19 +28,22 @@ export function MaintenanceRecordDetailPage() {
   const [item, setItem] = useState<InventoryItem | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    if (!recordId) return
-    setError(null)
-    try {
-      const loaded = await getMaintenanceRecord(recordId)
-      setRecord(loaded)
-      if (loaded) {
-        setItem(await getInventoryItem(loaded.item_id).catch(() => null))
-      }
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setRecord(null)
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!recordId) return Promise.resolve()
+
+    async function read() {
+      const record = await getMaintenanceRecord(recordId as string)
+      const item = record ? await getInventoryItem(record.item_id).catch(() => null) : null
+      return { record, item }
     }
+
+    return read().then(
+      (loaded) => { setRecord(loaded.record); setItem(loaded.item); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setRecord(null) },
+    )
   }, [recordId])
 
   useEffect(() => {

@@ -51,15 +51,16 @@ export function CalendarPage() {
 
   const canEdit = hasModuleAccess(role, membership?.permissions ?? null, 'calendar', 'edit')
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
-      setEvents(await listCalendarEvents(organizationId))
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setEvents([])
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    return listCalendarEvents(organizationId).then(
+      (loaded) => { setEvents(loaded); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setEvents([]) },
+    )
   }, [organizationId])
 
   useEffect(() => {

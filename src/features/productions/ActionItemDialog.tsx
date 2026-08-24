@@ -12,6 +12,7 @@ import {
   ACTION_STATUS_LABELS, ACTION_TYPE_LABELS, defaultActionQuantity, type RequirementAvailability,
 } from '@/domain/production'
 import { saveActionItem } from '@/services/action-item-service'
+import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import {
   ACTION_STATUSES, ACTION_TYPES, type ActionItem, type ActionStatus, type ActionType,
@@ -37,7 +38,8 @@ export function ActionItemDialog({
   )
   const [status, setStatus] = useState<ActionStatus>(existing?.status ?? 'todo')
   const [dueDate, setDueDate] = useState(
-    existing?.due_date ? existing.due_date.toDate().toISOString().slice(0, 10) : '',
+    // Local parts, matching how the value is parsed back on save.
+    existing?.due_date ? toDateKey(existing.due_date.toDate()) : '',
   )
   const [notes, setNotes] = useState(existing?.notes ?? '')
   const [error, setError] = useState<string | null>(null)

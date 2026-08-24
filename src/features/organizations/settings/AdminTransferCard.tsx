@@ -48,25 +48,34 @@ export function AdminTransferCard() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const load = useCallback(async () => {
-    if (!organizationId || !user) return
-    try {
-      const memberships = await listOrganizationDirectory(organizationId, { includeInactive: false })
-      const eligible = memberships.filter((entry) => entry.uid !== user.uid)
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId || !user) return Promise.resolve()
+    const uid = user.uid
+
+    async function read() {
+      const memberships = await listOrganizationDirectory(
+        organizationId as string,
+        { includeInactive: false },
+      )
+      const eligible = memberships.filter((entry) => entry.uid !== uid)
       const profiles = await getUserProfiles(eligible.map((entry) => entry.uid))
 
-      setCandidates(
-        eligible
-          .map((entry) => ({
-            uid: entry.uid,
-            displayName: profiles.get(entry.uid)?.display_name ?? 'Unknown member',
-            keepsAccess: satisfiesAssignmentCondition(entry),
-          }))
-          .sort((left, right) => left.displayName.localeCompare(right.displayName)),
-      )
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
+      return eligible
+        .map((entry) => ({
+          uid: entry.uid,
+          displayName: profiles.get(entry.uid)?.display_name ?? 'Unknown member',
+          keepsAccess: satisfiesAssignmentCondition(entry),
+        }))
+        .sort((left, right) => left.displayName.localeCompare(right.displayName))
     }
+
+    return read().then(
+      setCandidates,
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)) },
+    )
   }, [organizationId, user])
 
   useEffect(() => {

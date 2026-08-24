@@ -50,10 +50,6 @@ export function readFirebaseEnv(): FirebaseEnvResult {
   return { ok: false, missing }
 }
 
-export function isFirebaseConfigured(): boolean {
-  return readFirebaseEnv().ok
-}
-
 const optionalKey = z.string().min(1).optional()
 
 /**

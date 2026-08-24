@@ -1,31 +1,36 @@
-import { createBrowserRouter } from 'react-router-dom'
+import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { AuthLayout } from '@/features/auth/AuthLayout'
-import { AccountPage } from '@/features/auth/AccountPage'
 import { LogInPage } from '@/features/auth/LogInPage'
 import { SignUpPage } from '@/features/auth/SignUpPage'
-import { CreateOrganizationPage } from '@/features/organizations/CreateOrganizationPage'
-import { JoinOrganizationPage } from '@/features/organizations/JoinOrganizationPage'
-import { OrganizationSelectionPage } from '@/features/organizations/OrganizationSelectionPage'
-import { OrganizationSettingsPage } from '@/features/organizations/settings/OrganizationSettingsPage'
-import { InventoryItemDetailPage } from '@/features/inventory/InventoryItemDetailPage'
-import { InventoryItemFormPage } from '@/features/inventory/InventoryItemFormPage'
-import { InventoryListPage } from '@/features/inventory/InventoryListPage'
-import { MaintenanceListPage } from '@/features/maintenance/MaintenanceListPage'
-import { MaintenanceRecordDetailPage } from '@/features/maintenance/MaintenanceRecordDetailPage'
-import { MaintenanceRecordFormPage } from '@/features/maintenance/MaintenanceRecordFormPage'
-import { CalendarPage } from '@/features/calendar/CalendarPage'
-import { ActionListPage } from '@/features/productions/ActionListPage'
-import { ProductionDetailPage } from '@/features/productions/ProductionDetailPage'
-import { ProductionFormPage } from '@/features/productions/ProductionFormPage'
-import { ProductionListPage } from '@/features/productions/ProductionListPage'
 import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
-import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { NotFound } from '@/routes/NotFound'
-import { PlaceholderPage } from '@/routes/PlaceholderPage'
 import { paths } from '@/routes/paths'
+import {
+  AccountPage,
+  ActionListPage,
+  CalendarPage,
+  CreateOrganizationPage,
+  DashboardPage,
+  InventoryItemDetailPage,
+  InventoryItemFormPage,
+  InventoryListPage,
+  JoinOrganizationPage,
+  MaintenanceListPage,
+  MaintenanceRecordDetailPage,
+  MaintenanceRecordFormPage,
+  OrganizationSelectionPage,
+  OrganizationSettingsPage,
+  ProductionDetailPage,
+  ProductionFormPage,
+  ProductionListPage,
+} from '@/routes/lazy-routes'
 
 /**
+ * Feature pages are lazy (see `lazy-routes.ts`). The Suspense boundary lives
+ * inside AppShell, so navigation and the sidebar stay on screen while a page's
+ * code arrives; AuthGuard carries a second one for the routes outside the shell.
+ *
  * Guard chain: AuthGuard, then OrganizationGuard for anything inside an
  * organization, then AdminGuard where administration is required. Module-level
  * PermissionGuard arrives in Phase 3 and nests inside OrganizationGuard.
@@ -119,8 +124,11 @@ export const router = createBrowserRouter([
                 children: [{ path: paths.calendar, element: <CalendarPage /> }],
               },
               {
+                // Teams, members, permissions, and administration all live in
+                // Organization Settings. The old path is kept as a redirect so
+                // a bookmark still lands somewhere useful.
                 path: paths.team,
-                element: <PlaceholderPage title="Team & Members" phase="Phase 3" />,
+                element: <Navigate to={paths.organizationSettings} replace />,
               },
               {
                 element: <AdminGuard />,

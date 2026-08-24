@@ -44,25 +44,30 @@ export function InventoryItemDetailPage() {
     'edit',
   )
 
-  const load = useCallback(async () => {
-    if (!itemId) return
-    setError(null)
-    try {
-      const loaded = await getInventoryItem(itemId)
-      setItem(loaded)
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!itemId) return Promise.resolve()
 
-      if (loaded && canSeeMaintenance) {
-        setRecords(
-          await listMaintenanceRecordsForItem({
-            organizationId: loaded.organization_id,
-            itemId: loaded.item_id,
-          }).catch(() => []),
-        )
-      }
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setItem(null)
+    async function read() {
+      const item = await getInventoryItem(itemId as string)
+
+      // The repair history follows the maintenance permission, not this page's.
+      const records = item && canSeeMaintenance
+        ? await listMaintenanceRecordsForItem({
+          organizationId: item.organization_id,
+          itemId: item.item_id,
+        }).catch(() => [])
+        : []
+
+      return { item, records }
     }
+
+    return read().then(
+      (loaded) => { setItem(loaded.item); setRecords(loaded.records); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setItem(null) },
+    )
   }, [itemId, canSeeMaintenance])
 
   useEffect(() => {

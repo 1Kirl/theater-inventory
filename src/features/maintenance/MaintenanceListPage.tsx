@@ -45,20 +45,23 @@ export function MaintenanceListPage() {
   const canCreate = hasModuleAccess(role, membership?.permissions ?? null, 'maintenance', 'edit')
   const now = useMemo(() => new Date(), [])
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
-      const [loadedRecords, loadedItems] = await Promise.all([
-        listMaintenanceRecords(organizationId),
-        listInventoryItems(organizationId),
-      ])
-      setRecords(loadedRecords)
-      setItems(loadedItems)
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setRecords([])
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    return Promise.all([
+      listMaintenanceRecords(organizationId),
+      listInventoryItems(organizationId),
+    ]).then(
+      ([loadedRecords, loadedItems]) => {
+        setRecords(loadedRecords)
+        setItems(loadedItems)
+        setError(null)
+      },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setRecords([]) },
+    )
   }, [organizationId])
 
   useEffect(() => {
@@ -213,7 +216,17 @@ export function MaintenanceListPage() {
                       className="cursor-pointer"
                       onClick={() => navigate(paths.maintenanceRecord(record.maintenance_id))}
                     >
-                      <TableCell className="font-medium">{itemNameById(record.item_id, items)}</TableCell>
+                      <TableCell className="font-medium">
+                        {/* The row click is a convenience; this link is what
+                            makes the row reachable by keyboard. */}
+                        <Link
+                          to={paths.maintenanceRecord(record.maintenance_id)}
+                          className="hover:underline focus-visible:underline focus-visible:outline-none"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {itemNameById(record.item_id, items)}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {team.name}
                         {team.historical ? <span className="ml-1 text-xs">(at time of service)</span> : null}

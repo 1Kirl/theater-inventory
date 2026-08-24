@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil, Plus, Sparkles } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -15,8 +15,14 @@ import {
   actionPlaceholder, actionSummary, availabilityLabel, buildRequirementRows, shortageLabel,
   summarizeProduction, type RequirementRow,
 } from '@/features/productions/production-view'
-import { RequirementGeneratorDialog } from '@/features/ai/RequirementGeneratorDialog'
 import { ActionItemDialog } from '@/features/productions/ActionItemDialog'
+
+/**
+ * The generator carries the Firebase AI SDK with it, so it is fetched only when
+ * someone opens it. Nothing else on this page waits for it.
+ */
+const RequirementGeneratorDialog = lazy(() => import('@/features/ai/RequirementGeneratorDialog')
+  .then((m) => ({ default: m.RequirementGeneratorDialog })))
 import { RequirementDialog } from '@/features/productions/RequirementDialog'
 import { listInventoryItems } from '@/services/inventory-service'
 import { listActionItemsForProduction } from '@/services/action-item-service'
@@ -44,28 +50,40 @@ export function ProductionDetailPage() {
   // Matching needs inventory access; the requirement itself does not.
   const canReadInventory = hasModuleAccess(role, membership?.permissions ?? null, 'inventory', 'view')
 
-  const load = useCallback(async () => {
-    if (!productionId || !organization) return
-    setError(null)
-    try {
-      const loaded = await getProduction(productionId)
-      setProduction(loaded)
-      if (!loaded) return
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!productionId || !organization) return Promise.resolve()
+    const organizationId = organization.organization_id
 
-      const [loadedRequirements, loadedActions] = await Promise.all([
-        listRequirementsForProduction({ organizationId: organization.organization_id, productionId }),
-        listActionItemsForProduction({ organizationId: organization.organization_id, productionId }),
+    async function read() {
+      const production = await getProduction(productionId as string)
+      if (!production) return { production, requirements: [], actions: [], items: [] }
+
+      const [requirements, actions] = await Promise.all([
+        listRequirementsForProduction({ organizationId, productionId: productionId as string }),
+        listActionItemsForProduction({ organizationId, productionId: productionId as string }),
       ])
-      setRequirements(loadedRequirements)
-      setActions(loadedActions)
 
-      if (canReadInventory) {
-        setItems(await listInventoryItems(organization.organization_id).catch(() => []))
-      }
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setProduction(null)
+      // Matching needs inventory access; the requirement itself does not.
+      const items = canReadInventory
+        ? await listInventoryItems(organizationId).catch(() => [])
+        : []
+
+      return { production, requirements, actions, items }
     }
+
+    return read().then(
+      (loaded) => {
+        setProduction(loaded.production)
+        setRequirements(loaded.requirements)
+        setActions(loaded.actions)
+        setItems(loaded.items)
+        setError(null)
+      },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setProduction(null) },
+    )
   }, [productionId, organization, canReadInventory])
 
   useEffect(() => {
@@ -264,15 +282,17 @@ export function ProductionDetailPage() {
       ) : null}
 
       {generating ? (
-        <RequirementGeneratorDialog
-          production={production}
-          items={items}
-          canReadInventory={canReadInventory}
-          existingItemNames={requirements.map((requirement) => requirement.item_name)}
-          open
-          onOpenChange={setGenerating}
-          onSaved={load}
-        />
+        <Suspense fallback={null}>
+          <RequirementGeneratorDialog
+            production={production}
+            items={items}
+            canReadInventory={canReadInventory}
+            existingItemNames={requirements.map((requirement) => requirement.item_name)}
+            open
+            onOpenChange={setGenerating}
+            onSaved={load}
+          />
+        </Suspense>
       ) : null}
 
       {actioning ? (

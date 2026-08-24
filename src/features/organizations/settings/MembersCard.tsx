@@ -38,28 +38,34 @@ export function MembersCard() {
   const [busyUid, setBusyUid] = useState<string | null>(null)
   const [editing, setEditing] = useState<DirectoryRow | null>(null)
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    async function read() {
       // Admin only: including deactivated members is what the rule permits for
       // an Admin and denies for anyone else.
-      const memberships = await listOrganizationDirectory(organizationId, { includeInactive: true })
+      const memberships = await listOrganizationDirectory(
+        organizationId as string,
+        { includeInactive: true },
+      )
       const profiles = await getUserProfiles(memberships.map((entry) => entry.uid))
 
-      setRows(
-        memberships
-          .map((membership) => ({
-            membership,
-            displayName: profiles.get(membership.uid)?.display_name ?? 'Unknown member',
-            userId: profiles.get(membership.uid)?.user_id ?? '—',
-          }))
-          .sort((left, right) => left.displayName.localeCompare(right.displayName)),
-      )
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setRows([])
+      return memberships
+        .map((membership) => ({
+          membership,
+          displayName: profiles.get(membership.uid)?.display_name ?? 'Unknown member',
+          userId: profiles.get(membership.uid)?.user_id ?? '—',
+        }))
+        .sort((left, right) => left.displayName.localeCompare(right.displayName))
     }
+
+    return read().then(
+      (loaded) => { setRows(loaded); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setRows([]) },
+    )
   }, [organizationId])
 
   useEffect(() => {

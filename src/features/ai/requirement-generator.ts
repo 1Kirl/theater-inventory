@@ -65,14 +65,13 @@ export const requirementSuggestionsSchema = z
   .min(1)
   .max(MAX_SUGGESTIONS)
 
-/** The data-aware response: an assessment for the person, then the draft. */
-export const requirementResponseSchema = z.strictObject({
-  summary: z.string().trim().min(1).max(1200),
-  suggestions: requirementSuggestionsSchema,
-})
+/*
+ * There is deliberately no whole-response schema. The envelope is validated by
+ * hand in `parseRequirementResponse` so that one malformed suggestion costs
+ * only itself, which a single `strictObject` over the whole thing could not do.
+ */
 
 export type RequirementSuggestion = z.infer<typeof requirementSuggestionSchema>
-export type RequirementResponse = z.infer<typeof requirementResponseSchema>
 
 /**
  * Why a suggestion cannot be saved yet.

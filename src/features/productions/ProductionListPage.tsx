@@ -31,15 +31,16 @@ export function ProductionListPage() {
 
   const canCreate = hasModuleAccess(role, membership?.permissions ?? null, 'productions', 'edit')
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
-      setProductions(await listProductions(organizationId))
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setProductions([])
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    return listProductions(organizationId).then(
+      (loaded) => { setProductions(loaded); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setProductions([]) },
+    )
   }, [organizationId])
 
   useEffect(() => {

@@ -1,10 +1,13 @@
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
 import { Building2, Menu } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger,
+} from '@/components/ui/sheet'
 import { SidebarNav } from '@/components/layout/SidebarNav'
+import { RouteFallback } from '@/routes/RouteFallback'
 import { SignOutButton } from '@/features/auth/SignOutButton'
 import { useAuth } from '@/features/auth/useAuth'
 import { useOrganization } from '@/features/organizations/useOrganization'
@@ -65,6 +68,11 @@ export function AppShell() {
             <SheetContent side="left" className="w-72 p-0">
               <SheetHeader className="border-border border-b">
                 <SheetTitle className="text-sm">{organization?.name ?? APP_NAME}</SheetTitle>
+                {/* Radix expects a description on a dialog; the panel is a menu,
+                    so it is announced rather than shown. */}
+                <SheetDescription className="sr-only">
+                  Navigate to a module, or switch organization.
+                </SheetDescription>
               </SheetHeader>
               <div className="space-y-3 p-3">
                 <SidebarNav isAdmin={role === 'admin'} onNavigate={() => setMobileNavOpen(false)} />
@@ -98,7 +106,11 @@ export function AppShell() {
         </header>
 
         <main className="mx-auto w-full max-w-6xl px-4 py-6">
-          <Outlet />
+          {/* Route code is fetched on demand; the shell and its navigation stay
+              mounted, so only the page area shows the fallback. */}
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

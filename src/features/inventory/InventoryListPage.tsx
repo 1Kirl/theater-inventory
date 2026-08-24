@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -23,8 +23,16 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useOrganization } from '@/features/organizations/useOrganization'
-import { SmartSearchPanel } from '@/features/ai/SmartSearchPanel'
 import type { SmartSearchResult } from '@/features/ai/smart-search'
+
+/**
+ * The AI panel carries the Firebase AI SDK with it, so it is fetched as its own
+ * chunk rather than travelling with the inventory page. The list, the search,
+ * and the filters render and work while it arrives — and if it never arrives,
+ * they still do.
+ */
+const SmartSearchPanel = lazy(() => import('@/features/ai/SmartSearchPanel')
+  .then((m) => ({ default: m.SmartSearchPanel })))
 import { hasModuleAccess } from '@/domain/module-access'
 import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
 import {
@@ -72,15 +80,16 @@ export function InventoryListPage() {
 
   const canCreate = hasModuleAccess(role, membership?.permissions ?? null, 'inventory', 'edit')
 
-  const load = useCallback(async () => {
-    if (!organizationId) return
-    setError(null)
-    try {
-      setItems(await listInventoryItems(organizationId))
-    } catch (caught) {
-      setError(toOrganizationErrorMessage(caught))
-      setItems([])
-    }
+  // State settles in the promise continuations rather than synchronously, so
+  // the effect starts the read and nothing else. Returning the promise keeps
+  // `load` awaitable for callers that refresh after a write.
+  const load = useCallback((): Promise<void> => {
+    if (!organizationId) return Promise.resolve()
+
+    return listInventoryItems(organizationId).then(
+      (loaded) => { setItems(loaded); setError(null) },
+      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setItems([]) },
+    )
   }, [organizationId])
 
   useEffect(() => {
@@ -126,18 +135,20 @@ export function InventoryListPage() {
         ) : null}
       </div>
 
-      <SmartSearchPanel
-        items={items ?? []}
-        teams={teams}
-        active={aiSearch}
-        onAnswer={(result) => {
-          setAiSearch(result)
-          // The interpreted filters, when the model produced them, go into the
-          // ordinary controls so the user can keep working deterministically.
-          setFilters(result.resolved?.filters ?? EMPTY_FILTERS)
-        }}
-        onClear={clearAll}
-      />
+      <Suspense fallback={<div className="bg-muted/40 h-32 animate-pulse rounded-xl" aria-hidden="true" />}>
+        <SmartSearchPanel
+          items={items ?? []}
+          teams={teams}
+          active={aiSearch}
+          onAnswer={(result) => {
+            setAiSearch(result)
+            // The interpreted filters, when the model produced them, go into the
+            // ordinary controls so the user can keep working deterministically.
+            setFilters(result.resolved?.filters ?? EMPTY_FILTERS)
+          }}
+          onClear={clearAll}
+        />
+      </Suspense>
 
       <Card>
         <CardContent className="space-y-3 pt-6">
@@ -280,7 +291,15 @@ export function InventoryListPage() {
                     onClick={() => navigate(paths.inventoryItem(item.item_id))}
                   >
                     <TableCell className="font-medium">
-                      {item.name}
+                      {/* The row click is a convenience; this link is what makes
+                          the row reachable by keyboard and to a screen reader. */}
+                      <Link
+                        to={paths.inventoryItem(item.item_id)}
+                        className="hover:underline focus-visible:underline focus-visible:outline-none"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {item.name}
+                      </Link>
                       {aiSearch?.reasons.get(item.item_id) ? (
                         <span className="text-muted-foreground block text-xs font-normal">
                           {aiSearch.reasons.get(item.item_id)}
