@@ -27,4 +27,5 @@ export const COLLECTIONS = {
   productions: 'productions',
   productionRequirements: 'production_requirements',
   actionItems: 'action_items',
+  calendarEvents: 'calendar_events',
 } as const

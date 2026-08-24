@@ -787,6 +787,40 @@ When the AI Requirement Generator lands in Phase 7, a suggested action stays a t
 in the approval interface, or becomes an Action Item once approved. It is not written back onto the
 requirement.
 
+## 49. What Calendar Rules Can and Cannot Enforce
+
+Calendar is the first **organization-level** collection with real write traffic. Team scope does
+not apply to it at all: a member with `calendar` edit may create and change any event in the
+organization, whatever teams it names.
+
+`team_ids` is display metadata. Security Rules validate its **shape** — a list, within a sane
+length, and consistent with `visibility` — and nothing more:
+
+- `visibility: 'all_teams'` requires `team_ids` to be empty.
+- `visibility: 'teams'` requires at least one entry.
+
+Rules deliberately do **not** verify that each entry names a real team in this organization.
+Checking a variable-length list of references is not expressible: Rules can `get()` a known path,
+not iterate an array of unknown length. A partial check — validating only the first entry, say —
+would be worse than none, because it would read as integrity while guaranteeing nothing.
+
+The interface offers only this organization's teams, so a stray ID takes deliberate effort to
+produce, and produces nothing: an unrecognized ID is dropped when team names are resolved for
+display. `team_ids` is not security-sensitive, so this is a tidiness question rather than a
+boundary one.
+
+Linked records are a different matter and **are** enforced: `production_id` and `maintenance_id`
+name single documents at known paths, so Rules confirm each exists in the same organization.
+
+**Calendar events may be deleted**, by an Admin or anyone with `calendar` edit. This is the only
+collection in the MVP where deletion is allowed, and `IA.md` section 9.2 states it directly. A
+cancelled rehearsal is not history worth keeping the way a repair record or an action item is.
+
+`event_type` stays free text, as `DATA_MODEL.md` defines it. `IA.md` lists rehearsal, build day,
+equipment inspection, repair pickup/return, and production deadline as **examples**, not a closed
+set, so the form offers them as suggestions and the filter is built from the values an
+organization has actually used.
+
 ---
 
 ## IA v3 ↔ /docs Conflict Resolutions

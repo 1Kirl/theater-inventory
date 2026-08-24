@@ -907,6 +907,113 @@ service cloud.firestore {
                  .data.quantity_available;
     }
 
+    // -------------------------------------------------------- calendar_events
+
+    // Calendar is organization-level. Team scope does not apply: a member with
+    // calendar edit may create and change any event, whatever teams it names.
+    // `team_ids` is display metadata and is never read as a boundary here.
+
+    function calendarLevel(organizationId) {
+      return membershipData(organizationId).permissions.calendar;
+    }
+
+    function canViewCalendar(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && calendarLevel(organizationId) in ['view', 'edit'])
+      );
+    }
+
+    function canEditCalendar(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && calendarLevel(organizationId) == 'edit')
+      );
+    }
+
+    function isClockTime(value) {
+      return value is string && value.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$');
+    }
+
+    // Shape only. Whether each entry names a real team is deliberately not
+    // checked: Rules can get() a known path, not iterate a list of unknown
+    // length, and a partial check would read as integrity while guaranteeing
+    // nothing. team_ids is not security-sensitive. See decision 49.
+    function teamIdsShapeValid(data) {
+      return data.team_ids is list
+        && data.team_ids.size() <= 30
+        && (data.visibility == 'all_teams'
+              ? data.team_ids.size() == 0
+              : data.team_ids.size() > 0);
+    }
+
+    // Linked records are single documents at known paths, so these are checked.
+    function calendarLinksValid(data) {
+      return (!('production_id' in data)
+              || (exists(productionPath(data.production_id))
+                  && get(productionPath(data.production_id)).data.organization_id
+                       == data.organization_id))
+        && (!('maintenance_id' in data)
+            || (exists(/databases/$(database)/documents/maintenance_records/$(data.maintenance_id))
+                && get(/databases/$(database)/documents/maintenance_records/$(data.maintenance_id))
+                     .data.organization_id == data.organization_id));
+    }
+
+    function calendarFieldsValid(eventId) {
+      return hasExactly(
+               ['event_id', 'organization_id', 'title', 'event_type', 'event_date',
+                'visibility', 'team_ids', 'created_by_uid', 'created_at', 'updated_at'],
+               ['start_time', 'end_time', 'production_id', 'maintenance_id', 'notes'])
+        && request.resource.data.event_id == eventId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.event_type is string
+        && request.resource.data.event_type.size() > 0
+        && request.resource.data.event_type.size() <= 60
+        && request.resource.data.event_date is timestamp
+        && request.resource.data.visibility in ['all_teams', 'teams']
+        && teamIdsShapeValid(request.resource.data)
+        // No start time means an all-day event. An end time needs a start time
+        // and cannot precede it; both are 'HH:mm', so a string compare orders
+        // them correctly.
+        && (!('start_time' in request.resource.data)
+            || isClockTime(request.resource.data.start_time))
+        && (!('end_time' in request.resource.data)
+            || ('start_time' in request.resource.data
+                && isClockTime(request.resource.data.end_time)
+                && request.resource.data.end_time >= request.resource.data.start_time))
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && calendarLinksValid(request.resource.data)
+        && request.resource.data.updated_at == request.time;
+    }
+
+    match /calendar_events/{eventId} {
+
+      allow get, list: if canViewCalendar(resource.data.organization_id);
+
+      allow create: if canEditCalendar(request.resource.data.organization_id)
+        && calendarFieldsValid(eventId)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if canEditCalendar(resource.data.organization_id)
+        && calendarFieldsValid(eventId)
+        && request.resource.data.event_id == resource.data.event_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at;
+
+      // The only collection in the MVP where deletion is allowed. A cancelled
+      // rehearsal is not history worth keeping the way a repair record is, and
+      // IA section 9.2 states this directly.
+      allow delete: if canEditCalendar(resource.data.organization_id);
+    }
+
     // ---------------------------------------------------------------- default
 
     match /{document=**} {

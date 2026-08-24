@@ -154,7 +154,7 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Deterministic shortage calculation, derived not stored
 - [ ] Not Matched state for requirements with no linked inventory item
 - [ ] Responsible team
-- [ ] Requirement notes/action type
+- [ ] Requirement notes
 
 ### AI Requirement Generator — REQUIRED AI FEATURE
 
@@ -202,6 +202,7 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Calendar view
 - [ ] Create Event
 - [ ] Edit Event
+- [ ] Delete Event, the only delete flow in the MVP
 - [ ] Event title
 - [ ] Date/time
 - [ ] Event type

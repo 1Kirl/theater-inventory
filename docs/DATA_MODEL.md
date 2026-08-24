@@ -766,7 +766,7 @@ Likely query patterns include:
 - maintenance by organization + status,
 - productions by organization + status,
 - action items by organization + status,
-- calendar events by organization + date range,
+- calendar events by organization (a single equality filter; the month is selected on the client, so no composite index is needed),
 - memberships by uid + is_active (Organization Selection),
 - memberships by organization_id + is_active (member directory).
 
@@ -800,3 +800,8 @@ Join codes are never deleted. A superseded code keeps its document with `active:
 a clear reason rather than looking like a typo.
 
 Join proofs are never deleted or updated. They record a historical fact.
+
+`calendar_events` is the one collection the MVP does allow deleting, by an Admin or anyone with
+`calendar` edit. A cancelled rehearsal is not history the way a repair record or an action item is,
+and `IA.md` section 9.2 puts a delete control on the event. Nothing references an event, so the
+deletion orphans nothing.

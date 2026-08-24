@@ -21,6 +21,7 @@ export type OrganizationErrorCode =
   | 'invalid-requirement'
   | 'invalid-action-item'
   | 'requirement-not-actionable'
+  | 'invalid-calendar-event'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

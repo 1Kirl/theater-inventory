@@ -14,6 +14,7 @@ import { InventoryListPage } from '@/features/inventory/InventoryListPage'
 import { MaintenanceListPage } from '@/features/maintenance/MaintenanceListPage'
 import { MaintenanceRecordDetailPage } from '@/features/maintenance/MaintenanceRecordDetailPage'
 import { MaintenanceRecordFormPage } from '@/features/maintenance/MaintenanceRecordFormPage'
+import { CalendarPage } from '@/features/calendar/CalendarPage'
 import { ActionListPage } from '@/features/productions/ActionListPage'
 import { ProductionDetailPage } from '@/features/productions/ProductionDetailPage'
 import { ProductionFormPage } from '@/features/productions/ProductionFormPage'
@@ -112,8 +113,10 @@ export const router = createBrowserRouter([
                 ],
               },
               {
-                path: paths.calendar,
-                element: <PlaceholderPage title="Calendar" phase="Phase 9" />,
+                // Calendar is an organization-level resource: view grants the
+                // whole schedule, and team tags are only labels and filters.
+                element: <PermissionGuard module="calendar" level="view" />,
+                children: [{ path: paths.calendar, element: <CalendarPage /> }],
               },
               {
                 path: paths.team,

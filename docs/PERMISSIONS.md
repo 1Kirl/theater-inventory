@@ -392,6 +392,7 @@ Collection-specific requirements:
 | `productions` | Admin, or member with `productions` view/edit | same, own organization | Admin, or member with `productions` edit — organization-level, no team check | same | denied |
 | `production_requirements` | same as productions | same, own organization and per production | Admin any team, member `edit` own teams; linked production and any linked item must be same-organization | same | denied |
 | `action_items` | same as productions | same, own organization | document ID must equal `requirement_id`; requirement must be matched and short | same, without re-checking shortage | denied |
+| `calendar_events` | Admin, or member with `calendar` view/edit | same, own organization | Admin, or member with `calendar` edit — organization-level, `team_ids` is metadata and never a boundary | same | **allowed** for the same writers |
 
 ### Two creation paths
 
