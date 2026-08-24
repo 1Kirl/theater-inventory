@@ -118,6 +118,14 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] Permission/org scope preserved
 - [ ] Error/retry state
 - [ ] Manual search remains available
+- [ ] Result count and clear/reset action
+- [ ] Interpreted filters land in the manual filter state and stay editable there
+- [ ] An unresolvable team or category is reported, not guessed at
+- [ ] Smart Search hidden from users without Inventory view
+- [ ] AI answers from the accessible inventory, not only from the question
+- [ ] Natural-language answer shown above the real records
+- [ ] Temporary inventory refs validated; an unsupplied ref shows nothing
+- [ ] Never-inspected, condition, and availability questions answered
 
 ### Maintenance & Repair
 
@@ -175,6 +183,16 @@ This document defines what must be finished before optional stretch work begins.
 - [ ] No direct AI Firestore writes
 - [ ] Shortages calculated after approval using real data
 - [ ] Error/retry state
+- [ ] Suggestions start unaccepted; generation alone saves nothing
+- [ ] Suggested team name resolved deterministically against real teams
+- [ ] A team the reviewer cannot write to blocks acceptance until they choose another
+- [ ] Approved requirements saved with source = ai_approved
+- [ ] Manual requirement entry still available when AI fails
+- [ ] AI assessment shown above the review list
+- [ ] Available and shortage shown as facts come from the app, not the model
+- [ ] suggested_action stays transient and is never persisted
+- [ ] General guidance mode when the user has no Inventory view
+- [ ] Malformed individual suggestions dropped without losing the rest
 
 ### Action List
 

@@ -65,6 +65,7 @@ function productionDoc(productionId: string, organizationId: string) {
 function requirementDoc(o: {
   requirementId: string; organizationId?: string; productionId?: string; teamId?: string
   itemId?: string | null; requiredQty?: number; uid?: string
+  source?: 'manual' | 'ai_approved'
 }) {
   return buildRequirementDocument({
     requirementId: o.requirementId,
@@ -72,6 +73,7 @@ function requirementDoc(o: {
     productionId: o.productionId ?? PROD_A,
     uid: o.uid ?? ADMIN,
     now: serverTimestamp,
+    ...(o.source ? { source: o.source } : {}),
     input: {
       itemName: 'Wireless Microphone',
       inventoryItemId: o.itemId === undefined ? ITEM_SHORT : o.itemId,
@@ -286,6 +288,52 @@ describe('production requirements', () => {
     await assertFails(updateDoc(doc(db(ADMIN), 'production_requirements', REQ_SHORT), {
       action_type: 'already_available', updated_at: serverTimestamp(),
     }))
+  })
+
+  it('250c. an AI-approved requirement is an ordinary requirement to Rules', async () => {
+    // Phase 7 needed no rule of its own: `source` already accepted both values,
+    // and nothing about the write is trusted differently because a model
+    // suggested it. What a person approved is what gets checked.
+    const SECOND = 'reqAIAPPROVEDSECOND1'
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'production_requirements', NEW_REQ), requirementDoc({
+      requirementId: NEW_REQ, source: 'ai_approved',
+    })))
+    // A separate document: writing NEW_REQ again would be an update, and an
+    // update may not change the author.
+    await assertSucceeds(setDoc(doc(db(EDITOR), 'production_requirements', SECOND), requirementDoc({
+      requirementId: SECOND, uid: EDITOR, source: 'ai_approved',
+    })))
+  })
+
+  it('250d. AI approval does not widen team scope', async () => {
+    // The one thing an AI suggestion could try to buy: a team the author has no
+    // edit rights over. Marking it approved changes nothing.
+    await assertFails(setDoc(doc(db(EDITOR), 'production_requirements', NEW_REQ), requirementDoc({
+      requirementId: NEW_REQ, teamId: TEAM_COSTUME, uid: EDITOR, source: 'ai_approved',
+    })))
+  })
+
+  it('250e. a view-only member cannot save an AI-approved requirement', async () => {
+    await assertFails(setDoc(doc(db(VIEWER), 'production_requirements', NEW_REQ), requirementDoc({
+      requirementId: NEW_REQ, uid: VIEWER, source: 'ai_approved',
+    })))
+  })
+
+  it('250f. an AI-approved requirement still cannot invent a link', async () => {
+    await assertFails(setDoc(doc(db(ADMIN), 'production_requirements', NEW_REQ), requirementDoc({
+      requirementId: NEW_REQ, itemId: 'itemDOESNOTEXIST0001', source: 'ai_approved',
+    })))
+    await assertFails(setDoc(doc(db(ADMIN), 'production_requirements', NEW_REQ), requirementDoc({
+      requirementId: NEW_REQ, itemId: ITEM_OTHER_ORG, source: 'ai_approved',
+    })))
+  })
+
+  it('250g. a source outside the two documented values is refused', async () => {
+    for (const source of ['ai', 'ai_generated', 'approved', '']) {
+      await assertFails(setDoc(doc(db(ADMIN), 'production_requirements', NEW_REQ), {
+        ...requirementDoc({ requirementId: NEW_REQ }), source,
+      }))
+    }
   })
 
   it('251. immutable identity and metadata are protected', async () => {

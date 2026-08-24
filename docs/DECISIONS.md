@@ -852,3 +852,216 @@ organization has actually used.
 None. The five decisions previously carried here as derived have been confirmed as decisions 19
 through 22, admin access precedence as decision 23, and the Transfer Admin outcome — the one
 question that was still open — as decision 24.
+
+---
+
+## 50. App Check Is Now Part of the MVP
+
+`AI_SPEC.md` originally recorded App Check as optional post-MVP hardening. That is no longer
+true: Firebase AI Logic enforcement is switched on in the console, so a request without a valid
+App Check token is rejected by the service. Without App Check there is no AI feature.
+
+Production uses reCAPTCHA Enterprise with the registered site key. Localhost uses the SDK's debug
+provider, chosen by `import.meta.env.DEV`, which Vite resolves at build time — the debug branch is
+eliminated from the production bundle rather than guarded by a runtime check. Localhost is
+therefore never added to the production reCAPTCHA key.
+
+In debug mode the provider passed to `initializeAppCheck` is a `CustomProvider` that issues
+nothing, not `ReCaptchaEnterpriseProvider`. The SDK calls `provider.initialize()` whether or not
+debug mode is active, and the enterprise provider would load the reCAPTCHA script with the
+production site key from localhost. `CustomProvider.initialize` does nothing, and its `getToken`
+is unreachable in debug mode — it rejects, so a non-debug misconfiguration fails rather than
+passing quietly.
+
+**App Check is not authorization.** It attests that a request came from this app; it says nothing
+about who is behind it. Firestore Security Rules remain the only authorization boundary.
+
+### 50a. Environment variables are read by name, never as a whole object
+
+`readFirebaseEnv()` originally passed `import.meta.env` to Zod as one object. Vite replaces a bare
+`import.meta.env` with an object literal containing *every* `VITE_` variable it loaded, so that
+form baked unrelated values into whatever bundle was built next — including a development-only App
+Check debug token sitting in `.env.local`. This was confirmed with a canary value, not reasoned
+about: the canary appeared in `dist`.
+
+Each variable is now named explicitly, and the debug token is read by a function called only from
+inside the `import.meta.env.DEV` branch, so dead-code elimination drops the literal along with the
+branch. A debug token is a secret — it lets any caller pass App Check for this project — and the
+reCAPTCHA site key and Firebase web config are not.
+
+---
+
+## 51. What the AI Decides, and What It Cannot
+
+Both AI features return language, never data. The model interprets a sentence; the application
+owns every query, identifier, calculation, and write.
+
+The boundary is one function, `AiGenerate` in `src/features/ai/ai-client.ts`. Above it, prompts
+are built by pure code and responses are validated by Zod with `strictObject`, so an unknown field
+fails the response instead of being quietly dropped. Below it is the only place the SDK is
+reached, which is why unit tests can stub the whole path and never touch the network.
+
+Neither feature sends inventory records to the model. Smart Search sends the vocabulary to choose
+from and the user's sentence; the Requirement Generator sends the production's own text, team
+names, and the category list, and returns a search keyword the application resolves afterwards.
+A model that has seen a partial inventory will answer from it, and that answer is a claim about
+what the organization owns that nobody checked.
+
+### 51a. Identifiers are resolved, never returned
+
+`team_name` and `inventory_match_keyword` are names. Resolution is deterministic and happens in
+application code: exact normalized match, then a single unambiguous partial match, then nothing.
+Ambiguity resolves to null rather than to a guess, and an unresolved name is reported to the user
+rather than silently dropped from a filter.
+
+A second model call to resolve a name would put the model back in charge of an identifier, which
+is the one thing it must never decide. The schemas additionally reject any value shaped like a
+Firestore auto-ID, for a field that is legitimately free text.
+
+### 51b. Approval is what creates a record
+
+Generation produces review rows. Every row starts unaccepted, and the save button writes only the
+rows a person ticked and left in a savable state. A row whose team the reviewer may not write to
+cannot be accepted at all — Security Rules would refuse it, and asking in the review UI is kinder
+than failing at save.
+
+Saved records carry `source: 'ai_approved'`, which records that a person approved a suggestion.
+It is not a claim that the model wrote anything, and no rule trusts it: a rule that treated
+`ai_approved` differently would be trusting a claim the client makes about itself.
+
+### 51c. Arithmetic stays where it was
+
+The model may suggest a required quantity. It may not return an available quantity or a shortage,
+and the schema has no field for either. Shortage is computed after saving by the Phase 5 logic —
+`max(required_qty - quantity_available, 0)`, with `currently_in_service` not subtracted, per
+decisions 44 and 46.
+
+### 51d. Inventory linking has a defined threshold
+
+The application links a suggestion to an inventory item on its own only when exactly one item's
+name equals the keyword after normalization. Anything looser is offered as a candidate and left
+unmatched. "Not Matched" is a normal state; a wrong link is not, because it produces a wrong
+shortage on a real record without anyone noticing.
+
+### 51e. AI availability is not a dependency
+
+Smart Search sits above the manual filters and writes into the same filter state, so its result is
+an ordinary filtered list the user can then adjust. Manual requirement entry is untouched. Every
+AI failure — App Check, service disabled, quota, model unavailable, network, malformed JSON, Zod
+rejection, empty output — is classified into a short message that repeats none of the underlying
+detail, and leaves both pages working.
+
+---
+
+## 52. The AI Is Data-Aware
+
+Decision 51 said neither feature sends inventory records to the model. That is superseded.
+
+The reasoning behind it was sound as far as it went: a model that has seen a partial inventory will
+answer from it, and such an answer is a claim about what the organization owns that nobody checked.
+What it bought in safety it paid for in usefulness. A user could not ask "what has never been
+inspected", "does anything need attention", or "do we have enough microphones for twenty
+performers" — the questions the product exists to answer. What shipped was a natural-language front
+end for the filter dropdowns.
+
+Both features now send a compact view of the inventory the current user may already read. Firestore
+is still read by the application under Security Rules; the model never touches it.
+
+### 52a. Temporary references are what make it safe
+
+Records are labelled `I1`, `I2`, … per request, and the map back to real items lives only for the
+life of that request. Names, quantities, conditions, locations, and inspection dates travel; no
+document ID does, and nothing about members, accounts, or authentication does.
+
+Every reference the model returns is looked up in that request's map. An invented `I99`, an echoed
+document ID, a repeat — all resolve to nothing. What reaches the screen is therefore always a
+subset of what the application itself put into the request. The old rule made a fabricated record
+impossible by starving the model; this makes it impossible by checking, and the checking is what
+scales to a model that can actually answer the question.
+
+### 52b. The application still owns every number
+
+The model writes prose and picks references. Availability and shortage are computed from the
+matched record by the Phase 5 logic and recomputed whenever the reviewer edits a quantity or
+changes a match, so the figures on screen cannot drift from the records even if the model's
+sentence does. The system instruction tells it not to do that arithmetic, and the schema gives it
+nowhere to put the result if it tried.
+
+### 52c. Suggested action is advice, not a field
+
+`suggested_action` appears in the review UI and does not survive the save. Decision 48 removed
+`production_requirements.action_type` because a second copy of the plan could disagree with the
+Action Item, and that still holds — this is a hint about what to do next, not a stored plan.
+
+### 52d. Context is capped at 250 records, and the cut is announced
+
+Measured rather than assumed: a worst-case record line is 288 characters, roughly 72 tokens; a
+typical one is 162, roughly 41. 250 records is about 18,000 tokens at worst. A department tracking
+more than that is past this MVP's scope.
+
+Above the cap, records matching words from the user's question are sorted to the front and the cap
+is taken from there. Nothing is dropped silently: the prompt header tells the model how many were
+left out and not to claim the list is complete, and the UI tells the user the answer may not cover
+everything.
+
+### 52e. Without inventory permission, nothing is read
+
+A productions editor with no inventory access can still use the Requirement Generator. No inventory
+is read, no context is sent, the result is labelled general guidance, and every suggestion stays
+unmatched until someone with access resolves it. There is no Security Rule exception; the
+permission model is unchanged.
+
+---
+
+## 53. Truncation Was the Structured-Output Failure
+
+An ordinary Requirement Generator prompt returned "The AI response could not be read". The cause was
+in the SDK boundary, not in the model's understanding.
+
+`maxOutputTokens` was 2048, and thinking tokens count against that budget. More importantly,
+`MAX_TOKENS` is **not** in `@firebase/ai`'s `badFinishReasons` list, so a truncated generation is
+not an error to the SDK: `response.text()` returns the partial text. That partial text is JSON cut
+off mid-value, `JSON.parse` throws several layers later, and the failure surfaces as "malformed" —
+a symptom whose cause the message could not name.
+
+The fix has four parts:
+
+- `maxOutputTokens` is 8192, enough for an assessment, a dozen suggestions, and thinking on top.
+- `thinkingConfig` is left at the model's default. The SDK errors outright if a thinking budget
+  falls outside a model's supported range, and a knob that can hard-fail is not worth introducing
+  untested when a larger budget solves the problem.
+- The boundary returns `{ text, truncated }`, reading `finishReason` directly, so truncation is
+  named rather than inferred.
+- A truncated response is repaired structurally — closed at the last point where its structure was
+  whole — and validated normally. No key is invented and no value is completed.
+
+Alongside it, the Requirement Generator validates each suggestion on its own, so eight good
+suggestions and two bad ones is eight suggestions and a note rather than a failed request. Safe
+normalization runs before Zod and never instead of it: numeric strings, empty optional strings,
+category casing, and unambiguous field aliases. An invented identifier, an unknown reference, or an
+invalid quantity is never normalized into something valid.
+
+
+---
+
+## 54. A 429 Is Two Different Situations
+
+The Gemini Developer API free tier limits requests per day per project and model. On
+`gemini-3.5-flash` this was confirmed at 20 per day, arriving as HTTP 429 with
+`quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier`.
+
+The original handling called every 429 "busy right now, wait a moment". That is accurate for a
+per-minute limit and actively misleading for a per-day one: it tells someone to retry in a minute
+when the answer is tomorrow, and they will retry, and it will fail again.
+
+The application now reads the `google.rpc.QuotaFailure` detail. A `quotaId` containing `PerDay`
+produces "Today's AI usage limit has been reached"; every other 429, including one the service did
+not label, keeps the generic wording. An unlabelled 429 is never assumed to be the daily one —
+guessing wrong in that direction tells someone to give up for the day over a one-minute limit.
+
+The message names no plan, model, or number. None of it is something the person reading can act on,
+and a quota figure in a user-facing string goes stale the moment the project's billing changes.
+
+This is a wording decision, not an architectural one. Moving to the paid tier of the same Gemini
+Developer API is a billing change on the Firebase project: the SDK, `GoogleAIBackend`, the model,
+the contracts, and the security model are untouched, and this branch simply stops being reached.

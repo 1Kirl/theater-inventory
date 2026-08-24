@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth, type Auth } from 'firebase/auth'
 import { getFirestore, type Firestore } from 'firebase/firestore'
+import { ensureAppCheck } from '@/lib/app-check'
 import { readFirebaseEnv } from '@/lib/env'
 
 /**
@@ -10,7 +11,9 @@ import { readFirebaseEnv } from '@/lib/env'
 export function getFirebaseApp(): FirebaseApp {
   const existing = getApps()
   if (existing.length > 0) {
-    return getApp()
+    const app = getApp()
+    ensureAppCheck(app)
+    return app
   }
 
   const result = readFirebaseEnv()
@@ -20,7 +23,7 @@ export function getFirebaseApp(): FirebaseApp {
     )
   }
 
-  return initializeApp({
+  const app = initializeApp({
     apiKey: result.env.VITE_FIREBASE_API_KEY,
     authDomain: result.env.VITE_FIREBASE_AUTH_DOMAIN,
     projectId: result.env.VITE_FIREBASE_PROJECT_ID,
@@ -28,6 +31,12 @@ export function getFirebaseApp(): FirebaseApp {
     messagingSenderId: result.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: result.env.VITE_FIREBASE_APP_ID,
   })
+
+  // Before any Auth, Firestore, or AI Logic call: App Check enforcement is on,
+  // and a request that leaves without a token is rejected by the service.
+  ensureAppCheck(app)
+
+  return app
 }
 
 export function getFirebaseAuth(): Auth {

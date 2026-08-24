@@ -191,7 +191,13 @@ The application has exactly two required AI features for the MVP:
 Read `docs/AI_SPEC.md` before implementing either feature.
 
 Provider: Firebase AI Logic with the **Gemini Developer API**, model **gemini-3.5-flash**. The
-Vertex AI / Agent Platform path requires Blaze and is not used.
+Vertex AI / Agent Platform path requires Blaze and is not used. There is no Gemini API key: the
+SDK reaches the service through the Firebase app.
+
+**App Check is enforced for Firebase AI Logic**, so it is a prerequisite for both features, not
+optional hardening. reCAPTCHA Enterprise in production, the SDK debug provider on localhost. It
+attests that a request came from this app and is not authorization — Security Rules remain the
+only authorization boundary.
 
 Critical rules:
 
@@ -204,6 +210,14 @@ Critical rules:
 - Exact arithmetic such as shortage quantity must be calculated by application code, not by the model.
 - All AI results must respect the active organization and the user's permissions.
 - AI errors must fail safely and leave existing data unchanged.
+- Validate every model response with Zod before any of it reaches application state, and reject
+  unknown fields rather than ignoring them.
+- Inventory the user may already read **is** sent to the model, so it can answer questions about
+  what the organization actually has. It travels under request-local references (`I1`, `I2`), never
+  with document IDs, and every reference the model returns is validated against the ones that
+  request supplied. Nothing about members, accounts, or authentication is ever sent.
+- Treat user input and application text passed to the model as untrusted, and nothing it returns
+  as trusted.
 
 ## 9. UI and Responsive Rules
 

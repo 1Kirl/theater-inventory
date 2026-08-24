@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Pencil, Plus, Sparkles } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -15,6 +15,7 @@ import {
   actionPlaceholder, actionSummary, availabilityLabel, buildRequirementRows, shortageLabel,
   summarizeProduction, type RequirementRow,
 } from '@/features/productions/production-view'
+import { RequirementGeneratorDialog } from '@/features/ai/RequirementGeneratorDialog'
 import { ActionItemDialog } from '@/features/productions/ActionItemDialog'
 import { RequirementDialog } from '@/features/productions/RequirementDialog'
 import { listInventoryItems } from '@/services/inventory-service'
@@ -37,6 +38,7 @@ export function ProductionDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [editingRequirement, setEditingRequirement] = useState<ProductionRequirement | null | undefined>(undefined)
   const [actioning, setActioning] = useState<RequirementRow | null>(null)
+  const [generating, setGenerating] = useState(false)
 
   const canEdit = hasModuleAccess(role, membership?.permissions ?? null, 'productions', 'edit')
   // Matching needs inventory access; the requirement itself does not.
@@ -177,9 +179,14 @@ export function ProductionDetailPage() {
               </CardDescription>
             </div>
             {canEdit ? (
-              <Button size="sm" onClick={() => setEditingRequirement(null)}>
-                <Plus className="size-4" aria-hidden="true" />Add requirement
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => setGenerating(true)}>
+                  <Sparkles className="size-4" aria-hidden="true" />Draft with AI
+                </Button>
+                <Button size="sm" onClick={() => setEditingRequirement(null)}>
+                  <Plus className="size-4" aria-hidden="true" />Add requirement
+                </Button>
+              </div>
             ) : null}
           </div>
         </CardHeader>
@@ -252,6 +259,18 @@ export function ProductionDetailPage() {
           canReadInventory={canReadInventory}
           open
           onOpenChange={(open) => { if (!open) setEditingRequirement(undefined) }}
+          onSaved={load}
+        />
+      ) : null}
+
+      {generating ? (
+        <RequirementGeneratorDialog
+          production={production}
+          items={items}
+          canReadInventory={canReadInventory}
+          existingItemNames={requirements.map((requirement) => requirement.item_name)}
+          open
+          onOpenChange={setGenerating}
           onSaved={load}
         />
       ) : null}

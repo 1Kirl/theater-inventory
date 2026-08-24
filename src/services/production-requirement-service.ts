@@ -8,7 +8,7 @@ import {
   type RequirementInput,
 } from '@/domain/production-payloads'
 import { validateRequiredQuantity } from '@/domain/production'
-import type { ProductionRequirement } from '@/types/production'
+import type { ProductionRequirement, RequirementSource } from '@/types/production'
 
 const MAX_NAME_LENGTH = 120
 const MAX_NOTES_LENGTH = 2000
@@ -84,6 +84,7 @@ export async function createRequirement(params: {
   organizationId: string
   productionId: string
   input: RequirementInput
+  source?: RequirementSource
 }): Promise<{ requirementId: string }> {
   const uid = requireUid()
   validate(params.input)
@@ -100,6 +101,7 @@ export async function createRequirement(params: {
       uid,
       now: serverTimestamp,
       input: params.input,
+      ...(params.source ? { source: params.source } : {}),
     }),
   )
 

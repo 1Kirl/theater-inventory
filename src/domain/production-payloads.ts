@@ -1,5 +1,7 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
-import type { ActionStatus, ActionType, ProductionStatus } from '@/types/production'
+import type {
+  ActionStatus, ActionType, ProductionStatus, RequirementSource,
+} from '@/types/production'
 
 /**
  * The exact document shapes written to Firestore for Phase 5.
@@ -101,14 +103,19 @@ export function buildRequirementDocument(params: {
   uid: string
   now: Now
   input: RequirementInput
+  /**
+   * `ai_approved` records that a person reviewed and approved an AI suggestion.
+   * It is not a claim that the AI wrote anything: an unapproved suggestion is
+   * never sent here at all.
+   */
+  source?: RequirementSource
 }) {
   return {
     requirement_id: params.requirementId,
     organization_id: params.organizationId,
     production_id: params.productionId,
     ...requirementFields(params.input),
-    // AI approval arrives in Phase 7; everything written today is manual.
-    source: 'manual' as const,
+    source: params.source ?? ('manual' as const),
     created_by_uid: params.uid,
     created_at: params.now(),
     updated_at: params.now(),
@@ -119,7 +126,7 @@ export function buildRequirementUpdate(params: {
   requirementId: string
   organizationId: string
   productionId: string
-  source: 'manual' | 'ai_approved'
+  source: RequirementSource
   createdByUid: string
   createdAt: Timestamp
   now: Now

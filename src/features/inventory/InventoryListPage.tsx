@@ -23,6 +23,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useOrganization } from '@/features/organizations/useOrganization'
+import { SmartSearchPanel } from '@/features/ai/SmartSearchPanel'
+import type { SmartSearchResult } from '@/features/ai/smart-search'
 import { hasModuleAccess } from '@/domain/module-access'
 import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
 import {
@@ -63,6 +65,10 @@ export function InventoryListPage() {
   const [items, setItems] = useState<InventoryItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<InventoryFilters>(EMPTY_FILTERS)
+  // The AI answer and the records it named. While one is active the list shows
+  // those records; the manual filters still apply on top, so the user can
+  // narrow an AI answer or drop out of it entirely.
+  const [aiSearch, setAiSearch] = useState<SmartSearchResult | null>(null)
 
   const canCreate = hasModuleAccess(role, membership?.permissions ?? null, 'inventory', 'edit')
 
@@ -81,16 +87,25 @@ export function InventoryListPage() {
     void load()
   }, [load])
 
-  const visible = useMemo(
-    () => (items ? filterInventoryItems(items, filters, teams) : []),
-    [items, filters, teams],
-  )
+  const visible = useMemo(() => {
+    if (!items) return []
+    // An AI answer narrows the set to the records it named; the manual filters
+    // are then applied to those, so both controls keep working together.
+    const base = aiSearch && aiSearch.items.length > 0 ? aiSearch.items : items
+    return filterInventoryItems(base, filters, teams)
+  }, [items, filters, teams, aiSearch])
 
   function setFilter<K extends keyof InventoryFilters>(key: K, value: InventoryFilters[K]) {
     setFilters((current) => ({ ...current, [key]: value }))
   }
 
-  const filtersActive = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS)
+  function clearAll() {
+    setFilters(EMPTY_FILTERS)
+    setAiSearch(null)
+  }
+
+  const filtersActive =
+    aiSearch !== null || JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS)
 
   return (
     <div className="space-y-6">
@@ -110,6 +125,19 @@ export function InventoryListPage() {
           </Button>
         ) : null}
       </div>
+
+      <SmartSearchPanel
+        items={items ?? []}
+        teams={teams}
+        active={aiSearch}
+        onAnswer={(result) => {
+          setAiSearch(result)
+          // The interpreted filters, when the model produced them, go into the
+          // ordinary controls so the user can keep working deterministically.
+          setFilters(result.resolved?.filters ?? EMPTY_FILTERS)
+        }}
+        onClear={clearAll}
+      />
 
       <Card>
         <CardContent className="space-y-3 pt-6">
@@ -184,8 +212,15 @@ export function InventoryListPage() {
             </div>
           </div>
 
+          {aiSearch ? (
+            <p className="text-muted-foreground text-xs">
+              These filters narrow the AI's results. Clear the AI answer above to search everything
+              again.
+            </p>
+          ) : null}
+
           {filtersActive ? (
-            <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY_FILTERS)}>
+            <Button variant="ghost" size="sm" onClick={clearAll}>
               Clear filters
             </Button>
           ) : null}
@@ -244,7 +279,14 @@ export function InventoryListPage() {
                     className="cursor-pointer"
                     onClick={() => navigate(paths.inventoryItem(item.item_id))}
                   >
-                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {item.name}
+                      {aiSearch?.reasons.get(item.item_id) ? (
+                        <span className="text-muted-foreground block text-xs font-normal">
+                          {aiSearch.reasons.get(item.item_id)}
+                        </span>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{item.category}</TableCell>
                     <TableCell className="text-muted-foreground">{teamNameOf(item, teams)}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.quantity_available}</TableCell>
@@ -276,6 +318,11 @@ export function InventoryListPage() {
                         {item.quantity_available} of {item.quantity_total} available
                       </p>
                       <p className="text-muted-foreground text-xs">{item.location}</p>
+                      {aiSearch?.reasons.get(item.item_id) ? (
+                        <p className="text-muted-foreground text-xs italic">
+                          {aiSearch.reasons.get(item.item_id)}
+                        </p>
+                      ) : null}
                     </CardContent>
                   </Card>
                 </Link>
