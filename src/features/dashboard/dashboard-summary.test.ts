@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { Timestamp } from 'firebase/firestore'
 import {
-  dashboardAccess, hasAnyAccess, isOpenRepair, summarizeInventory, summarizeMaintenance,
-  summarizeProductions, upcomingEvents,
+  dashboardAccess, hasAnyAccess, isOpenRepair, summarizeCalendar, summarizeInventory,
+  summarizeMaintenance, summarizeProductions, upcomingEvents,
 } from '@/features/dashboard/dashboard-summary'
 import { EMPTY_CONDITION_COUNTS } from '@/domain/inventory'
 import { currentlyInService } from '@/domain/maintenance'
@@ -382,14 +382,116 @@ describe('upcomingEvents', () => {
       .toEqual(['allday', 'morning', 'evening'])
   })
 
-  it('caps the list', () => {
+  it('does not cap: counting and previewing are different questions', () => {
     const many = Array.from({ length: 12 }, (_, index) =>
       event({ event_id: `e-${index}`, event_date: Timestamp.fromDate(new Date(2026, 8, index + 1)) }))
 
-    expect(upcomingEvents(many, NOW, 5)).toHaveLength(5)
+    expect(upcomingEvents(many, NOW)).toHaveLength(12)
   })
 
   it('handles an organization with nothing scheduled', () => {
     expect(upcomingEvents([], NOW)).toEqual([])
+  })
+})
+
+describe('summarizeCalendar', () => {
+  /** The seeded demo calendar: six events, all ahead of today. */
+  function seededSix() {
+    return [3, 5, 7, 10, 14, 21].map((days) => event({
+      event_id: `e+${days}`,
+      event_date: Timestamp.fromDate(new Date(2026, 7, 25 + days)),
+    }))
+  }
+
+  it('counts every upcoming event, not just the ones it previews', () => {
+    // The bug this replaces: the summary read its number off the preview list,
+    // so six upcoming events were reported as five.
+    const summary = summarizeCalendar(seededSix(), NOW)
+
+    expect(summary.upcomingCount).toBe(6)
+  })
+
+  it('still caps the preview at five', () => {
+    const summary = summarizeCalendar(seededSix(), NOW)
+
+    expect(summary.preview).toHaveLength(5)
+    expect(summary.preview.map((entry) => entry.event_id))
+      .toEqual(['e+3', 'e+5', 'e+7', 'e+10', 'e+14'])
+  })
+
+  it('counts past the preview limit without bound', () => {
+    const many = Array.from({ length: 40 }, (_, index) => event({
+      event_id: `e-${index}`,
+      event_date: Timestamp.fromDate(new Date(2026, 8, index + 1)),
+    }))
+
+    const summary = summarizeCalendar(many, NOW)
+
+    expect(summary.upcomingCount).toBe(40)
+    expect(summary.preview).toHaveLength(5)
+  })
+
+  it('counts today and excludes yesterday', () => {
+    const summary = summarizeCalendar([
+      event({ event_id: 'yesterday', event_date: Timestamp.fromDate(new Date(2026, 7, 24)) }),
+      event({ event_id: 'today', event_date: Timestamp.fromDate(new Date(2026, 7, 25)) }),
+      event({ event_id: 'tomorrow', event_date: Timestamp.fromDate(new Date(2026, 7, 26)) }),
+    ], NOW)
+
+    expect(summary.upcomingCount).toBe(2)
+    expect(summary.preview.map((entry) => entry.event_id)).toEqual(['today', 'tomorrow'])
+  })
+
+  it('counts an event at local midnight today, with no UTC shift', () => {
+    // NOW is 10:00 local. A UTC comparison would push this into yesterday for
+    // anyone east of Greenwich and drop it from the count.
+    const summary = summarizeCalendar([
+      event({ event_id: 'midnight', event_date: Timestamp.fromDate(new Date(2026, 7, 25, 0, 0, 0)) }),
+    ], NOW)
+
+    expect(summary.upcomingCount).toBe(1)
+  })
+
+  it('reports zero and an empty preview for an organization with nothing scheduled', () => {
+    expect(summarizeCalendar([], NOW)).toEqual({ upcomingCount: 0, preview: [] })
+  })
+
+  it('honours a different preview limit without changing the count', () => {
+    const summary = summarizeCalendar(seededSix(), NOW, 2)
+
+    expect(summary.upcomingCount).toBe(6)
+    expect(summary.preview).toHaveLength(2)
+  })
+})
+
+describe('no other summary lets a preview cap reach its count', () => {
+  it('counts every open repair while previewing only the most recent', () => {
+    const many = Array.from({ length: 9 }, (_, index) =>
+      record({ maintenance_id: `m-${index}`, status: 'sent', quantity_sent: 1 }))
+
+    const summary = summarizeMaintenance(many, NOW, 3)
+
+    expect(summary.openCount).toBe(9)
+    expect(summary.inServiceQuantity).toBe(9)
+    expect(summary.recent).toHaveLength(3)
+  })
+
+  it('counts every active production while previewing only a few', () => {
+    const many = Array.from({ length: 7 }, (_, index) =>
+      production({ production_id: `p-${index}`, status: 'active' }))
+    const actions = many.map((entry, index) => action({
+      action_item_id: `r-${index}`,
+      requirement_id: `r-${index}`,
+      production_id: entry.production_id,
+      status: 'todo',
+    }))
+
+    const summary = summarizeProductions({
+      productions: many, requirements: [], actions, items: [], canReadInventory: true, limit: 2,
+    })
+
+    expect(summary.activeCount).toBe(7)
+    expect(summary.openActionCount).toBe(7)
+    expect(summary.active).toHaveLength(2)
   })
 })

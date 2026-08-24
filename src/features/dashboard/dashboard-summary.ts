@@ -182,7 +182,12 @@ export function summarizeProductions(params: {
 }
 
 /**
- * Events from today onward, soonest first.
+ * Every event from today onward, soonest first.
+ *
+ * Deliberately uncapped. This used to take a limit and return the first few,
+ * which meant the only thing the dashboard could count was the truncated list —
+ * six upcoming events reported as five. Counting and previewing are different
+ * questions, and every other summary here already keeps them apart.
  *
  * Compared as local date keys rather than timestamps, which is what keeps an
  * early-morning event from falling into yesterday. `sortEvents` then applies the
@@ -191,9 +196,25 @@ export function summarizeProductions(params: {
 export function upcomingEvents(
   events: readonly CalendarEvent[],
   from: Date,
-  limit = 5,
 ): CalendarEvent[] {
   const fromKey = toDateKey(from)
 
-  return sortEvents(events.filter((event) => dateKeyOf(event) >= fromKey)).slice(0, limit)
+  return sortEvents(events.filter((event) => dateKeyOf(event) >= fromKey))
+}
+
+export interface CalendarSummary {
+  /** Everything upcoming. What the summary card reports. */
+  upcomingCount: number
+  /** The soonest few, for the list beneath it. */
+  preview: CalendarEvent[]
+}
+
+export function summarizeCalendar(
+  events: readonly CalendarEvent[],
+  from: Date,
+  previewLimit = 5,
+): CalendarSummary {
+  const upcoming = upcomingEvents(events, from)
+
+  return { upcomingCount: upcoming.length, preview: upcoming.slice(0, previewLimit) }
 }

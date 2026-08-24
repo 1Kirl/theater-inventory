@@ -13,7 +13,7 @@ import { formatEventTime, isAllDay } from '@/domain/calendar'
 import { itemNameById } from '@/features/maintenance/maintenance-view'
 import { audienceLabel } from '@/features/calendar/calendar-view'
 import {
-  hasAnyAccess, summarizeInventory, summarizeMaintenance, summarizeProductions, upcomingEvents,
+  hasAnyAccess, summarizeCalendar, summarizeInventory, summarizeMaintenance, summarizeProductions,
 } from '@/features/dashboard/dashboard-summary'
 import { useDashboardData, type ModuleState } from '@/features/dashboard/useDashboardData'
 import { paths } from '@/routes/paths'
@@ -100,7 +100,7 @@ export function DashboardPage() {
       canReadInventory: data.access.inventory && items !== null,
     })
     : null
-  const upcoming = events ? upcomingEvents(events, now) : null
+  const calendarSummary = events ? summarizeCalendar(events, now) : null
 
   if (!hasAnyAccess(data.access)) {
     return (
@@ -215,11 +215,15 @@ export function DashboardPage() {
         {data.calendar.status === 'error' ? (
           <ModuleError label="Calendar" message={data.calendar.message} />
         ) : null}
-        {upcoming ? (
+        {calendarSummary ? (
           <Metric
             label="Upcoming events"
-            value={String(upcoming.length)}
-            hint={upcoming.length === 0 ? 'Nothing scheduled from today' : 'From today onward'}
+            value={String(calendarSummary.upcomingCount)}
+            hint={
+              calendarSummary.upcomingCount === 0
+                ? 'Nothing scheduled from today'
+                : 'From today onward'
+            }
           />
         ) : null}
       </div>
@@ -335,7 +339,7 @@ export function DashboardPage() {
           </Card>
         ) : null}
 
-        {upcoming ? (
+        {calendarSummary ? (
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -344,7 +348,11 @@ export function DashboardPage() {
                     <CalendarDays className="size-4" aria-hidden="true" />
                     Upcoming events
                   </CardTitle>
-                  <CardDescription>From today onward.</CardDescription>
+                  <CardDescription>
+                    {calendarSummary.upcomingCount > calendarSummary.preview.length
+                      ? `The next ${calendarSummary.preview.length} of ${calendarSummary.upcomingCount}.`
+                      : 'From today onward.'}
+                  </CardDescription>
                 </div>
                 <Button asChild variant="ghost" size="sm">
                   <Link to={paths.calendar}>Open calendar</Link>
@@ -352,14 +360,14 @@ export function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {upcoming.length === 0 ? (
+              {calendarSummary.preview.length === 0 ? (
                 <p className="text-muted-foreground text-sm">
                   Nothing is scheduled.
                   {canAddEvent ? ' Add a rehearsal or a build day.' : ''}
                 </p>
               ) : (
                 <ul className="divide-border divide-y">
-                  {upcoming.map((event) => (
+                  {calendarSummary.preview.map((event) => (
                     <li key={event.event_id} className="py-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-muted-foreground text-xs tabular-nums">
