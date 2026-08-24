@@ -713,6 +713,80 @@ not. No document may describe this aggregate as enforced.
 
 `quantity_available` is never adjusted by any of this.
 
+## 46. Requirement Availability Is `quantity_available`, Unadjusted
+
+Shortage is computed from the linked inventory item's `quantity_available` and nothing else:
+
+```
+available = inventory_item.quantity_available
+shortage  = max(required_qty - available, 0)
+```
+
+Quantity currently in service is **not** subtracted. `quantity_available` is already the number a
+person maintains as genuinely available (decision 15), so subtracting the in-service figure would
+deduct the same equipment twice — once when the technician lowered the available count, and again
+from the maintenance records.
+
+Worked example:
+
+| | |
+|---|---|
+| `quantity_total` | 10 |
+| `quantity_available` | 7 |
+| currently in service | 3 |
+| required | 8 |
+| **available** | **7** |
+| **shortage** | **1** |
+
+Not available 4 and shortage 4.
+
+Availability is read live, never stored on the requirement. When an item's `quantity_available`
+changes, every requirement pointing at it reports a different shortage the next time it is read.
+Only the Action Item's `quantity` is a snapshot, and deliberately so — it records what the crew
+decided to do, not what the arithmetic currently says.
+
+## 47. Requirement and Action Teams
+
+`production_requirements.team_id` and `action_items.team_id` are both required.
+
+The requirement's team names the crew responsible for the need, and edit scope is judged against
+it. The Action Item copies it, and Security Rules verify the copy matches; an action cannot be
+filed under a different crew than the requirement it resolves.
+
+The **linked inventory item's team is unrelated**. A sound requirement may match a lighting item,
+and nothing rejects that — decision 40 exists precisely so those cross-team links are possible.
+
+Matching an item requires `inventory` view, because the item is inventory data and module
+permission governs module data. That is the combination `PERMISSIONS.md` Example B already gives a
+stage manager: Productions edit alongside Inventory view. No rule exception is added for
+productions; a planner without inventory access can still record an unmatched requirement, and the
+interface says what is missing.
+
+## 48. The Action Plan Lives Only on the Action Item
+
+`production_requirements` has no `action_type` field.
+
+Storing one there alongside `action_items.action_type` would create two places
+holding the same decision, free to disagree:
+
+```
+requirement.action_type = 'rent'
+action_item.action_type = 'buy'
+```
+
+Nothing could say which one the crew meant. The Action Item is the operational record — it carries
+the quantity, the status, the assignee, and the due date — so it holds the action type too.
+
+The persisted set is four values: `buy`, `rent`, `build`, `repair`.
+
+**Already Available is not among them.** It is the derived state of a requirement whose shortage is
+zero, computed at read time and never written anywhere. A requirement covered by stock needs no
+work, so there is no Action Item to hold a type for.
+
+When the AI Requirement Generator lands in Phase 7, a suggested action stays a transient suggestion
+in the approval interface, or becomes an Action Item once approved. It is not written back onto the
+requirement.
+
 ---
 
 ## IA v3 ↔ /docs Conflict Resolutions

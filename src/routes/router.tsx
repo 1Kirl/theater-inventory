@@ -14,6 +14,10 @@ import { InventoryListPage } from '@/features/inventory/InventoryListPage'
 import { MaintenanceListPage } from '@/features/maintenance/MaintenanceListPage'
 import { MaintenanceRecordDetailPage } from '@/features/maintenance/MaintenanceRecordDetailPage'
 import { MaintenanceRecordFormPage } from '@/features/maintenance/MaintenanceRecordFormPage'
+import { ActionListPage } from '@/features/productions/ActionListPage'
+import { ProductionDetailPage } from '@/features/productions/ProductionDetailPage'
+import { ProductionFormPage } from '@/features/productions/ProductionFormPage'
+import { ProductionListPage } from '@/features/productions/ProductionListPage'
 import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
 import { DashboardPlaceholder } from '@/routes/DashboardPlaceholder'
 import { NotFound } from '@/routes/NotFound'
@@ -91,12 +95,21 @@ export const router = createBrowserRouter([
                 ],
               },
               {
-                path: paths.productions,
-                element: <PlaceholderPage title="Productions" phase="Phase 5" />,
-              },
-              {
-                path: paths.actionList,
-                element: <PlaceholderPage title="Action List" phase="Phase 6" />,
+                // Action List follows the productions permission; it has none of
+                // its own.
+                element: <PermissionGuard module="productions" level="view" />,
+                children: [
+                  { path: paths.productions, element: <ProductionListPage /> },
+                  { path: paths.actionList, element: <ActionListPage /> },
+                  {
+                    element: <PermissionGuard module="productions" level="edit" />,
+                    children: [
+                      { path: paths.productionNew, element: <ProductionFormPage mode="create" /> },
+                      { path: '/productions/:productionId/edit', element: <ProductionFormPage mode="edit" /> },
+                    ],
+                  },
+                  { path: '/productions/:productionId', element: <ProductionDetailPage /> },
+                ],
               },
               {
                 path: paths.calendar,

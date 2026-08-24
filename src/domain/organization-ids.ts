@@ -24,4 +24,7 @@ export const COLLECTIONS = {
   teams: 'teams',
   inventoryItems: 'inventory_items',
   maintenanceRecords: 'maintenance_records',
+  productions: 'productions',
+  productionRequirements: 'production_requirements',
+  actionItems: 'action_items',
 } as const

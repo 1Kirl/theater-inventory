@@ -551,13 +551,6 @@ Path:
 `production_requirements/{requirementId}`
 
 ```ts
-type RequirementActionType =
-  | 'buy'
-  | 'rent'
-  | 'build'
-  | 'repair'
-  | 'already_available';
-
 interface ProductionRequirement {
   requirement_id: string;
   organization_id: string;
@@ -565,8 +558,7 @@ interface ProductionRequirement {
   item_name: string;
   inventory_item_id?: string;
   required_qty: number;
-  team_id?: string;
-  action_type?: RequirementActionType;
+  team_id: string;           // required — the crew responsible for this need
   notes?: string;
   source: 'manual' | 'ai_approved';
   created_by_uid: string;
@@ -587,6 +579,18 @@ Preferred implementation:
 ```ts
 const shortageQty = Math.max(requiredQty - availableQty, 0);
 ```
+
+`required_qty` is an integer greater than zero. `team_id` is required and names the crew
+responsible; it is what edit scope is judged against. The linked inventory item does **not** have
+to belong to that team — a stage manager matching a sound requirement to a lighting item is normal
+theater practice, and decision 40 depends on it being possible.
+
+**Availability comes from `quantity_available` alone.** Quantity currently in service is a separate
+derived indicator and is never subtracted here; see decision 46.
+
+A requirement carries **no action type**. The plan is the Action Item, which is the only place it is
+persisted; a second copy here could disagree with it. Already Available is derived from a shortage
+of zero and is never stored. See decision 48.
 
 A requirement with no `inventory_item_id` is **Not Matched**:
 
@@ -619,7 +623,7 @@ interface ActionItem {
   item_name: string;
   action_type: ActionType;
   quantity: number;
-  team_id?: string;
+  team_id: string;           // copied from the requirement; must match it
   assignee_uid?: string;
   due_date?: Timestamp;
   status: ActionStatus;

@@ -389,6 +389,9 @@ Collection-specific requirements:
 | `teams` | active member | active member, own organization | Admin | Admin, name and description | denied |
 | `inventory_items` | Admin, or member with `inventory` view/edit | same, own organization | Admin any team, member `edit` own teams | same, and may not move an item outside their teams | denied |
 | `maintenance_records` | Admin, or member with `maintenance` view/edit | same, own organization and per item | Admin any team, member `edit` own teams; `team_id` must match the linked item | same, judged against the stored snapshot | denied |
+| `productions` | Admin, or member with `productions` view/edit | same, own organization | Admin, or member with `productions` edit — organization-level, no team check | same | denied |
+| `production_requirements` | same as productions | same, own organization and per production | Admin any team, member `edit` own teams; linked production and any linked item must be same-organization | same | denied |
+| `action_items` | same as productions | same, own organization | document ID must equal `requirement_id`; requirement must be matched and short | same, without re-checking shortage | denied |
 
 ### Two creation paths
 

@@ -17,6 +17,10 @@ export type OrganizationErrorCode =
   | 'invalid-inventory-item'
   | 'invalid-maintenance-record'
   | 'inventory-item-not-found'
+  | 'invalid-production'
+  | 'invalid-requirement'
+  | 'invalid-action-item'
+  | 'requirement-not-actionable'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

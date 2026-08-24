@@ -688,6 +688,225 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ------------------------------------------------- productions and friends
+
+    function productionsLevel(organizationId) {
+      return membershipData(organizationId).permissions.productions;
+    }
+
+    function canViewProductions(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && productionsLevel(organizationId) in ['view', 'edit'])
+      );
+    }
+
+    // Productions themselves are organization-level: the module permission
+    // alone decides, with no team check.
+    function canEditProductions(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && productionsLevel(organizationId) == 'edit')
+      );
+    }
+
+    // Requirements and action items are team-scoped for editing.
+    function canEditProductionsForTeam(organizationId, teamId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && productionsLevel(organizationId) == 'edit'
+            && teamId in membershipData(organizationId).team_ids)
+      );
+    }
+
+    function productionPath(productionId) {
+      return /databases/$(database)/documents/productions/$(productionId);
+    }
+
+    function requirementPath(requirementId) {
+      return /databases/$(database)/documents/production_requirements/$(requirementId);
+    }
+
+    match /productions/{productionId} {
+
+      allow get, list: if canViewProductions(resource.data.organization_id);
+
+      allow create: if canEditProductions(request.resource.data.organization_id)
+        && productionFieldsValid(productionId)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if canEditProductions(resource.data.organization_id)
+        && productionFieldsValid(productionId)
+        && request.resource.data.production_id == resource.data.production_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at;
+
+      // Completed productions are archived by status, never removed.
+      allow delete: if false;
+    }
+
+    function productionFieldsValid(productionId) {
+      return hasExactly(
+               ['production_id', 'organization_id', 'title', 'status',
+                'created_by_uid', 'created_at', 'updated_at'],
+               ['description', 'notes', 'start_date', 'end_date'])
+        && request.resource.data.production_id == productionId
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 120
+        && request.resource.data.status in ['planning', 'active', 'completed']
+        && (!('description' in request.resource.data)
+            || (request.resource.data.description is string
+                && request.resource.data.description.size() <= 2000))
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && (!('start_date' in request.resource.data)
+            || request.resource.data.start_date is timestamp)
+        && (!('end_date' in request.resource.data)
+            || request.resource.data.end_date is timestamp)
+        && request.resource.data.updated_at == request.time;
+    }
+
+    match /production_requirements/{requirementId} {
+
+      allow get, list: if canViewProductions(resource.data.organization_id);
+
+      allow create: if requirementFieldsValid(requirementId)
+        && canEditProductionsForTeam(request.resource.data.organization_id,
+                                     request.resource.data.team_id)
+        && requirementLinksValid(request.resource.data)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if requirementFieldsValid(requirementId)
+        && request.resource.data.requirement_id == resource.data.requirement_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.production_id == resource.data.production_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        // Editable as it stands, and editable where it is going.
+        && canEditProductionsForTeam(resource.data.organization_id, resource.data.team_id)
+        && canEditProductionsForTeam(resource.data.organization_id,
+                                     request.resource.data.team_id)
+        && requirementLinksValid(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    function requirementFieldsValid(requirementId) {
+      return hasExactly(
+               ['requirement_id', 'organization_id', 'production_id', 'item_name',
+                'required_qty', 'team_id', 'source', 'created_by_uid', 'created_at',
+                'updated_at'],
+               ['inventory_item_id', 'notes'])
+        && request.resource.data.requirement_id == requirementId
+        && request.resource.data.item_name is string
+        && request.resource.data.item_name.size() > 0
+        && request.resource.data.item_name.size() <= 120
+        && request.resource.data.required_qty is int
+        && request.resource.data.required_qty > 0
+        && request.resource.data.source in ['manual', 'ai_approved']
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && request.resource.data.updated_at == request.time;
+    }
+
+    // The production must exist in the same organization. A matched inventory
+    // item must too — but its team is deliberately unconstrained: a sound
+    // requirement matching a lighting item is ordinary theater practice.
+    function requirementLinksValid(data) {
+      return exists(productionPath(data.production_id))
+        && get(productionPath(data.production_id)).data.organization_id == data.organization_id
+        && (!('inventory_item_id' in data)
+            || (exists(itemPath(data.inventory_item_id))
+                && get(itemPath(data.inventory_item_id)).data.organization_id
+                     == data.organization_id));
+    }
+
+    match /action_items/{requirementId} {
+
+      allow get, list: if canViewProductions(resource.data.organization_id);
+
+      // Creation carries two conditions beyond permission, and both are
+      // checkable here because the requirement and its item are reachable by
+      // known path: the requirement must be matched, and it must actually be
+      // short. An unmatched requirement has no shortage to act on, and a
+      // satisfied one needs no work.
+      allow create: if actionFieldsValid(requirementId)
+        && canEditProductionsForTeam(request.resource.data.organization_id,
+                                     request.resource.data.team_id)
+        && actionMatchesRequirement(requirementId, request.resource.data)
+        && requirementIsShort(requirementId)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      // Update deliberately does not re-check the shortage. Once inventory
+      // arrives the shortage clears, and marking the work done has to stay
+      // possible — the documents say to close such an item, never delete it.
+      allow update: if actionFieldsValid(requirementId)
+        && request.resource.data.action_item_id == resource.data.action_item_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.production_id == resource.data.production_id
+        && request.resource.data.requirement_id == resource.data.requirement_id
+        && request.resource.data.team_id == resource.data.team_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        && canEditProductionsForTeam(resource.data.organization_id, resource.data.team_id);
+
+      // Work history. If a shortage clears, the item is closed, not removed.
+      allow delete: if false;
+    }
+
+    function actionFieldsValid(requirementId) {
+      return hasExactly(
+               ['action_item_id', 'organization_id', 'production_id', 'requirement_id',
+                'item_name', 'action_type', 'quantity', 'team_id', 'status',
+                'created_by_uid', 'created_at', 'updated_at'],
+               ['assignee_uid', 'due_date', 'notes'])
+        // The document ID is the requirement ID. That is what makes a second
+        // action for the same requirement impossible.
+        && request.resource.data.action_item_id == requirementId
+        && request.resource.data.requirement_id == requirementId
+        && request.resource.data.item_name is string
+        && request.resource.data.item_name.size() > 0
+        && request.resource.data.item_name.size() <= 120
+        && request.resource.data.action_type in ['buy', 'rent', 'build', 'repair']
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity > 0
+        && request.resource.data.status in ['todo', 'in_progress', 'done', 'cancelled']
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && (!('due_date' in request.resource.data)
+            || request.resource.data.due_date is timestamp)
+        && request.resource.data.updated_at == request.time;
+    }
+
+    // The action inherits the requirement's organization, production, and team.
+    // Without the team check an action could be filed under a crew that does not
+    // own the requirement it resolves.
+    function actionMatchesRequirement(requirementId, data) {
+      return exists(requirementPath(requirementId))
+        && get(requirementPath(requirementId)).data.organization_id == data.organization_id
+        && get(requirementPath(requirementId)).data.production_id == data.production_id
+        && get(requirementPath(requirementId)).data.team_id == data.team_id;
+    }
+
+    function requirementIsShort(requirementId) {
+      return 'inventory_item_id' in get(requirementPath(requirementId)).data
+        && exists(itemPath(get(requirementPath(requirementId)).data.inventory_item_id))
+        && get(requirementPath(requirementId)).data.required_qty
+             > get(itemPath(get(requirementPath(requirementId)).data.inventory_item_id))
+                 .data.quantity_available;
+    }
+
     // ---------------------------------------------------------------- default
 
     match /{document=**} {
