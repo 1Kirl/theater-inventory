@@ -6,13 +6,18 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
+import { Badge as StatusBadge } from '@/components/ui/badge'
 import { useOrganization } from '@/features/organizations/useOrganization'
-import { canEditTeamScopedRecord } from '@/domain/module-access'
+import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
 import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
+import { currentlyInService, isOverdue } from '@/domain/maintenance'
 import { conditionSummaryLabel, teamNameOf, unclassifiedOf } from '@/features/inventory/inventory-view'
+import { statusLabel, statusTone } from '@/features/maintenance/maintenance-view'
 import { getInventoryItem } from '@/services/inventory-service'
+import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
+import type { MaintenanceRecord } from '@/types/maintenance'
 import { paths } from '@/routes/paths'
 
 export function InventoryItemDetailPage() {
@@ -20,18 +25,45 @@ export function InventoryItemDetailPage() {
   const { organization, membership, role, teams } = useOrganization()
 
   const [item, setItem] = useState<InventoryItem | null | undefined>(undefined)
+  const [records, setRecords] = useState<MaintenanceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
+
+  // In Service is derived from maintenance data, so it follows the maintenance
+  // permission — the same principle as the dashboard cards. Without it Rules
+  // would refuse the read anyway, so there would be no number to show.
+  const canSeeMaintenance = hasModuleAccess(
+    role,
+    membership?.permissions ?? null,
+    'maintenance',
+    'view',
+  )
+  const canEditMaintenance = hasModuleAccess(
+    role,
+    membership?.permissions ?? null,
+    'maintenance',
+    'edit',
+  )
 
   const load = useCallback(async () => {
     if (!itemId) return
     setError(null)
     try {
-      setItem(await getInventoryItem(itemId))
+      const loaded = await getInventoryItem(itemId)
+      setItem(loaded)
+
+      if (loaded && canSeeMaintenance) {
+        setRecords(
+          await listMaintenanceRecordsForItem({
+            organizationId: loaded.organization_id,
+            itemId: loaded.item_id,
+          }).catch(() => []),
+        )
+      }
     } catch (caught) {
       setError(toOrganizationErrorMessage(caught))
       setItem(null)
     }
-  }, [itemId])
+  }, [itemId, canSeeMaintenance])
 
   useEffect(() => {
     void load()
@@ -60,6 +92,8 @@ export function InventoryItemDetailPage() {
 
   const canEdit = canEditTeamScopedRecord(role, membership, 'inventory', item.team_id)
   const unclassified = unclassifiedOf(item)
+  const inService = currentlyInService(records)
+  const now = new Date()
 
   return (
     <div className="space-y-6">
@@ -97,15 +131,21 @@ export function InventoryItemDetailPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <dl className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <dt className="text-muted-foreground text-sm">Available</dt>
-              <dd className="text-2xl font-semibold tabular-nums">{item.quantity_available}</dd>
-            </div>
+          <dl className={canSeeMaintenance ? 'grid gap-4 sm:grid-cols-4' : 'grid gap-4 sm:grid-cols-3'}>
             <div>
               <dt className="text-muted-foreground text-sm">Total</dt>
               <dd className="text-2xl font-semibold tabular-nums">{item.quantity_total}</dd>
             </div>
+            <div>
+              <dt className="text-muted-foreground text-sm">Available</dt>
+              <dd className="text-2xl font-semibold tabular-nums">{item.quantity_available}</dd>
+            </div>
+            {canSeeMaintenance ? (
+              <div>
+                <dt className="text-muted-foreground text-sm">In service</dt>
+                <dd className="text-2xl font-semibold tabular-nums">{inService}</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-muted-foreground text-sm">Condition</dt>
               <dd className="pt-1"><Badge variant="secondary">{conditionSummaryLabel(item)}</Badge></dd>
@@ -184,13 +224,64 @@ export function InventoryItemDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Maintenance history</CardTitle>
-          <CardDescription>Built in Phase 4.</CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <CardTitle className="text-base">Maintenance history</CardTitle>
+              <CardDescription>
+                {canSeeMaintenance
+                  ? 'Repairs stay in history permanently, including returned ones.'
+                  : null}
+              </CardDescription>
+            </div>
+            {canSeeMaintenance && canEditMaintenance ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to={`${paths.maintenanceNew}?item=${item.item_id}`}>Add repair record</Link>
+              </Button>
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-sm">
-            Repair and service records for this item will appear here.
-          </p>
+          {!canSeeMaintenance ? (
+            <p className="text-muted-foreground text-sm">
+              Maintenance access required. Ask your Admin if you need to see repair history for this
+              item.
+            </p>
+          ) : records.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No repair records for this item yet.
+            </p>
+          ) : (
+            <ul className="divide-border divide-y">
+              {records.map((record) => {
+                const tone = statusTone(record.status)
+                return (
+                  <li key={record.maintenance_id} className="py-3">
+                    <Link
+                      to={paths.maintenanceRecord(record.maintenance_id)}
+                      className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                    >
+                      <StatusBadge
+                        variant={tone === 'active' ? 'default' : tone === 'pending' ? 'outline' : 'secondary'}
+                      >
+                        {statusLabel(record.status)}
+                      </StatusBadge>
+                      {isOverdue(record, now) ? (
+                        <StatusBadge variant="destructive">Overdue</StatusBadge>
+                      ) : null}
+                      <span className="text-sm tabular-nums">{record.quantity_sent} unit
+                        {record.quantity_sent === 1 ? '' : 's'}</span>
+                      <span className="text-muted-foreground min-w-0 flex-1 truncate text-sm">
+                        {record.issue_description}
+                      </span>
+                      <span className="text-muted-foreground text-xs">
+                        {record.service_provider_name ?? 'No provider'}
+                      </span>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>

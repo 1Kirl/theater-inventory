@@ -388,6 +388,7 @@ Collection-specific requirements:
 | `organization_membership_join_proofs` | self or Admin | denied | valid join batch | denied | denied |
 | `teams` | active member | active member, own organization | Admin | Admin, name and description | denied |
 | `inventory_items` | Admin, or member with `inventory` view/edit | same, own organization | Admin any team, member `edit` own teams | same, and may not move an item outside their teams | denied |
+| `maintenance_records` | Admin, or member with `maintenance` view/edit | same, own organization and per item | Admin any team, member `edit` own teams; `team_id` must match the linked item | same, judged against the stored snapshot | denied |
 
 ### Two creation paths
 

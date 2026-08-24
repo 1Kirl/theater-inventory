@@ -651,6 +651,68 @@ The list is held in three places and they must agree: `PROJECT_SPEC.md` section 
 Adding a category later means editing all three; because Rules only compare against the list,
 no migration of existing documents is involved.
 
+## 43. Maintenance Team Is a Historical Snapshot
+
+`maintenance_records.team_id` is required, copied from the linked inventory item at creation, and
+immutable afterwards. Security Rules verify the copy matches at creation.
+
+If the item's owning team changes later, existing records keep the team they were filed under —
+that team is who actually sent the equipment out, and rewriting history to match the present would
+misattribute the repair.
+
+Where the snapshot and the item's current team differ, the interface says so:
+
+> Team at time of service: Lighting
+
+Where they agree it shows the team plainly, with no note. Edit scope is judged against the
+snapshot, so the crew that filed a repair keeps control of it.
+
+## 44. Currently In Service
+
+The Inventory Item Detail quantity summary shows **Total · Available · In Service · Condition**.
+
+In Service is derived, never stored: the sum of `quantity_sent` across that item's records whose
+status is `sent`, `in_service`, or `ready`. It is displayed **beside** `quantity_available` and
+never subtracted from it — `quantity_available` stays the manually maintained authoritative value
+from decision 15.
+
+It follows the maintenance permission, not the inventory one, on the same principle as the
+dashboard cards in decision 3: a figure derived from a module's data requires access to that
+module.
+
+- `maintenance` at view or edit, and Admin — four values, plus the maintenance history.
+- `maintenance` at none — three values, and the maintenance section says access is required.
+
+This is not only a policy choice. In Service is computed from `maintenance_records`, so without the
+permission Security Rules refuse the read and there is no number to show.
+
+## 45. Active Maintenance Quantity Is a Warning, Not an Invariant
+
+Per record, Security Rules enforce that `quantity_sent` is an integer above zero and no greater
+than the linked item's `quantity_total`.
+
+The **sum** across an item's active records is a derived operational indicator, not a constraint.
+Exceeding `quantity_total` is a warning condition, and the write is still allowed.
+
+Two reasons, and the first is decisive:
+
+- Security Rules cannot enforce it. They have no query capability, so aggregating an unknown set of
+  sibling documents is not expressible. A check living only in the client would look like a
+  security boundary while being trivially bypassable — worse than no check, because it invites
+  trust it cannot earn.
+- It is not always an error. Sending six of ten units for repair and later scrapping three brings
+  the total below what is out, from entirely correct data.
+
+The form warns before saving, in language that names the numbers:
+
+> This would put 12 of 10 units in service. Check the maintenance quantities or the item's current
+> total.
+
+The warning is visually distinct from a validation error: an error blocks the save, a warning does
+not. No document may describe this aggregate as enforced.
+
+`quantity_available` is never adjusted by any of this.
+
 ---
 
 ## IA v3 ↔ /docs Conflict Resolutions

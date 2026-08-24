@@ -15,6 +15,8 @@ export type OrganizationErrorCode =
   | 'invalid-organization-name'
   | 'invalid-team-name'
   | 'invalid-inventory-item'
+  | 'invalid-maintenance-record'
+  | 'inventory-item-not-found'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

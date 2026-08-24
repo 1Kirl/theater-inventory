@@ -563,6 +563,131 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------------------------------------------------- maintenance_records
+
+    // Same two axes as inventory: reading is organization-wide for anyone with
+    // the module, editing is bounded by team. The team here is the snapshot
+    // stored on the record, not the linked item's current team, so the crew that
+    // filed a repair keeps control of it after the item moves.
+
+    function maintenanceLevel(organizationId) {
+      return membershipData(organizationId).permissions.maintenance;
+    }
+
+    function canViewMaintenance(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && maintenanceLevel(organizationId) in ['view', 'edit'])
+      );
+    }
+
+    function canWriteMaintenanceForTeam(organizationId, teamId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && maintenanceLevel(organizationId) == 'edit'
+            && teamId in membershipData(organizationId).team_ids)
+      );
+    }
+
+    function itemPath(itemId) {
+      return /databases/$(database)/documents/inventory_items/$(itemId);
+    }
+
+    // The record must point at a real item in the same organization, and its
+    // team must be the copy the service made. Without this a crafted team_id
+    // could widen who may edit the record afterwards.
+    function linkedItemAgrees(organizationId, itemId, teamId) {
+      return exists(itemPath(itemId))
+        && get(itemPath(itemId)).data.organization_id == organizationId
+        && get(itemPath(itemId)).data.team_id == teamId;
+    }
+
+    function quantityFitsItem(itemId, quantitySent) {
+      return quantitySent <= get(itemPath(itemId)).data.quantity_total;
+    }
+
+    // Only the per-record rule is enforceable here. The sum across an item's
+    // active records cannot be: Rules have no query capability, so an unknown
+    // set of sibling documents cannot be aggregated. That total is a warning in
+    // the interface, never a boundary. See decision 45.
+    function maintenanceFieldsValid(maintenanceId) {
+      return hasExactly(
+               ['maintenance_id', 'organization_id', 'item_id', 'team_id', 'quantity_sent',
+                'issue_description', 'status', 'created_by_uid', 'created_at', 'updated_at'],
+               ['sent_at', 'return_method', 'expected_return_at', 'returned_at',
+                'service_provider_name', 'service_provider_phone', 'service_provider_email',
+                'cost', 'repair_notes'])
+        && request.resource.data.maintenance_id == maintenanceId
+        && request.resource.data.quantity_sent is int
+        && request.resource.data.quantity_sent > 0
+        && request.resource.data.issue_description is string
+        && request.resource.data.issue_description.size() > 0
+        && request.resource.data.issue_description.size() <= 1000
+        && request.resource.data.status in
+             ['planned', 'sent', 'in_service', 'ready', 'returned', 'cancelled']
+        && (!('return_method' in request.resource.data)
+            || request.resource.data.return_method in ['pickup', 'delivery', 'other'])
+        && (!('sent_at' in request.resource.data)
+            || request.resource.data.sent_at is timestamp)
+        && (!('expected_return_at' in request.resource.data)
+            || request.resource.data.expected_return_at is timestamp)
+        && (!('returned_at' in request.resource.data)
+            || request.resource.data.returned_at is timestamp)
+        && (!('service_provider_name' in request.resource.data)
+            || (request.resource.data.service_provider_name is string
+                && request.resource.data.service_provider_name.size() <= 120))
+        && (!('service_provider_phone' in request.resource.data)
+            || (request.resource.data.service_provider_phone is string
+                && request.resource.data.service_provider_phone.size() <= 120))
+        && (!('service_provider_email' in request.resource.data)
+            || (request.resource.data.service_provider_email is string
+                && request.resource.data.service_provider_email.size() <= 120))
+        && (!('cost' in request.resource.data)
+            || (request.resource.data.cost is number && request.resource.data.cost >= 0))
+        && (!('repair_notes' in request.resource.data)
+            || (request.resource.data.repair_notes is string
+                && request.resource.data.repair_notes.size() <= 2000))
+        && request.resource.data.updated_at == request.time;
+    }
+
+    match /maintenance_records/{maintenanceId} {
+
+      allow get, list: if canViewMaintenance(resource.data.organization_id);
+
+      allow create: if maintenanceFieldsValid(maintenanceId)
+        && canWriteMaintenanceForTeam(request.resource.data.organization_id,
+                                      request.resource.data.team_id)
+        && linkedItemAgrees(request.resource.data.organization_id,
+                            request.resource.data.item_id,
+                            request.resource.data.team_id)
+        && quantityFitsItem(request.resource.data.item_id,
+                            request.resource.data.quantity_sent)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if maintenanceFieldsValid(maintenanceId)
+        // Identity, the item link, the team snapshot, and authorship never
+        // change. The snapshot in particular records who sent the equipment out.
+        && request.resource.data.maintenance_id == resource.data.maintenance_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.item_id == resource.data.item_id
+        && request.resource.data.team_id == resource.data.team_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        // Edit scope follows the stored snapshot.
+        && canWriteMaintenanceForTeam(resource.data.organization_id, resource.data.team_id)
+        // Only a changed quantity is re-checked, so an item whose total was
+        // reduced later does not freeze edits to unrelated fields.
+        && (request.resource.data.quantity_sent == resource.data.quantity_sent
+            || quantityFitsItem(resource.data.item_id, request.resource.data.quantity_sent));
+
+      // Repair history is permanent. Documents say it should not be deleted
+      // casually, and nothing in the MVP authorizes deleting it at all.
+      allow delete: if false;
+    }
+
     // ---------------------------------------------------------------- default
 
     match /{document=**} {

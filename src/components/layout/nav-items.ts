@@ -24,7 +24,7 @@ export interface NavItem {
 export const navItems: readonly NavItem[] = [
   { label: 'Dashboard', path: paths.dashboard, icon: LayoutDashboard, adminOnly: false },
   { label: 'Inventory', path: paths.inventory, icon: Package, adminOnly: false, module: 'inventory' },
-  { label: 'Maintenance', path: paths.maintenance, icon: Wrench, adminOnly: false },
+  { label: 'Maintenance', path: paths.maintenance, icon: Wrench, adminOnly: false, module: 'maintenance' },
   { label: 'Productions', path: paths.productions, icon: Theater, adminOnly: false },
   { label: 'Action List', path: paths.actionList, icon: ClipboardList, adminOnly: false },
   { label: 'Calendar', path: paths.calendar, icon: CalendarDays, adminOnly: false },

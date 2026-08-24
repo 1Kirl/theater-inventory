@@ -11,6 +11,9 @@ import { OrganizationSettingsPage } from '@/features/organizations/settings/Orga
 import { InventoryItemDetailPage } from '@/features/inventory/InventoryItemDetailPage'
 import { InventoryItemFormPage } from '@/features/inventory/InventoryItemFormPage'
 import { InventoryListPage } from '@/features/inventory/InventoryListPage'
+import { MaintenanceListPage } from '@/features/maintenance/MaintenanceListPage'
+import { MaintenanceRecordDetailPage } from '@/features/maintenance/MaintenanceRecordDetailPage'
+import { MaintenanceRecordFormPage } from '@/features/maintenance/MaintenanceRecordFormPage'
 import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
 import { DashboardPlaceholder } from '@/routes/DashboardPlaceholder'
 import { NotFound } from '@/routes/NotFound'
@@ -71,8 +74,21 @@ export const router = createBrowserRouter([
                 ],
               },
               {
-                path: paths.maintenance,
-                element: <PlaceholderPage title="Maintenance & Repair" phase="Phase 4" />,
+                element: <PermissionGuard module="maintenance" level="view" />,
+                children: [
+                  { path: paths.maintenance, element: <MaintenanceListPage /> },
+                  {
+                    element: <PermissionGuard module="maintenance" level="edit" />,
+                    children: [
+                      { path: paths.maintenanceNew, element: <MaintenanceRecordFormPage mode="create" /> },
+                      {
+                        path: '/maintenance/:recordId/edit',
+                        element: <MaintenanceRecordFormPage mode="edit" />,
+                      },
+                    ],
+                  },
+                  { path: '/maintenance/:recordId', element: <MaintenanceRecordDetailPage /> },
+                ],
               },
               {
                 path: paths.productions,

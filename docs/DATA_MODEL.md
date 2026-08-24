@@ -461,7 +461,7 @@ interface MaintenanceRecord {
   maintenance_id: string;
   organization_id: string;
   item_id: string;
-  team_id?: string;          // copied from the linked inventory item at creation
+  team_id: string;           // required — copied from the linked item at creation
   quantity_sent: number;
   issue_description: string;
   status: MaintenanceStatus;
@@ -480,10 +480,29 @@ interface MaintenanceRecord {
 }
 ```
 
-`team_id` is a deliberate denormalization. It is copied from the linked inventory item when the
-record is created so that Security Rules can evaluate team scope with a single document read
-instead of joining back to `inventory_items` on every write. If the item's owning team changes
-later, existing maintenance records keep the team they were filed under.
+`team_id` is a deliberate denormalization and is **required**. It is copied from the linked
+inventory item when the record is created, so Security Rules can evaluate team scope with a single
+document read instead of joining back to `inventory_items` on every write. Rules verify at creation
+that it equals the linked item's team, and it is immutable afterwards.
+
+It is a **historical snapshot**. If the item's owning team changes later, existing maintenance
+records keep the team they were filed under, because that is who actually sent the equipment out.
+Where the two differ, the interface says so explicitly rather than showing a team that was never
+responsible for the repair.
+
+Per-record validation, enforced by Security Rules:
+
+- `quantity_sent` is an integer greater than zero,
+- `quantity_sent` does not exceed the linked item's `quantity_total`,
+- `status` is one of the six values above,
+- `item_id` names an item in the same organization.
+
+**The aggregate is not an invariant.** The sum of `quantity_sent` across an item's active records
+may exceed its `quantity_total`, and nothing rejects that. Security Rules cannot enforce it:
+they have no query capability, so summing an unknown set of sibling documents is impossible, and a
+check that lived only in the client would look like a boundary without being one. It is also not
+always wrong — reducing `quantity_total` after equipment is scrapped can produce it from correct
+data. The interface warns when a write would produce that state and still lets the user save.
 
 Derived UI state:
 

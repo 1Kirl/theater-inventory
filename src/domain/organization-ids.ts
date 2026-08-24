@@ -23,4 +23,5 @@ export const COLLECTIONS = {
   joinProofs: 'organization_membership_join_proofs',
   teams: 'teams',
   inventoryItems: 'inventory_items',
+  maintenanceRecords: 'maintenance_records',
 } as const
