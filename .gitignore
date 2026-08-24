@@ -30,6 +30,9 @@ dist-ssr
 # Demo/QA seed credentials. Never committed.
 .env.seed.local
 
+# Firebase CLI deploy cache
+.firebase/
+
 # Firebase emulator
 firestore-debug.log
 firebase-debug.log
