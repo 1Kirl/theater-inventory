@@ -161,12 +161,24 @@ currently in service, 1 active production, 2 unresolved actions, and 6 upcoming 
 
 ## Deployment
 
-**Pending.** Firebase Hosting has not been deployed yet, so there is no URL. `npm run build`
-produces the deployable `dist/`.
+**Live at https://theater-inventory.web.app**, on Firebase Hosting.
 
-Before deploying, `VITE_FIREBASE_APP_CHECK_SITE_KEY` must be set to the project's reCAPTCHA
-Enterprise site key; without it, App Check enforcement rejects every AI request from the deployed
-build.
+```
+npm run build
+npx firebase deploy --only hosting
+```
+
+`--only hosting` keeps the deploy scoped: Firestore Rules and indexes are published separately and
+are not republished by a Hosting deploy.
+
+`VITE_FIREBASE_APP_CHECK_SITE_KEY` must be set in `.env.local` before the build, because Vite inlines
+it at build time. Without it, App Check enforcement rejects every AI request from the deployed build
+while the rest of the application keeps working.
+
+The deployed build was smoke-tested as both demo accounts: sign-in, every module, direct navigation
+and refresh on client-side routes, the `/team` redirect, an unknown route falling through to the
+application's own NotFound rather than a Hosting 404, sign-out, the Member's permission boundaries,
+and the 375px layout.
 
 ## Known pending verification
 
@@ -174,11 +186,10 @@ build.
   redesign. The implementation is committed and covered by unit tests with the model boundary
   stubbed, but the Gemini free tier allows 20 requests per day per model and that quota was spent
   during a separate investigation. The seeded data supports the questions those features should
-  answer; the answers themselves have not been judged.
-- **Production deployment is pending**, as above.
+  answer; the answers themselves have not been judged. This is the only outstanding verification.
 
-Everything else in the application, including the seeded demo data and both demo accounts, has been
-verified in a browser.
+Everything else, including the seeded demo data, both demo accounts, and the deployed production
+build, has been verified in a browser.
 
 `docs/MVP_CHECKLIST.md` marks these distinctly: an item verified in a browser, an item implemented
 but awaiting that verification, and an item not done.

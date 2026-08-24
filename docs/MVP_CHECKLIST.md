@@ -14,14 +14,15 @@ This document defines what must be finished before optional stretch work begins.
 The Dashboard, the lazy-route refactor, the 375px responsive pass, and the seeded demo dataset have
 all been verified in a browser, as both demo accounts.
 
-Two things remain outstanding, and only two:
+One thing remains outstanding, and only one:
 
 - **AI quality QA.** Both AI features are implemented and unit-tested with the model boundary
   stubbed, but nobody has judged the answers they give against the seeded data. Blocked on the
   Gemini free tier's 20 requests per day. The demo *data* for those questions exists; the *answers*
   have not been assessed.
-- **Deployment.** Firebase Hosting has not been deployed, and the production App Check site key is
-  not configured.
+
+Firebase Hosting is deployed at https://theater-inventory.web.app and the production App Check site
+key is configured. The deployed build was smoke-tested as both demo accounts.
 
 ## P0 — Required for Final Demo
 
@@ -320,7 +321,7 @@ Two things remain outstanding, and only two:
 - [x] Calendar events populated
 - [x] AI Smart Search demo query prepared — data supports the four QA questions; answers not yet judged
 - [x] AI Requirement Generator demo production prepared — 200-seat, 20-vocalist musical seeded; output not yet judged
-- [ ] Firebase Hosting deployment works
+- [x] Firebase Hosting deployment works — https://theater-inventory.web.app, smoke-tested as both demo accounts
 - [x] README contains local run instructions
 - [x] No TypeScript errors
 - [x] Lint succeeds
