@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -40,7 +41,13 @@ export function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<CalendarFilters>(EMPTY_CALENDAR_FILTERS)
-  const [editing, setEditing] = useState<CalendarEvent | null | undefined>(undefined)
+  // `?new=1` opens the create dialog directly, which is what the dashboard's
+  // Add calendar event action links to. Read once: closing the dialog should not
+  // reopen it.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [editing, setEditing] = useState<CalendarEvent | null | undefined>(
+    () => (searchParams.get('new') === '1' ? null : undefined),
+  )
 
   const canEdit = hasModuleAccess(role, membership?.permissions ?? null, 'calendar', 'edit')
 
@@ -296,7 +303,11 @@ export function CalendarPage() {
           defaultDateKey={selectedDateKey}
           canEdit={canEdit}
           open
-          onOpenChange={(open) => { if (!open) setEditing(undefined) }}
+          onOpenChange={(open) => {
+            if (open) return
+            setEditing(undefined)
+            if (searchParams.has('new')) setSearchParams({}, { replace: true })
+          }}
           onSaved={load}
         />
       ) : null}

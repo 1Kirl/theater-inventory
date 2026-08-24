@@ -20,7 +20,7 @@ import { ProductionDetailPage } from '@/features/productions/ProductionDetailPag
 import { ProductionFormPage } from '@/features/productions/ProductionFormPage'
 import { ProductionListPage } from '@/features/productions/ProductionListPage'
 import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
-import { DashboardPlaceholder } from '@/routes/DashboardPlaceholder'
+import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { NotFound } from '@/routes/NotFound'
 import { PlaceholderPage } from '@/routes/PlaceholderPage'
 import { paths } from '@/routes/paths'
@@ -59,7 +59,7 @@ export const router = createBrowserRouter([
             path: paths.dashboard,
             element: <AppShell />,
             children: [
-              { index: true, element: <DashboardPlaceholder /> },
+              { index: true, element: <DashboardPage /> },
               { path: paths.account, element: <AccountPage /> },
               {
                 element: <PermissionGuard module="inventory" level="view" />,

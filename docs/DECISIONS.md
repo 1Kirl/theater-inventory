@@ -1065,3 +1065,55 @@ and a quota figure in a user-facing string goes stale the moment the project's b
 This is a wording decision, not an architectural one. Moving to the paid tier of the same Gemini
 Developer API is a billing change on the Firebase project: the SDK, `GoogleAIBackend`, the model,
 the contracts, and the security model are untouched, and this branch simply stops being reached.
+
+---
+
+## 55. What the Dashboard's Repair Cards Count
+
+`IA.md` section 4.1 lists **Needs Repair** and **Currently in Service** as separate summary cards,
+and assigns both to the `maintenance` permission. The IA label alone is ambiguous: `needs_repair` is
+also an inventory condition key, so the card could plausibly count inventory items in that
+condition.
+
+It counts maintenance records, because that is what the permission assignment says. A figure
+derived from a module requires access to that module — decision 3, and the same reasoning as
+decision 44 — and inventory conditions are readable with `inventory` view, not `maintenance` view.
+Counting them here would put an inventory figure behind the maintenance permission.
+
+The two cards are therefore:
+
+- **Active Repairs** — repair records still open, meaning status is neither `returned` nor
+  `cancelled`. A count of jobs.
+- **Currently in Service** — `currentlyInService()`, the existing rule: units summed across records
+  whose status is `sent`, `in_service`, or `ready`. A count of units.
+
+Different units and different sets, so neither restates the other. A `planned` repair is open but
+has not left the building, which is exactly the gap between the two numbers.
+
+### 55b. The card is labelled Active Repairs, not Needs Repair
+
+`IA.md` calls the card **Needs Repair**. The interface calls it **Active Repairs**, and the count
+behind it is unchanged.
+
+The IA wording collides with the inventory condition of the same name, which is a different figure
+behind a different permission and appears elsewhere on the same page. Two cards a screen apart
+reading "Needs Repair" and meaning different things is the kind of thing nobody notices until a
+number is quoted in the wrong conversation.
+
+"Active" carries its own hazard: `ACTIVE_STATUSES` in the maintenance domain means `sent`,
+`in_service`, and `ready`, which is the narrower set the *other* card sums. The card's supporting
+line therefore says "Open records, including repairs not yet sent" rather than leaving the word to
+do the work alone.
+
+The inventory condition angle is not lost: the Inventory Condition card reports how many items are
+mostly needing repair or unusable, derived with the existing `conditionSummary`, and sits behind
+`inventory` view where it belongs.
+
+### 55a. A shortage that cannot be computed reports null, not zero
+
+Shortage is measured against the matched inventory item's available quantity. A user with
+`productions` view but no `inventory` view has no inventory to measure against — the dashboard does
+not read it, and Security Rules would refuse if it tried.
+
+That case reports null and the interface says "shortages need inventory access". Zero would read as
+"nothing is short", which is a different statement and possibly a false one.
