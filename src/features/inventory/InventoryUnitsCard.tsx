@@ -12,6 +12,8 @@ import { CONDITION_LABELS } from '@/domain/inventory'
 import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
 import { BulkGenerateUnitsDialog } from '@/features/inventory/BulkGenerateUnitsDialog'
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
+import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
+import { unitRowControls } from '@/features/inventory/unit-lifecycle-view'
 import { teamNameOf } from '@/features/inventory/inventory-view'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { listAssetCodes, listUnitsForItem } from '@/services/inventory-unit-service'
@@ -33,13 +35,16 @@ interface Props {
  * counted from these rows, and a unit write moves both in one transaction.
  */
 export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
-  const { teams } = useOrganization()
+  const { membership, role, teams } = useOrganization()
   const [units, setUnits] = useState<InventoryUnit[] | undefined>(undefined)
   const [codes, setCodes] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [editing, setEditing] = useState<InventoryUnit | null>(null)
+  // Siblings, never nested: opening one closes the other. Radix focus traps
+  // make stacked modals awkward, and nothing else in this project stacks them.
+  const [managing, setManaging] = useState<InventoryUnit | null>(null)
 
   const load = useCallback((): Promise<void> => {
     async function read() {
@@ -128,6 +133,22 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                     {teamNameOf(unit, teams)} · {CONDITION_LABELS[unit.condition]}
                   </p>
                   <p className="text-muted-foreground text-sm">{unit.storage_location}</p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {unitRowControls({ unit, role, membership }).canManageStatus ? (
+                      <Button size="sm" variant="outline" onClick={() => setManaging(unit)}>
+                        Manage status
+                      </Button>
+                    ) : null}
+                    {canEdit ? (
+                      <Button size="sm" variant="outline" onClick={() => setEditing(unit)}>
+                        Edit
+                      </Button>
+                    ) : null}
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={paths.inventoryUnit(unit.unit_id)}>View details</Link>
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -141,7 +162,7 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                     <TableHead>Owning team</TableHead>
                     <TableHead>Condition</TableHead>
                     <TableHead>Location</TableHead>
-                    {canEdit ? <TableHead className="w-0" /> : null}
+                    <TableHead className="w-0 text-right">Manage</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -167,13 +188,26 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                       <TableCell className="text-muted-foreground">
                         {unit.storage_location}
                       </TableCell>
-                      {canEdit ? (
-                        <TableCell>
-                          <Button size="sm" variant="ghost" onClick={() => setEditing(unit)}>
-                            Edit
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex justify-end gap-1">
+                          {unitRowControls({ unit, role, membership }).canManageStatus ? (
+                            <Button size="sm" variant="ghost" onClick={() => setManaging(unit)}>
+                              Manage status
+                            </Button>
+                          ) : null}
+                          {canEdit ? (
+                            <Button size="sm" variant="ghost" onClick={() => setEditing(unit)}>
+                              Edit
+                            </Button>
+                          ) : null}
+                          {/* An explicit way in. The asset code is also a link,
+                              but a link that looks like a label is not a way
+                              anybody finds. */}
+                          <Button asChild size="sm" variant="ghost">
+                            <Link to={paths.inventoryUnit(unit.unit_id)}>View details</Link>
                           </Button>
-                        </TableCell>
-                      ) : null}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -202,6 +236,23 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
           open={editing !== null}
           onOpenChange={(open) => { if (!open) setEditing(null) }}
           onSaved={refresh}
+          onManageStatus={() => {
+            // Close the edit dialog before opening the lifecycle one, so the
+            // two are never on screen together.
+            const unit = editing
+            setEditing(null)
+            setManaging(unit)
+          }}
+        />
+      ) : null}
+
+      {managing ? (
+        <UnitLifecycleDialog
+          unit={managing}
+          to={null}
+          open={managing !== null}
+          onOpenChange={(open) => { if (!open) setManaging(null) }}
+          onDone={refresh}
         />
       ) : null}
 

@@ -12,7 +12,7 @@ import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inven
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
 import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
 import {
-  eventDetail, eventLabel, lifecycleActions, noActionsReason, retirementLabel,
+  eventDetail, eventLabel, lifecyclePanel, retirementLabel,
 } from '@/features/inventory/unit-lifecycle-view'
 import { listUnitHistory } from '@/services/unit-lifecycle-service'
 import { getUserProfiles } from '@/services/user-service'
@@ -41,7 +41,7 @@ export function InventoryUnitDetailPage() {
   const [codes, setCodes] = useState<string[]>([])
   const [history, setHistory] = useState<AssetEvent[]>([])
   const [actorNames, setActorNames] = useState<Map<string, string>>(new Map())
-  const [action, setAction] = useState<{ to: UnitStatus; label: string } | null>(null)
+  const [action, setAction] = useState<{ to: UnitStatus | null; label: string } | null>(null)
 
   const load = useCallback((): Promise<void> => {
     if (!unitId) return Promise.resolve()
@@ -111,7 +111,10 @@ export function InventoryUnitDetailPage() {
 
   const canEdit = canEditTeamScopedRecord(role, membership, 'inventory', unit.team_id)
   const teamName = teams.find((team) => team.team_id === unit.team_id)?.name ?? 'Unknown team'
-  const actions = lifecycleActions(unit)
+  // One helper decides whether the section appears and what is in it, so the
+  // page and its test agree rather than each working it out separately.
+  const panel = lifecyclePanel({ unit, role, membership })
+
   const usingTeamName = unit.using_team_id
     ? teams.find((team) => team.team_id === unit.using_team_id)?.name ?? 'Unknown team'
     : null
@@ -209,7 +212,7 @@ export function InventoryUnitDetailPage() {
         </CardContent>
       </Card>
 
-      {canEdit ? (
+      {panel.visible ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Actions</CardTitle>
@@ -218,9 +221,9 @@ export function InventoryUnitDetailPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {actions.length > 0 ? (
+            {panel.actions.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {actions.map((option) => (
+                {panel.actions.map((option) => (
                   <Button
                     key={option.to}
                     size="sm"
@@ -233,9 +236,12 @@ export function InventoryUnitDetailPage() {
               </div>
             ) : (
               <p className="text-muted-foreground text-sm">
-                {noActionsReason(unit) ?? 'Nothing can be done with this unit right now.'}
+                {panel.reason ?? 'Nothing can be done with this unit right now.'}
               </p>
             )}
+            {panel.actions.length > 0 && panel.reason ? (
+              <p className="text-muted-foreground mt-3 text-sm">{panel.reason}</p>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -309,6 +315,11 @@ export function InventoryUnitDetailPage() {
           open={editing}
           onOpenChange={setEditing}
           onSaved={load}
+          onManageStatus={() => {
+            // Same handoff as the unit list: close this, open that.
+            setEditing(false)
+            setAction({ to: null, label: '' })
+          }}
         />
       ) : null}
     </div>

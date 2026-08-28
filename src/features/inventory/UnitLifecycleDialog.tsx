@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { assignableTeamIds } from '@/domain/module-access'
 import { RETIREMENT_REASONS } from '@/types/inventory'
-import { retirementLabel } from '@/features/inventory/unit-lifecycle-view'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { lifecyclePanel, retirementLabel } from '@/features/inventory/unit-lifecycle-view'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { performLifecycleAction } from '@/services/unit-lifecycle-service'
 import { listOrganizationDirectory } from '@/services/membership-service'
@@ -19,8 +20,17 @@ import type { InventoryUnit, RetirementReason, UnitStatus } from '@/types/invent
 
 interface Props {
   unit: InventoryUnit
-  to: UnitStatus
-  label: string
+  /**
+   * The move to perform, or `null` to let the user pick one first.
+   *
+   * The unit page already shows a button per action, so it names the move. The
+   * unit list and the edit dialog offer a single "Manage status" control and
+   * pass `null`, which turns this into a two-step dialog rather than a second
+   * dialog opened on top of the first. Nothing in this project nests modals,
+   * and Radix focus traps are the reason.
+   */
+  to: UnitStatus | null
+  label?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onDone: () => Promise<void> | void
@@ -43,8 +53,19 @@ interface MemberOption {
  * checking it in needs nothing at all. A note is always available because
  * "why is this lost" is the question the history will be asked.
  */
-export function UnitLifecycleDialog({ unit, to, label, open, onOpenChange, onDone }: Props) {
+export function UnitLifecycleDialog({
+  unit, to, label, open, onOpenChange, onDone,
+}: Props) {
   const { membership, role, teams } = useOrganization()
+
+  // When the caller did not name a move, the user picks one here first. Built
+  // from the same helper the unit page uses, so the three entry points cannot
+  // offer different actions.
+  const panel = lifecyclePanel({ unit, role, membership })
+  const [chosen, setChosen] = useState<{ to: UnitStatus; label: string } | null>(
+    to ? { to, label: label ?? '' } : null,
+  )
+  const move = chosen
 
   const [usingTeamId, setUsingTeamId] = useState(UNSET)
   const [usingMemberUid, setUsingMemberUid] = useState(UNSET)
@@ -59,8 +80,8 @@ export function UnitLifecycleDialog({ unit, to, label, open, onOpenChange, onDon
   const assignable = assignableTeamIds(role, membership, teams.map((team) => team.team_id))
   const teamChoices = teams.filter((team) => assignable.includes(team.team_id))
 
-  const needsTeam = to === 'in_use'
-  const needsReason = to === 'retired'
+  const needsTeam = move?.to === 'in_use'
+  const needsReason = move?.to === 'retired'
 
   useEffect(() => {
     if (!needsTeam || !unit.organization_id) return
@@ -92,14 +113,14 @@ export function UnitLifecycleDialog({ unit, to, label, open, onOpenChange, onDon
     : members.filter((member) => member.teamIds.includes(usingTeamId))
 
   async function confirm() {
-    if (submitting) return
+    if (submitting || !move) return
     setError(null)
     setSubmitting(true)
 
     try {
       await performLifecycleAction({
         unit,
-        to,
+        to: move.to,
         usingTeamId: needsTeam && usingTeamId !== UNSET ? usingTeamId : null,
         usingMemberUid: needsTeam && usingMemberUid !== UNSET ? usingMemberUid : null,
         retirementReason: needsReason ? retirementReason : null,
@@ -118,10 +139,37 @@ export function UnitLifecycleDialog({ unit, to, label, open, onOpenChange, onDon
     <Dialog open={open} onOpenChange={(next) => { if (!submitting) onOpenChange(next) }}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{label}</DialogTitle>
-          <DialogDescription>{descriptionFor(to, unit.asset_code)}</DialogDescription>
+          <DialogTitle>{move ? move.label : 'Manage status'}</DialogTitle>
+          <DialogDescription>
+            {move
+              ? descriptionFor(move.to, unit.asset_code)
+              : `${unit.asset_code} is ${UNIT_STATUS_LABELS[unit.status].toLowerCase()}. What has happened to it?`}
+          </DialogDescription>
         </DialogHeader>
 
+        {move === null ? (
+          <div className="grid gap-2">
+            {panel.actions.length > 0 ? (
+              panel.actions.map((option) => (
+                <Button
+                  key={option.to}
+                  variant={option.tone}
+                  className="justify-start"
+                  onClick={() => setChosen({ to: option.to, label: option.label })}
+                >
+                  {option.label}
+                </Button>
+              ))
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                {panel.reason ?? 'Nothing can be done with this unit right now.'}
+              </p>
+            )}
+            {panel.actions.length > 0 && panel.reason ? (
+              <p className="text-muted-foreground text-sm">{panel.reason}</p>
+            ) : null}
+          </div>
+        ) : (
         <div className="grid gap-4">
           {needsTeam ? (
             <>
@@ -206,14 +254,27 @@ export function UnitLifecycleDialog({ unit, to, label, open, onOpenChange, onDon
             <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
           ) : null}
         </div>
+        )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button onClick={confirm} disabled={submitting}>
-            {submitting ? 'Saving…' : label}
-          </Button>
+          {move === null ? (
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          ) : (
+            <>
+              <Button
+                variant="outline"
+                // Back to the chooser when the user opened this without naming a
+                // move; otherwise there is nothing behind it to go back to.
+                onClick={() => (to === null ? setChosen(null) : onOpenChange(false))}
+                disabled={submitting}
+              >
+                {to === null ? 'Back' : 'Cancel'}
+              </Button>
+              <Button onClick={confirm} disabled={submitting}>
+                {submitting ? 'Saving…' : move.label}
+              </Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

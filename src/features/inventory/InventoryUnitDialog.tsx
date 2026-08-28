@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
 import { assignableTeamIds } from '@/domain/module-access'
@@ -31,6 +32,12 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => Promise<void> | void
+  /**
+   * Hands off to the lifecycle workflow. The caller closes this dialog and
+   * opens that one — a status change is not a field on this form, and stacking
+   * modals is not something this project does.
+   */
+  onManageStatus?: () => void
 }
 
 /**
@@ -43,7 +50,7 @@ interface Props {
  * phase has no way to record why anything would start anywhere else.
  */
 export function InventoryUnitDialog({
-  item, existing, usedCodes, open, onOpenChange, onSaved,
+  item, existing, usedCodes, open, onOpenChange, onSaved, onManageStatus,
 }: Props) {
   const [assetCode, setAssetCode] = useState(existing?.asset_code ?? '')
   const [condition, setCondition] = useState<ConditionKey>(existing?.condition ?? 'good')
@@ -211,14 +218,28 @@ export function InventoryUnitDialog({
           </div>
 
           {existing ? (
-            <div className="space-y-1">
-              <Label>Status</Label>
-              <p className="text-sm">{UNIT_STATUS_LABELS[existing.status]}</p>
-              <p className="text-muted-foreground text-xs">
-                Status changes with what happens to the equipment, not by editing this form. Use
-                the actions on the unit&rsquo;s own page.
-              </p>
-            </div>
+            <>
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Equipment status</p>
+                <p className="text-sm">
+                  Currently{' '}
+                  <span className="font-medium">
+                    {UNIT_STATUS_LABELS[existing.status].toLowerCase()}
+                  </span>.
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  Status changes with what happens to the equipment, so it is not a field on this
+                  form — each move is its own action and is recorded in the unit&rsquo;s history.
+                </p>
+                {onManageStatus ? (
+                  <Button type="button" variant="outline" size="sm" onClick={onManageStatus}>
+                    Manage status
+                  </Button>
+                ) : null}
+              </div>
+            </>
           ) : (
             <>
               <div className="space-y-2">
