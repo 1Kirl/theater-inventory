@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -22,7 +21,9 @@ import { getUserProfiles } from '@/services/user-service'
 import type { AssetEvent } from '@/types/asset-event'
 import { getInventoryItem } from '@/services/inventory-service'
 import { getInventoryUnit, listAssetCodes } from '@/services/inventory-unit-service'
-import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
+import { EquipmentQrCard } from '@/features/inventory/EquipmentQrCard'
+import { EquipmentScanNotice } from '@/features/inventory/EquipmentScanNotice'
+import { equipmentScanOutcome } from '@/features/inventory/equipment-scan-view'
 import type { InventoryItem, InventoryUnit, UnitStatus } from '@/types/inventory'
 import { paths } from '@/routes/paths'
 
@@ -35,11 +36,13 @@ import { paths } from '@/routes/paths'
  */
 export function InventoryUnitDetailPage() {
   const { unitId } = useParams<{ unitId: string }>()
-  const { organization, membership, role, teams } = useOrganization()
+  const {
+    organization, membership, role, teams, loading: organizationLoading,
+  } = useOrganization()
 
-  const [unit, setUnit] = useState<InventoryUnit | null | undefined>(undefined)
+  const [loadedUnit, setLoadedUnit] = useState<InventoryUnit | null | undefined>(undefined)
   const [item, setItem] = useState<InventoryItem | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<unknown>(null)
   const [editing, setEditing] = useState(false)
   const [codes, setCodes] = useState<string[]>([])
   const [history, setHistory] = useState<AssetEvent[]>([])
@@ -105,13 +108,13 @@ export function InventoryUnitDetailPage() {
 
     return read().then(
       (loaded) => {
-        setUnit(loaded.unit); setItem(loaded.item); setCodes(loaded.codes)
+        setLoadedUnit(loaded.unit); setItem(loaded.item); setCodes(loaded.codes)
         setHistory(loaded.history); setActorNames(loaded.actorNames)
         setCurrentMaintenance(loaded.currentMaintenance)
         setPlannedMaintenance(loaded.plannedMaintenance)
-        setPastMaintenance(loaded.pastMaintenance); setError(null)
+        setPastMaintenance(loaded.pastMaintenance); setFailure(null)
       },
-      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setUnit(null) },
+      (caught: unknown) => { setFailure(caught); setLoadedUnit(null) },
     )
   }, [unitId])
 
@@ -119,26 +122,26 @@ export function InventoryUnitDetailPage() {
     void load()
   }, [load])
 
-  if (unit === undefined) {
-    return <p className="text-muted-foreground text-sm">Loading unit…</p>
+  // This page is where a scanned QR label lands. It is the only route outside
+  // the active organization's guards, precisely because the organization that
+  // owns the equipment is a fact stored in the unit rather than something the
+  // route knows — so the person arriving may be in the wrong organization, in
+  // none, or not entitled to this equipment at all. One helper decides which,
+  // and the Firestore read is what settles the last of those.
+  const outcome = equipmentScanOutcome({
+    unit: loadedUnit,
+    error: failure,
+    activeOrganizationId: organization?.organization_id ?? null,
+    organizationLoading,
+  })
+
+  if (outcome.kind !== 'ready') {
+    return <EquipmentScanNotice outcome={outcome} />
   }
 
-  if (error) {
-    return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-  }
-
-  if (!unit || unit.organization_id !== organization?.organization_id) {
-    return (
-      <div className="space-y-4">
-        <Alert variant="destructive">
-          <AlertDescription>That unit was not found in this organization.</AlertDescription>
-        </Alert>
-        <Button asChild variant="outline" size="sm">
-          <Link to={paths.inventory}>Back to inventory</Link>
-        </Button>
-      </div>
-    )
-  }
+  // Everything below is written against a unit that loaded and belongs to the
+  // organization currently open. The outcome is what establishes both.
+  const unit = outcome.unit
 
   const canEdit = canEditTeamScopedRecord(role, membership, 'inventory', unit.team_id)
   const teamName = teams.find((team) => team.team_id === unit.team_id)?.name ?? 'Unknown team'
@@ -242,6 +245,8 @@ export function InventoryUnitDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      <EquipmentQrCard unit={unit} item={item} organization={organization} />
 
       {panel.visible ? (
         <Card>

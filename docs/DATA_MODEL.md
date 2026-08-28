@@ -911,6 +911,43 @@ is away. Never at `returned` or `cancelled`. Whichever is chosen, the units move
 exactly once. Return and
 cancellation move every listed unit back together; there is no partial return.
 
+## 13g. Equipment labels and deep links
+
+No collection, no document, and no field. A QR label is derived entirely from
+data that already exists.
+
+The code encodes one string:
+
+```
+https://theater-inventory.web.app/equipment/<inventory_units document id>
+```
+
+Nothing else. No token, no signature, no `organization_id`, no asset code, and
+nothing about the equipment. The origin is a compiled-in constant, overridable
+with the optional, non-secret `VITE_PUBLIC_APP_ORIGIN`, and never taken from
+`window.location` — a label generated on `localhost` would otherwise be printed
+and permanently useless. The override must be an absolute `https:` URL with a
+host and no credentials, path, query, or fragment; anything else falls back to
+the constant rather than being printed.
+
+The document id is the identity because it is the only field that never changes.
+Asset codes are edited; a label keyed to one would silently stop resolving the
+day somebody fixed a typo. Status, team, condition, repairs, loss, and retirement
+all leave the link untouched, so a label is printed once.
+
+What is printed alongside the code — asset code, item name, organization name —
+is limited to fields whose value on a sticker stays true. Status, condition,
+storage location, owning team, holder, current repair, and notes are excluded:
+they change while the sticker does not, and a confidently wrong label is worse
+than none.
+
+Authorization is unchanged by any of this. Opening the link requires signing in,
+and the unit read is gated on the document's own `organization_id`, exactly as
+every other inventory read is. Because Rules dereference `resource.data`, a
+request for a unit that does not exist is denied rather than returning an empty
+snapshot — so "no such equipment" and "not your equipment" are indistinguishable
+to a client, and the interface reports them as one. See decisions 89 to 89e.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

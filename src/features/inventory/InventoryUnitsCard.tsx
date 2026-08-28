@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ListPlus, Plus } from 'lucide-react'
+import { ListPlus, Plus, Printer } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,9 @@ import { CONDITION_LABELS } from '@/domain/inventory'
 import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
 import { BulkGenerateUnitsDialog } from '@/features/inventory/BulkGenerateUnitsDialog'
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
+import { PrintLabelsDialog } from '@/features/inventory/PrintLabelsDialog'
+import { EquipmentLabelPrinter } from '@/features/inventory/EquipmentLabelPrinter'
+import type { EquipmentLabel } from '@/features/inventory/equipment-label'
 import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
 import { unitMaintenanceIndicator, unitRowControls } from '@/features/inventory/unit-lifecycle-view'
 import { teamNameOf } from '@/features/inventory/inventory-view'
@@ -45,6 +48,12 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
   // Siblings, never nested: opening one closes the other. Radix focus traps
   // make stacked modals awkward, and nothing else in this project stacks them.
   const [managing, setManaging] = useState<InventoryUnit | null>(null)
+  const [selectingLabels, setSelectingLabels] = useState(false)
+  // The finished sheet, handed over by the selection dialog. Held here rather
+  // than inside it because the printer must not live under a modal: Radix
+  // disables pointer events outside an open dialog, which left the print sheet
+  // unclickable and made the first click dismiss the dialog instead.
+  const [labels, setLabels] = useState<EquipmentLabel[] | null>(null)
 
   const load = useCallback((): Promise<void> => {
     async function read() {
@@ -83,18 +92,26 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
               status. Retired units stay here for their history and are counted separately above.
             </CardDescription>
           </div>
-          {canEdit ? (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setGenerating(true)}>
-                <ListPlus className="size-4" aria-hidden="true" />
-                Generate
+          <div className="flex flex-wrap gap-2">
+            {units && units.length > 0 ? (
+              <Button size="sm" variant="outline" onClick={() => setSelectingLabels(true)}>
+                <Printer className="size-4" aria-hidden="true" />
+                Print labels
               </Button>
-              <Button size="sm" onClick={() => setAdding(true)}>
-                <Plus className="size-4" aria-hidden="true" />
-                Add unit
-              </Button>
-            </div>
-          ) : null}
+            ) : null}
+            {canEdit ? (
+              <>
+                <Button size="sm" variant="outline" onClick={() => setGenerating(true)}>
+                  <ListPlus className="size-4" aria-hidden="true" />
+                  Generate
+                </Button>
+                <Button size="sm" onClick={() => setAdding(true)}>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Add unit
+                </Button>
+              </>
+            ) : null}
+          </div>
         </div>
       </CardHeader>
 
@@ -295,6 +312,30 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
           onDone={refresh}
         />
       ) : null}
+
+      {/* Mounted on demand so the default selection is taken from units that
+          have actually loaded. */}
+      {selectingLabels && units ? (
+        <PrintLabelsDialog
+          item={item}
+          units={units}
+          open={selectingLabels}
+          onOpenChange={setSelectingLabels}
+          onPrint={(prepared) => {
+            // The selection is finished, so the dialog goes and the sheet stays.
+            // Printing then happens on an ordinary page with nothing modal above
+            // it — byte for byte the path the single-label button takes.
+            setSelectingLabels(false)
+            setLabels(prepared)
+          }}
+        />
+      ) : null}
+
+      <EquipmentLabelPrinter
+        labels={labels ?? []}
+        open={labels !== null}
+        onOpenChange={(open) => { if (!open) setLabels(null) }}
+      />
 
       {generating ? (
         <BulkGenerateUnitsDialog

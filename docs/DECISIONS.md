@@ -2225,3 +2225,195 @@ equipment.
 swapped — because nothing has been taken yet and the list is still a decision.
 The moment the repair starts it becomes a record of what left, and Rules make it
 immutable from then on, as decision 86 already required.
+
+### 89. A QR label is a link, not a credential
+
+The QR printed on a piece of equipment encodes exactly one thing: the path
+`/equipment/<unit document id>` on the deployed origin. It carries no token, no
+signature, no organization identifier, and nothing about the equipment itself.
+
+Everything an authorization decision needs is already in Firestore. A URL that
+carried more would be a second, weaker copy of it — one that travels on a sticker
+that leaves the building, gets photographed, and cannot be revoked. Anyone who
+opens the link still signs in, and still sees the unit only if Security Rules say
+their membership allows it. A label is a shortcut for someone who already has
+access, not a way to obtain any.
+
+That is also why nothing about the equipment is encoded. A code that spelled out
+the asset code, the item, or the organization would tell a stranger holding a
+lost microphone which school to sell it back to.
+
+### 89a. The identity is the document id, not the asset code
+
+Asset codes are edited. Crews renumber, correct typos, and adopt new conventions,
+and a serialized item's codes are the field most likely to change over the life of
+the equipment. A sticker printed from an asset code would quietly stop working on
+the day somebody fixed a typo, and there would be no way to notice except by
+scanning it.
+
+The unit document id never changes, so a label printed once is correct for as
+long as the unit exists — through a rename, a change of owning team, a repair, a
+loss, and retirement. Nothing in the lifecycle touches identity, which is what
+makes "print once" true rather than aspirational.
+
+### 89b. The origin is a constant, not the current browser location
+
+`publicAppOrigin()` returns a compiled-in constant. It never reads
+`window.location`, because a label generated during development on
+`localhost:5173` would then be printed, stuck to a microphone, and be permanently
+useless to everyone including the person who printed it.
+
+`VITE_PUBLIC_APP_ORIGIN` can override it for a different deployment, but it is
+optional and non-secret: with nothing set, the production origin is used from
+every environment, including local development. No `.env.local` change is needed
+to print a correct label.
+
+The override is validated before it is used, and anything questionable is
+discarded in favour of the default rather than printed. It must be an absolute
+`https:` URL with a host and nothing else — no other scheme, no credentials, no
+path, query, or fragment. A sticker cannot be recalled, so a typo in
+configuration should cost a wrong deployment origin at worst, never a
+`javascript:` URL in a code that somebody's phone offers to open, and never a
+label that fails to resolve.
+
+### 89c. Denied and absent are the same answer, on purpose
+
+Rules gate a unit read on `resource.data.organization_id`, and a document that
+does not exist has no `resource` — so the read is denied rather than returning an
+empty snapshot. This is verified in `tests/rules/equipment-scan.test.ts` rather
+than assumed.
+
+The consequence is that a client genuinely cannot distinguish "this equipment
+does not exist" from "this equipment is not yours", and the interface says one
+thing for both. That is not vagueness for its own sake: distinguishing them would
+let anyone with a scanner and a guessed id confirm which units are real, one
+request at a time, without belonging to any organization.
+
+### 89d. A scanned label may belong to another of your organizations
+
+A person can be in several organizations, and the active one lives in the
+browser. Scanning a label from organization B while organization A is open is
+ordinary, not an attack.
+
+Rules decide from the unit's own `organization_id`, not from whatever the browser
+has open, so the read either succeeds — proving membership and inventory access
+in the owning organization — or is denied. When it succeeds against a different
+organization, the page offers to switch rather than claiming the equipment was
+not found. The switch is offered rather than performed, because the active
+organization is global and changing it silently would move every other page the
+person has open.
+
+Switching does not navigate. The route stays exactly where the label pointed and
+the page re-resolves, so the person lands on the equipment rather than on a
+dashboard they then have to find it from. The same is true after signing in and
+after choosing an organization: the destination is carried through all three (see
+decision 89f for why the route can sit where it does).
+
+### 89e. What a printed label says, and what it refuses to say
+
+A label carries the QR, the asset code, the item name, and the organization name.
+It carries no status, condition, storage location, owning team, holder, repair, or
+notes.
+
+Every one of those changes while the sticker stays where it is. A label reading
+"Available" on a microphone that has been missing for a month is worse than a
+label saying nothing, because somebody will believe it. Anything that moves lives
+on the page the QR opens, which is current by construction.
+
+### 89f. One route sits outside the active organization's guards
+
+Every other page in the application knows which organization it belongs to before
+it loads. `/equipment/:unitId` does not: a QR carries a unit id and nothing else,
+and which organization owns that unit is a fact stored in the unit.
+
+Leaving the route under `OrganizationGuard` and the inventory `PermissionGuard`
+therefore refused legitimate scans. Someone in two organizations, whose active
+one gives them no inventory access, scanning a label from the organization where
+they do have it, was stopped before the page could read the unit and find out.
+The guard was answering a question about the wrong organization.
+
+So this one route was moved to sit directly under `AuthGuard`, still inside
+`AppShell`. Nothing else moved, and `src/routes/routes.test.tsx` walks the real
+route tree to keep it that way — it fails if the equipment route is re-nested,
+and equally if any other route wanders out.
+
+Nothing is given away by the move. The guards only ever decided what to render;
+Security Rules decide what may be read, and they are unchanged. A successful unit
+read already proves membership and inventory access in the owning organization,
+because Rules evaluate `resource.data.organization_id`. A failed one yields the
+generic message of decision 89c. `tests/rules/equipment-scan.test.ts` proves both
+directions against the emulator, including the split-access case the exception
+exists for: inventory access in the unit's organization opens it whatever the
+browser has open, and inventory access in the open organization opens nothing
+that belongs to another.
+
+What the move does cost is the `UnassignedPage` an unassigned member used to see
+here. They now get the generic unavailable message instead, which is accurate —
+Rules deny them the read — but says less about why. A worthwhile trade for a
+route whose whole purpose is to be reachable from a sticker.
+
+### 89g. The print sheet is never opened from inside a modal
+
+The label sheet is portalled to `document.body`, because the print stylesheet
+hides every top-level element except the sheet — nesting it in the application
+shell would either print the sidebar or hide the sheet along with its parent.
+
+That has a consequence which cost a working batch print. An open Radix modal
+sets `pointer-events: none` on `body` and re-enables it only for its own layers,
+so anything else portalled alongside it inherits the lock. The batch dialog
+originally rendered the printer as its own sibling: the sheet appeared, its Print
+button could not be clicked, and the click fell through to the dialog's overlay,
+which dismissed the dialog and unmounted the printer with it. Nothing printed,
+and it looked exactly like Cancel.
+
+So the selection dialog no longer prints. It prepares the sheet while the units
+and the selection are still in hand, hands it over whole, and closes; the page
+owns the printer and opens it with nothing modal above. That is the same path the
+single-label button on Unit Detail always took, which is why that one worked
+throughout — there is now one print mechanism rather than two.
+
+The print root also sets `pointer-events: auto` for itself. Not a workaround for
+the above, which is fixed by structure: it covers the one close animation during
+which the departing dialog's lock is still on `body`, and it stops the same trap
+from being re-set by anyone who later opens the printer from somewhere new.
+
+### 89h. One return path, agreed on by everything that redirects
+
+A scanned label survives sign-in only if every component in the chain agrees on
+what a stored destination looks like. `src/routes/return-to.ts` is that
+agreement: `locationToReturnPath` reduces a router location to
+`pathname + search + hash`, `safeReturnPath` validates that string, and
+`afterAuthDestination` answers "where does somebody who just signed in belong".
+
+Three redirects use it — `AuthGuard` on the way to sign-in, `GuestGuard` on the
+way back, and the sign-in screen itself — and organization selection uses the
+same validator.
+
+`GuestGuard` is the reason this had to be centralised rather than left to the
+sign-in screen. Its job is only to keep signed-in people off the login form, but
+it re-renders the instant authentication succeeds, while the sign-in screen is
+still mounted, and mounts a `<Navigate>` whose effect lands after that screen's
+own redirect. It was sending everyone to organization selection, so a deep link
+that had been carried correctly all the way through sign-in was discarded at the
+final step. Making the two disagree less was not an option; making them ask the
+same function was.
+
+The destination is a string, never a `Location` object. An object reads perfectly
+well at the storing end and is silently discarded by the validator at the far
+end, which is exactly the kind of mismatch that loses a destination between two
+components that each look correct.
+
+### 89i. With no organization open, the unit's own is opened
+
+Decision 89d switches organizations only on an explicit click, because the active
+organization is global and moving it would move every other page and tab.
+
+None of that applies when nothing is open. Signing out clears the stored
+organization, so the ordinary end of a scanned label — scan, sign in, arrive — has
+no active organization at all, and asking which organization the equipment in the
+person's hand belongs to would be a question with one answer that the application
+has already read and authorized.
+
+So that case opens the unit's organization directly and stays on the route. The
+explicit card remains for the case it was written for: a *different* organization
+already open, where switching costs the person something elsewhere.

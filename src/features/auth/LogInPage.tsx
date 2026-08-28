@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,9 +9,18 @@ import { PasswordInput } from '@/features/auth/PasswordInput'
 import { logIn } from '@/services/auth-service'
 import { toUserFacingMessage } from '@/services/auth-errors'
 import { paths } from '@/routes/paths'
+import { afterAuthDestination } from '@/routes/return-to'
 
 export function LogInPage() {
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Where the guard sent them from, if anywhere. Someone who scanned a label on
+  // a microphone should end up looking at that microphone, not at a list of
+  // organizations they then have to navigate out of. GuestGuard answers the same
+  // question from the same helper, because both of them redirect on the way out
+  // of here and the one that lands last decides.
+  const destination = afterAuthDestination(location.state)
   const userIdFieldId = useId()
   const errorId = useId()
 
@@ -27,7 +36,10 @@ export function LogInPage() {
 
     try {
       await logIn({ userId, password })
-      navigate(paths.organizations, { replace: true })
+      // Not via organization selection: the equipment route resolves its own
+      // organization from the unit, so a deep link goes straight there and the
+      // page decides whether a switch is needed.
+      navigate(destination, { replace: true })
     } catch (caught) {
       // logIn throws a plain Error for malformed input so that it is
       // indistinguishable from a wrong password.

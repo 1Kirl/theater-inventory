@@ -6,6 +6,7 @@ import { useOrganization } from '@/features/organizations/useOrganization'
 import { UnassignedPage } from '@/features/organizations/UnassignedPage'
 import { hasModuleAccess, type RequiredLevel } from '@/domain/module-access'
 import { paths } from '@/routes/paths'
+import { afterAuthDestination, locationToReturnPath } from '@/routes/return-to'
 import type { PermissionModule } from '@/types/organization'
 
 function FullPageMessage({ children }: { children: React.ReactNode }) {
@@ -39,6 +40,25 @@ function ConfigErrorScreen({ message }: { message: string }) {
 }
 
 /**
+ * Sends someone to organization selection without losing where they were going.
+ *
+ * A scanned equipment label is a deep link into an organization that may not be
+ * the active one — or into an account with no active organization at all. The
+ * destination rides along so that picking an organization finishes the journey
+ * instead of dropping the person on the dashboard.
+ */
+function ToOrganizationSelection() {
+  const location = useLocation()
+  return (
+    <Navigate
+      to={paths.organizations}
+      replace
+      state={{ from: locationToReturnPath(location) }}
+    />
+  )
+}
+
+/**
  * Requires an authenticated Firebase user.
  *
  * Also the outer Suspense boundary for the routes that sit outside the
@@ -59,7 +79,9 @@ export function AuthGuard() {
   }
 
   if (!user) {
-    return <Navigate to={paths.logIn} replace state={{ from: location.pathname }} />
+    return (
+      <Navigate to={paths.logIn} replace state={{ from: locationToReturnPath(location) }} />
+    )
   }
 
   return (
@@ -84,7 +106,7 @@ export function OrganizationGuard() {
   }
 
   if (!organization) {
-    return <Navigate to={paths.organizations} replace />
+    return <ToOrganizationSelection />
   }
 
   if (role === 'unassigned') {
@@ -116,7 +138,7 @@ export function PermissionGuard({
   }
 
   if (!organization) {
-    return <Navigate to={paths.organizations} replace />
+    return <ToOrganizationSelection />
   }
 
   if (!hasModuleAccess(role, membership?.permissions ?? null, module, level)) {
@@ -144,7 +166,7 @@ export function AdminGuard() {
   }
 
   if (!organization) {
-    return <Navigate to={paths.organizations} replace />
+    return <ToOrganizationSelection />
   }
 
   if (role !== 'admin') {
@@ -163,9 +185,19 @@ export function AdminGuard() {
   return <Outlet />
 }
 
-/** Keeps signed-in users away from the sign-up and log-in screens. */
+/**
+ * Keeps signed-in users away from the sign-up and log-in screens.
+ *
+ * This redirect fires the moment authentication succeeds — the auth state
+ * update re-renders it while the sign-in screen is still mounted — so it
+ * arrives within a frame of the screen's own redirect and lands after it. It
+ * therefore has to agree about the destination, or a deep link that survived
+ * everything else is thrown away at the last step by the guard whose only job
+ * was to keep signed-in people off the login form.
+ */
 export function GuestGuard() {
   const { loading, user, configError } = useAuth()
+  const location = useLocation()
 
   if (configError) {
     return <ConfigErrorScreen message={configError} />
@@ -176,7 +208,7 @@ export function GuestGuard() {
   }
 
   if (user) {
-    return <Navigate to={paths.organizations} replace />
+    return <Navigate to={afterAuthDestination(location.state)} replace />
   }
 
   return <Outlet />

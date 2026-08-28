@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Building2, Plus, Ticket } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,7 @@ import { getOrganization } from '@/services/organization-service'
 import { listTeams } from '@/services/team-service'
 import { toUserFacingMessage } from '@/services/auth-errors'
 import { paths } from '@/routes/paths'
+import { returnToFromState } from '@/routes/return-to'
 import type { Organization, OrganizationMembership, TheaterTeam } from '@/types/organization'
 
 interface MembershipCard {
@@ -25,8 +26,13 @@ interface MembershipCard {
 
 export function OrganizationSelectionPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, profile } = useAuth()
   const { selectOrganization } = useOrganization()
+
+  // Set when a guard sent the person here on the way to somewhere specific —
+  // scanning an equipment label, most often. Only internal paths are honoured.
+  const returnTo = returnToFromState(location.state)
 
   const [cards, setCards] = useState<MembershipCard[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -65,7 +71,10 @@ export function OrganizationSelectionPage() {
 
   function enter(organizationId: string) {
     selectOrganization(organizationId)
-    navigate(paths.dashboard)
+    // If the destination belongs to a different organization than the one just
+    // chosen, its own page says so and offers to switch. Nothing here needs to
+    // guess which organization a link belongs to.
+    navigate(returnTo ?? paths.dashboard)
   }
 
   return (
@@ -87,7 +96,9 @@ export function OrganizationSelectionPage() {
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight">Organizations</h1>
             <p className="text-muted-foreground text-sm">
-              Choose a theater organization to work in. Your role and teams are separate in each one.
+              {returnTo === null
+                ? 'Choose a theater organization to work in. Your role and teams are separate in each one.'
+                : 'Choose the organization this equipment belongs to. You will be taken straight to it.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
