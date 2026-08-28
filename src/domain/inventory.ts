@@ -1,4 +1,13 @@
-import type { ConditionCounts, ConditionKey } from '@/types/inventory'
+import {
+  UNIT_STATUSES,
+  type ConditionCounts,
+  type ConditionKey,
+  type InventoryItem,
+  type InventoryUnit,
+  type TrackingMode,
+  type UnitCounts,
+  type UnitStatus,
+} from '@/types/inventory'
 
 /**
  * Inventory arithmetic, kept out of components so it can be tested directly and
@@ -96,4 +105,192 @@ export function validateInventoryQuantities(params: {
   }
 
   return { valid: true }
+}
+
+/**
+ * Serialized inventory.
+ *
+ * Everything below derives a parent item's summary from the units beneath it.
+ * The parent keeps a copy of these figures so the list, the dashboard, and
+ * production shortages never read a unit — but this is where the answer is
+ * actually defined, and it is what a recalculation would compute.
+ */
+
+/**
+ * How an item is tracked.
+ *
+ * Items written before serialized tracking existed have no field, and they are
+ * bulk: that is what they have always been, and reading them any other way
+ * would change what the application says about data nobody touched.
+ */
+export function trackingModeOf(
+  item: Pick<InventoryItem, 'tracking_mode'>,
+): TrackingMode {
+  return item.tracking_mode ?? 'bulk'
+}
+
+export function isSerialized(item: Pick<InventoryItem, 'tracking_mode'>): boolean {
+  return trackingModeOf(item) === 'serialized'
+}
+
+export const EMPTY_UNIT_COUNTS: UnitCounts = {
+  active_total: 0,
+  available: 0,
+  unusable_on_hand: 0,
+  in_use: 0,
+  in_maintenance: 0,
+  lost: 0,
+  retired: 0,
+}
+
+/**
+ * Whether a production could actually count on this unit.
+ *
+ * Two conditions, and the second one is a deliberate departure from the bulk
+ * model: an unusable unit is present and on the shelf, but it is not something
+ * anyone can use, so it is not available. A unit merely needing repair *is*
+ * available — it needs attention, not that it has stopped working.
+ */
+export function isUnitAvailable(
+  unit: Pick<InventoryUnit, 'status' | 'condition'>,
+): boolean {
+  return unit.status === 'available' && unit.condition !== 'unusable'
+}
+
+/** Present in the organization, whether or not it can be used. */
+export function isUnitActive(unit: Pick<InventoryUnit, 'status'>): boolean {
+  return unit.status !== 'retired'
+}
+
+/**
+ * The parent's summary, computed from the units.
+ *
+ * `unusable_on_hand` is what keeps the totals honest: without it the counts
+ * would not add up, and a reader would be left to guess where the missing
+ * units went.
+ */
+export function unitCountsFrom(
+  units: readonly Pick<InventoryUnit, 'status' | 'condition'>[],
+): UnitCounts {
+  const counts: UnitCounts = { ...EMPTY_UNIT_COUNTS }
+
+  for (const unit of units) {
+    switch (unit.status) {
+      case 'retired':
+        counts.retired += 1
+        continue
+      case 'in_use':
+        counts.in_use += 1
+        break
+      case 'in_maintenance':
+        counts.in_maintenance += 1
+        break
+      case 'lost':
+        counts.lost += 1
+        break
+      case 'available':
+        if (isUnitAvailable(unit)) counts.available += 1
+        else counts.unusable_on_hand += 1
+        break
+    }
+
+    counts.active_total += 1
+  }
+
+  return counts
+}
+
+/**
+ * Condition counts for a serialized item: the active units, by condition.
+ *
+ * Retired units are left out, which is what makes the total match
+ * `active_total`. Every unit carries exactly one condition, so a serialized
+ * item has no unclassified remainder — unlike a bulk item, where the counts are
+ * a person's partial record of a quantity.
+ */
+export function conditionCountsFrom(
+  units: readonly Pick<InventoryUnit, 'status' | 'condition'>[],
+): ConditionCounts {
+  const counts: ConditionCounts = { ...EMPTY_CONDITION_COUNTS }
+
+  for (const unit of units) {
+    if (isUnitActive(unit)) counts[unit.condition] += 1
+  }
+
+  return counts
+}
+
+/**
+ * The parent fields a serialized item mirrors from its units.
+ *
+ * `quantity_total` and `quantity_available` are kept so that production
+ * shortage, the dashboard, and the AI context read exactly what they read
+ * before serialized tracking existed.
+ */
+export interface SerializedMirror {
+  unit_counts: UnitCounts
+  condition_counts: ConditionCounts
+  quantity_total: number
+  quantity_available: number
+}
+
+export function serializedMirrorFrom(
+  units: readonly Pick<InventoryUnit, 'status' | 'condition'>[],
+): SerializedMirror {
+  const unitCounts = unitCountsFrom(units)
+
+  return {
+    unit_counts: unitCounts,
+    condition_counts: conditionCountsFrom(units),
+    quantity_total: unitCounts.active_total,
+    quantity_available: unitCounts.available,
+  }
+}
+
+/**
+ * The counts add up, and none of them is negative.
+ *
+ * This is checkable without reading a single unit, which is why Security Rules
+ * can enforce it. What no rule can check is whether the numbers match reality —
+ * Rules cannot count documents. Keeping the arithmetic honest is the part that
+ * is enforceable, and later phases keep the numbers honest by mutating a unit
+ * and its parent inside one transaction.
+ */
+export function unitCountsValid(counts: UnitCounts): boolean {
+  const values = [
+    counts.active_total, counts.available, counts.unusable_on_hand,
+    counts.in_use, counts.in_maintenance, counts.lost, counts.retired,
+  ]
+
+  if (!values.every((value) => Number.isInteger(value) && value >= 0)) return false
+
+  return counts.active_total
+    === counts.available + counts.unusable_on_hand + counts.in_use
+      + counts.in_maintenance + counts.lost
+}
+
+/**
+ * Which lifecycle moves are legal.
+ *
+ * Defined here in 11A, before anything performs them, so the later phases that
+ * do have one place to agree with — and so Security Rules and the interface
+ * cannot drift into permitting different things.
+ *
+ * `retired` is terminal. Bringing equipment back is a new unit, which is the
+ * honest record: the old one really did leave the inventory.
+ */
+const ALLOWED_TRANSITIONS: Record<UnitStatus, readonly UnitStatus[]> = {
+  available: ['in_use', 'in_maintenance', 'lost', 'retired'],
+  in_use: ['available', 'in_maintenance', 'lost', 'retired'],
+  in_maintenance: ['available', 'lost', 'retired'],
+  lost: ['available', 'retired'],
+  retired: [],
+}
+
+export function canTransition(from: UnitStatus, to: UnitStatus): boolean {
+  return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false
+}
+
+export function isUnitStatus(value: string): value is UnitStatus {
+  return (UNIT_STATUSES as readonly string[]).includes(value)
 }

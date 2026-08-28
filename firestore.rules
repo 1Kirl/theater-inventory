@@ -506,12 +506,73 @@ service cloud.firestore {
              <= quantityTotal;
     }
 
+    // The seven buckets a serialized item keeps, and the one arithmetic fact
+    // about them a rule can actually check.
+    //
+    // What it cannot check is whether the numbers match the units they claim to
+    // count: Rules cannot query a collection, so an unknown set of sibling
+    // documents cannot be tallied. Later phases keep them true by mutating a
+    // unit and its parent inside one transaction. This is the part that is
+    // enforceable, and it is enforced.
+    //
+    // The invariant is not the obvious one. `unusable_on_hand` is what makes it
+    // hold: a unit on the shelf in unusable condition is active and present,
+    // but nothing can count on it, so it is not available.
+    function unitCountsValid(counts) {
+      return counts.keys().hasOnly(['active_total', 'available', 'unusable_on_hand',
+                                    'in_use', 'in_maintenance', 'lost', 'retired'])
+        && counts.keys().hasAll(['active_total', 'available', 'unusable_on_hand',
+                                 'in_use', 'in_maintenance', 'lost', 'retired'])
+        && isCount(counts.active_total)
+        && isCount(counts.available)
+        && isCount(counts.unusable_on_hand)
+        && isCount(counts.in_use)
+        && isCount(counts.in_maintenance)
+        && isCount(counts.lost)
+        && isCount(counts.retired)
+        && counts.active_total == counts.available + counts.unusable_on_hand
+             + counts.in_use + counts.in_maintenance + counts.lost;
+    }
+
+    function trackingModeOf(data) {
+      return 'tracking_mode' in data ? data.tracking_mode : 'bulk';
+    }
+
+    // A serialized item's quantities are a mirror of its units, so the fields
+    // everything else already reads — production shortage, the dashboard, the
+    // AI context — keep meaning what they meant, without any of those callers
+    // learning about units.
+    //
+    // Condition counts are exact rather than bounded here: every unit carries
+    // one condition, so an active unit is in exactly one bucket. A bulk item
+    // keeps the looser rule, because there the counts are a person's partial
+    // record of a quantity and an unclassified remainder is legitimate.
+    function serializedMirrorsValid(data) {
+      return 'unit_counts' in data
+        && unitCountsValid(data.unit_counts)
+        && data.quantity_total == data.unit_counts.active_total
+        && data.quantity_available == data.unit_counts.available
+        && data.condition_counts.excellent + data.condition_counts.good
+             + data.condition_counts.fair + data.condition_counts.needs_repair
+             + data.condition_counts.unusable
+           == data.unit_counts.active_total;
+    }
+
     function inventoryFieldsValid(itemId) {
       return hasExactly(
                ['item_id', 'organization_id', 'name', 'category', 'team_id', 'quantity_total',
                 'quantity_available', 'condition_counts', 'location', 'created_by_uid',
                 'created_at', 'updated_at'],
-               ['last_inspected_at', 'notes'])
+               ['tracking_mode', 'unit_counts', 'last_inspected_at', 'notes'])
+        && trackingModeOf(request.resource.data) in ['bulk', 'serialized']
+        // A bulk item has no units, so it has nothing to summarize. Written as
+        // two guarded alternatives rather than a ternary: `&&` short-circuits
+        // reliably here, so the mirror checks never look at a map a bulk item
+        // does not carry.
+        && ((trackingModeOf(request.resource.data) == 'serialized'
+             && serializedMirrorsValid(request.resource.data))
+            || (trackingModeOf(request.resource.data) == 'bulk'
+                && !('unit_counts' in request.resource.data)))
         && request.resource.data.item_id == itemId
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -553,6 +614,11 @@ service cloud.firestore {
         && request.resource.data.organization_id == resource.data.organization_id
         && request.resource.data.created_by_uid == resource.data.created_by_uid
         && request.resource.data.created_at == resource.data.created_at
+        // Promotion to serialized is one way. Going back would strand the unit
+        // documents and the history attached to them; a fresh item is the
+        // honest alternative.
+        && !(trackingModeOf(resource.data) == 'serialized'
+             && trackingModeOf(request.resource.data) == 'bulk')
         // Editable as it stands, and editable where it is going.
         && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
         && canWriteInventoryForTeam(resource.data.organization_id,
@@ -560,6 +626,109 @@ service cloud.firestore {
 
       // No delete flow in the MVP. Maintenance history and, from Phase 5,
       // production requirements reference these items.
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------- inventory_units
+
+    // One document per physical object, for items tracked serially.
+    //
+    // A unit carries copies of its parent's organization, item, and team. That
+    // is not convenience: it is what lets a write be authorized without reading
+    // the parent, which keeps the access-call budget low enough for a later
+    // checkout to move a unit, adjust its parent's counters, and record an event
+    // in one transaction. `maintenance_records` carries a team snapshot for the
+    // same reason. All three are immutable, so the copy cannot drift into
+    // granting access the parent would not.
+
+    function unitStatusValid(data) {
+      return data.status in ['available', 'in_use', 'in_maintenance', 'lost', 'retired']
+        && data.condition in ['excellent', 'good', 'fair', 'needs_repair', 'unusable']
+        // A retirement reason belongs to a retired unit and to nothing else.
+        && (data.status == 'retired'
+            ? ('retirement_reason' in data
+               && data.retirement_reason in
+                    ['disposed', 'permanently_lost', 'donated', 'sold', 'other'])
+            : !('retirement_reason' in data))
+        // Borrowing details describe a unit that is out, and only that.
+        && (data.status == 'in_use'
+            ? 'using_team_id' in data
+            : (!('using_team_id' in data)
+               && !('using_member_uid' in data)
+               && !('checked_out_at' in data)))
+        // A member cannot be recorded without the team they were borrowing for.
+        && (!('using_member_uid' in data) || 'using_team_id' in data);
+    }
+
+    function unitFieldsValid(unitId) {
+      return hasExactly(
+               ['unit_id', 'organization_id', 'inventory_item_id', 'team_id', 'asset_code',
+                'condition', 'status', 'storage_location', 'created_by_uid', 'created_at',
+                'updated_at'],
+               ['retirement_reason', 'using_team_id', 'using_member_uid', 'checked_out_at',
+                'last_known_location', 'last_inspected_at', 'notes'])
+        && request.resource.data.unit_id == unitId
+        && request.resource.data.asset_code is string
+        && request.resource.data.asset_code.size() > 0
+        && request.resource.data.asset_code.size() <= 60
+        && request.resource.data.storage_location is string
+        && request.resource.data.storage_location.size() > 0
+        && request.resource.data.storage_location.size() <= 120
+        && unitStatusValid(request.resource.data)
+        && (!('using_team_id' in request.resource.data)
+            || request.resource.data.using_team_id is string)
+        && (!('using_member_uid' in request.resource.data)
+            || request.resource.data.using_member_uid is string)
+        && (!('checked_out_at' in request.resource.data)
+            || request.resource.data.checked_out_at is timestamp)
+        && (!('last_known_location' in request.resource.data)
+            || (request.resource.data.last_known_location is string
+                && request.resource.data.last_known_location.size() <= 120))
+        && (!('last_inspected_at' in request.resource.data)
+            || request.resource.data.last_inspected_at is timestamp)
+        && (!('notes' in request.resource.data)
+            || (request.resource.data.notes is string
+                && request.resource.data.notes.size() <= 2000))
+        && request.resource.data.updated_at == request.time;
+    }
+
+    // Checked once, at creation. Afterwards the three copied fields are
+    // immutable, so re-reading the parent on every edit would buy nothing and
+    // cost two access calls that a later transaction needs.
+    function unitParentAgrees(data) {
+      return exists(itemPath(data.inventory_item_id))
+        && get(itemPath(data.inventory_item_id)).data.organization_id == data.organization_id
+        && get(itemPath(data.inventory_item_id)).data.team_id == data.team_id;
+    }
+
+    match /inventory_units/{unitId} {
+
+      // Organization-wide, like the parent item. Reading what the organization
+      // owns is not bounded by team; editing it is.
+      allow get, list: if canViewInventory(resource.data.organization_id);
+
+      allow create: if unitFieldsValid(unitId)
+        && canWriteInventoryForTeam(request.resource.data.organization_id,
+                                    request.resource.data.team_id)
+        && unitParentAgrees(request.resource.data)
+        && request.resource.data.created_by_uid == uid()
+        && request.resource.data.created_at == request.time;
+
+      allow update: if unitFieldsValid(unitId)
+        // Identity, the parent link, the owning team, and authorship are fixed.
+        // The owning team especially: it is what the rule above authorizes
+        // against, so a writable copy could widen who may edit the unit.
+        && request.resource.data.unit_id == resource.data.unit_id
+        && request.resource.data.organization_id == resource.data.organization_id
+        && request.resource.data.inventory_item_id == resource.data.inventory_item_id
+        && request.resource.data.team_id == resource.data.team_id
+        && request.resource.data.created_by_uid == resource.data.created_by_uid
+        && request.resource.data.created_at == resource.data.created_at
+        && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id);
+
+      // Equipment leaves the inventory by being retired, which keeps its
+      // history. Deleting it would destroy exactly the record this collection
+      // exists to hold. See decision 7 of the Phase 11 analysis.
       allow delete: if false;
     }
 

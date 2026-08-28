@@ -1,5 +1,5 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
-import type { ConditionCounts } from '@/types/inventory'
+import type { ConditionCounts, TrackingMode, UnitCounts } from '@/types/inventory'
 
 /**
  * The exact inventory document shape written to Firestore.
@@ -14,6 +14,17 @@ export interface InventoryItemInput {
   name: string
   category: string
   teamId: string
+  /**
+   * Defaults to `bulk`, which is what every item written before serialized
+   * tracking existed is.
+   *
+   * Always written, never left off. An update replaces the whole document, so a
+   * form that did not carry this field forward would quietly turn a serialized
+   * item back into a bulk one.
+   */
+  trackingMode?: TrackingMode
+  /** Serialized items only. Mirrors the units; absent for a bulk item. */
+  unitCounts?: UnitCounts | undefined
   quantityTotal: number
   quantityAvailable: number
   conditionCounts: ConditionCounts
@@ -26,10 +37,16 @@ export interface InventoryItemInput {
 function editableFields(input: InventoryItemInput) {
   const notes = input.notes?.trim()
 
+  const trackingMode: TrackingMode = input.trackingMode ?? 'bulk'
+
   return {
     name: input.name.trim(),
     category: input.category,
     team_id: input.teamId,
+    tracking_mode: trackingMode,
+    ...(trackingMode === 'serialized' && input.unitCounts
+      ? { unit_counts: input.unitCounts }
+      : {}),
     quantity_total: input.quantityTotal,
     quantity_available: input.quantityAvailable,
     condition_counts: input.conditionCounts,

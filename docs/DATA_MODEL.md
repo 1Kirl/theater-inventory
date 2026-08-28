@@ -703,6 +703,84 @@ view permission may read every event in the organization; `team_ids` drives filt
 labelling in the UI. Security Rules enforce organization scope and the `calendar` permission
 level, and do not evaluate `team_ids`.
 
+## 13b. inventory_units
+
+Path:
+
+`inventory_units/{unitId}`
+
+One physical object, for items whose `tracking_mode` is `serialized`. Bulk items
+have none.
+
+```ts
+type TrackingMode = 'bulk' | 'serialized';
+type UnitStatus = 'available' | 'in_use' | 'in_maintenance' | 'lost' | 'retired';
+type RetirementReason = 'disposed' | 'permanently_lost' | 'donated' | 'sold' | 'other';
+
+interface InventoryUnit {
+  unit_id: string;
+  organization_id: string;        // immutable, copied from the parent
+  inventory_item_id: string;      // immutable, copied from the parent
+  team_id: string;                // immutable, the parent's owning team
+  asset_code: string;             // the label a person reads, e.g. CLAMP-017
+  condition: ConditionKey;
+  status: UnitStatus;
+  storage_location: string;
+  retirement_reason?: RetirementReason;   // required when retired, absent otherwise
+  using_team_id?: string;                 // present only while in use
+  using_member_uid?: string;
+  checked_out_at?: Timestamp;
+  last_known_location?: string;
+  last_inspected_at?: Timestamp;
+  notes?: string;
+  created_by_uid: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+```
+
+The three copied fields exist so Security Rules can authorize a write without
+reading the parent — see decision 65. All three are immutable, and there is no
+delete: equipment leaves by being retired, which keeps its history.
+
+Condition and status are separate axes. A unit can be unusable and on the shelf,
+or excellent and given away.
+
+### 13c. inventory_items additions
+
+```ts
+interface InventoryItem {
+  // ... existing fields
+  tracking_mode?: TrackingMode;   // absent means bulk
+  unit_counts?: UnitCounts;       // serialized only
+}
+
+interface UnitCounts {
+  active_total: number;        // status != retired
+  available: number;           // status == available AND condition != unusable
+  unusable_on_hand: number;    // status == available AND condition == unusable
+  in_use: number;
+  in_maintenance: number;
+  lost: number;
+  retired: number;             // beside the active total, not inside it
+}
+```
+
+Invariant, enforced in Rules:
+
+```
+active_total == available + unusable_on_hand + in_use + in_maintenance + lost
+```
+
+For a serialized item, `quantity_total`, `quantity_available`, and
+`condition_counts` mirror the units — `quantity_available` equals
+`unit_counts.available`, `quantity_total` equals `active_total`, and the
+condition counts cover every non-retired unit exactly. Everything that already
+reads those fields keeps working without learning that units exist.
+
+For a bulk item they remain what they always were: numbers a person maintains,
+with condition counts allowed to fall short of the total.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

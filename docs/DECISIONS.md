@@ -1247,3 +1247,175 @@ No password appears in the repository. The dataset itself is described in `src/d
 as plain data with local keys, so its invariants — that the microphone shortage is real, that every
 action refers to a matched and short requirement, that no repair sends more units than exist — are
 unit-tested without touching Firebase.
+
+---
+
+## 61. Inventory Is Tracked Two Ways
+
+An inventory item now declares how it accounts for the physical things it
+represents. `bulk` is the original model: one document holding quantities a
+person maintains. `serialized` gives each physical object its own document in
+`inventory_units`, so a question like "which of the twenty-four is missing" has
+an answer.
+
+Forcing every item to be serialized was considered and rejected on the data.
+The seeded demo inventory is 17 items representing 273 physical objects, and the
+five largest are lumber (60), gel frames (40), XLR cables (30), C-clamps (24),
+and DMX cables (20) — 64% of the total. Sixty lengths of lumber do not have
+individual identities to track; they stop being those lengths the moment
+somebody cuts one. A hybrid needs 99 unit documents where all-serialized needs
+273.
+
+**The mode is chosen per item by the user, never derived from the category.** A
+clamp worth tracking individually in one school is a box of hardware in another,
+and that is not a judgement this application is entitled to make. A category may
+suggest a default in the interface; it may not decide.
+
+Promotion from bulk to serialized is allowed and one-way. Going back would
+strand the unit documents and the history attached to them; a fresh item is the
+honest alternative, and Security Rules refuse the reverse.
+
+### 61a. Items written before this have not changed
+
+No document currently in Firestore carries `tracking_mode`, and none was
+migrated. A missing field reads as `bulk` — which is what those items have
+always been — through `trackingModeOf()`. Nothing about their behaviour differs.
+
+The payload builder now always writes the field, including for bulk items. That
+is not decoration: an update replaces the whole document rather than merging, so
+a form that did not carry the mode forward would quietly turn a serialized item
+back into a bulk one.
+
+---
+
+## 62. Condition and Lifecycle Status Are Different Questions
+
+A unit carries both a `condition` (the existing five values) and a `status`:
+`available`, `in_use`, `in_maintenance`, `lost`, `retired`.
+
+Folding them into one field would make two ordinary states unsayable:
+
+```
+condition = good,         status = retired    — perfectly fine, and given away
+condition = unusable,     status = available  — on the shelf, and worth nothing
+```
+
+Retirement is terminal and carries a reason — `disposed`, `permanently_lost`,
+`donated`, `sold`, `other`. Equipment that comes back is a new unit, because the
+old one really did leave the inventory.
+
+There is no delete. Losing something and discarding something are both recorded,
+because the record is what the collection exists for. See the Phase 11 analysis,
+decision 7.
+
+---
+
+## 63. What Available Means for a Serialized Item
+
+```
+available  ⟺  status == 'available' AND condition != 'unusable'
+```
+
+Two departures from the bulk model, each deliberate:
+
+**Needs repair still counts.** Something needing attention has not stopped
+working, and the crew may well use it before it goes for service. The interface
+warns; the count does not lie.
+
+**Unusable does not count.** This is a change from the aggregate model, where
+`quantity_available` was a number a person maintained independently of
+condition. A production told it can count on equipment that cannot be used is
+being told something false, and the shortage that follows is wrong.
+
+The consequence is accepted rather than hidden: promoting an item to serialized
+can change its available count, and therefore a production's shortage. Phase 11B
+must show that difference before a promotion completes, and must not invent the
+lifecycle state of units the old aggregate could not describe — twelve total and
+eight available says nothing about where the other four are.
+
+Bulk items are untouched by all of this. `quantity_available` remains what a
+person maintains.
+
+---
+
+## 64. The Summary a Serialized Item Carries
+
+```ts
+unit_counts: {
+  active_total, available, unusable_on_hand,
+  in_use, in_maintenance, lost, retired
+}
+```
+
+The obvious invariant is not the one that holds. `unusable_on_hand` is the term
+that makes it work:
+
+```
+active_total == available + unusable_on_hand + in_use + in_maintenance + lost
+```
+
+A unit on the shelf in unusable condition is present and active, but nothing can
+count on it. Without a bucket of its own the totals would not add up and a
+reader would be left guessing where the missing units went.
+
+`retired` sits beside the active total rather than inside it. Lost units stay
+*in* it: "twenty-four total, three lost" is a sentence the product has to be able
+to say, and subtracting them would erase the fact.
+
+### 64a. The parent mirrors what its units say
+
+A serialized item keeps `quantity_total`, `quantity_available`, and
+`condition_counts` in step with its units. That is what lets production
+shortage, the dashboard, the inventory list, and the AI context keep reading
+exactly the fields they already read — none of them learns that units exist.
+
+`condition_counts` for a serialized item counts **non-retired units by
+condition**, so it sums to `active_total` exactly. A serialized item has no
+unclassified remainder, unlike a bulk item where the counts are a person's
+partial record of a quantity. Rules enforce the exact sum for serialized items
+and keep the looser bound for bulk ones.
+
+### 64b. What Rules can and cannot enforce about the counts
+
+Rules enforce that the numbers are non-negative integers, that the buckets add
+up, and that the mirrors match. What no rule can check is whether the numbers
+match the units they claim to count: Rules cannot query a collection.
+
+Later phases keep them true by mutating a unit and its parent inside one
+transaction, so a lifecycle change either lands completely or not at all. That
+is the normal consistency mechanism. A recalculation tool may exist as a safety
+net; it is not the mechanism.
+
+---
+
+## 65. Why a Unit Copies Its Parent's Organization, Item, and Team
+
+`inventory_units` carries `organization_id`, `inventory_item_id`, and `team_id`,
+all immutable, all copies of the parent's.
+
+This is not convenience. Security Rules spend access calls, and the budget is 10
+for a single write and 20 for a transaction. A unit write that had to read its
+parent would spend two more, and a future checkout — unit, parent counters, and
+an event in one transaction — would not fit. The copies let
+`canWriteInventoryForTeam` authorize a unit write without reading anything else.
+`maintenance_records` carries a team snapshot for the same reason (decision 43).
+
+The parent is read exactly once, at creation, to confirm the copies are honest.
+Afterwards all three are immutable, so re-reading would buy nothing. The owning
+team especially: it is what the rule authorizes against, so a writable copy could
+widen who may edit the unit.
+
+The cost is that a serialized item's owning team cannot change while units exist.
+That is a real limitation, and locking it is the safe half of the trade; a
+dedicated ownership transfer can be designed later if it is ever wanted.
+
+### 65a. Asset codes are labels, not identifiers
+
+`asset_code` is what a person reads off the equipment. Uniqueness is checked in
+the interface and not enforced by Rules, which cannot query a collection to find
+a duplicate.
+
+A claim-document pattern was considered and rejected: it would double the writes
+for every unit, and a bulk creation of twenty-four clamps would blow the access
+budget. The identifier is `unit_id`, and that is what a QR code will encode. Two
+units sharing a label is untidy, not broken.

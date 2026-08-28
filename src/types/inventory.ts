@@ -26,6 +26,105 @@ export const INVENTORY_CATEGORIES = [
 export type InventoryCategory = (typeof INVENTORY_CATEGORIES)[number]
 
 /**
+ * How an item accounts for the physical things it represents.
+ *
+ * `bulk` is the original model: one document holding quantities a person
+ * maintains. `serialized` gives each physical object its own document, so a
+ * question like "which of the twenty-four is missing" has an answer.
+ *
+ * Chosen per item by the user, never derived from the category — a clamp worth
+ * tracking individually in one school is a box of hardware in another.
+ */
+export const TRACKING_MODES = ['bulk', 'serialized'] as const
+export type TrackingMode = (typeof TRACKING_MODES)[number]
+
+/**
+ * Where a physical unit is in its life, which is a different question from what
+ * condition it is in.
+ *
+ * A unit can be `available` and unusable, or `in_use` and merely fair. Folding
+ * the two into one field would make one of those two states unsayable.
+ */
+export const UNIT_STATUSES = [
+  'available',
+  'in_use',
+  'in_maintenance',
+  'lost',
+  'retired',
+] as const
+export type UnitStatus = (typeof UNIT_STATUSES)[number]
+
+/** Why a unit stopped being an active asset. Required when it is retired. */
+export const RETIREMENT_REASONS = [
+  'disposed',
+  'permanently_lost',
+  'donated',
+  'sold',
+  'other',
+] as const
+export type RetirementReason = (typeof RETIREMENT_REASONS)[number]
+
+/**
+ * The summary a serialized item carries so the list, the dashboard, production
+ * shortages, and the AI context never have to read individual units.
+ *
+ * `active_total` excludes retired units; `retired` is kept beside it as history
+ * rather than folded in.
+ *
+ * The obvious invariant is deliberately *not* the obvious one:
+ *
+ *     active_total === available + unusable_on_hand + in_use + in_maintenance + lost
+ *
+ * `unusable_on_hand` is the term that makes it hold. A unit sitting on the
+ * shelf with an unusable condition is present and active, but it is not
+ * something a production can count on, so it is not `available`.
+ */
+export interface UnitCounts {
+  active_total: number
+  available: number
+  unusable_on_hand: number
+  in_use: number
+  in_maintenance: number
+  lost: number
+  retired: number
+}
+
+/**
+ * Path: inventory_units/{unitId}
+ *
+ * One physical object. `organization_id`, `inventory_item_id`, and `team_id`
+ * are copies of the parent's, held here so Security Rules can authorize a write
+ * without reading the parent — the same reason `maintenance_records` carries a
+ * team snapshot. All three are immutable.
+ */
+export interface InventoryUnit {
+  unit_id: string
+  organization_id: string
+  inventory_item_id: string
+  team_id: string
+
+  /** The label a person reads off the equipment, such as `CLAMP-017`. */
+  asset_code: string
+  condition: ConditionKey
+  status: UnitStatus
+  storage_location: string
+
+  /** Required when retired, absent otherwise. */
+  retirement_reason?: RetirementReason
+  /** Present only while in use; the team currently borrowing it. */
+  using_team_id?: string
+  using_member_uid?: string
+  checked_out_at?: Timestamp
+  last_known_location?: string
+  last_inspected_at?: Timestamp
+  notes?: string
+
+  created_by_uid: string
+  created_at: Timestamp
+  updated_at: Timestamp
+}
+
+/**
  * Path: inventory_items/{itemId}
  *
  * Team-scoped for editing, organization-wide for reading. `team_id` is required:
@@ -37,6 +136,18 @@ export interface InventoryItem {
   name: string
   category: string
   team_id: string
+  /**
+   * Absent on every document written before serialized tracking existed, which
+   * reads as `bulk`. Use `trackingModeOf()` rather than the field directly.
+   */
+  tracking_mode?: TrackingMode
+  /** Present only for serialized items. Maintained with the units it counts. */
+  unit_counts?: UnitCounts
+  /**
+   * For a bulk item these are what a person maintains. For a serialized item
+   * they mirror the units, so everything already reading them — production
+   * shortages, the dashboard, the AI context — keeps working unchanged.
+   */
   quantity_total: number
   quantity_available: number
   condition_counts: ConditionCounts

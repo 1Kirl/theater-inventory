@@ -23,6 +23,7 @@ export const COLLECTIONS = {
   joinProofs: 'organization_membership_join_proofs',
   teams: 'teams',
   inventoryItems: 'inventory_items',
+  inventoryUnits: 'inventory_units',
   maintenanceRecords: 'maintenance_records',
   productions: 'productions',
   productionRequirements: 'production_requirements',
