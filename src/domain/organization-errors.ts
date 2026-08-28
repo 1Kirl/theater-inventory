@@ -26,6 +26,7 @@ export type OrganizationErrorCode =
   | 'promotion-blocked-by-maintenance'
   | 'invalid-lifecycle-action'
   | 'inventory-unit-not-found'
+  | 'maintenance-record-not-found'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

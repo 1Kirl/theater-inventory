@@ -733,7 +733,8 @@ service cloud.firestore {
                 'updated_at'],
                ['retirement_reason', 'using_team_id', 'using_member_uid', 'checked_out_at',
                 'last_known_location', 'last_inspected_at', 'notes',
-                'last_lifecycle_event_id'])
+                'last_lifecycle_event_id', 'current_maintenance_record_id',
+                'maintenance_record_ids', 'planned_maintenance_record_id'])
         && request.resource.data.unit_id == unitId
         && request.resource.data.asset_code is string
         && request.resource.data.asset_code.size() > 0
@@ -764,6 +765,21 @@ service cloud.firestore {
         && (!('last_lifecycle_event_id' in request.resource.data)
             || (request.resource.data.last_lifecycle_event_id is string
                 && request.resource.data.last_lifecycle_event_id.size() > 0))
+        // A unit away for repair names the record that took it, and a unit that
+        // is not away names nothing. The pointer is current state, not history:
+        // it answers "where is this right now" without a query.
+        && (request.resource.data.status == 'in_maintenance'
+            ? ('current_maintenance_record_id' in request.resource.data
+               && request.resource.data.current_maintenance_record_id is string
+               && request.resource.data.current_maintenance_record_id.size() > 0)
+            : !('current_maintenance_record_id' in request.resource.data))
+        && (!('maintenance_record_ids' in request.resource.data)
+            || (request.resource.data.maintenance_record_ids is list
+                && request.resource.data.maintenance_record_ids.size() <= 200
+                && isDistinctList(request.resource.data.maintenance_record_ids)))
+        && (!('planned_maintenance_record_id' in request.resource.data)
+            || (request.resource.data.planned_maintenance_record_id is string
+                && request.resource.data.planned_maintenance_record_id.size() > 0))
         && request.resource.data.updated_at == request.time
         && request.resource.data.team_id is string
         && request.resource.data.team_id.size() > 0;
@@ -780,6 +796,10 @@ service cloud.firestore {
         || (from == 'lost' && to in ['available', 'retired']);
     }
 
+    function maintenancePath(recordId) {
+      return /databases/$(database)/documents/maintenance_records/$(recordId);
+    }
+
     function eventPath(eventId) {
       return /databases/$(database)/documents/asset_events/$(eventId);
     }
@@ -793,6 +813,45 @@ service cloud.firestore {
      * Combined with the event rule requiring the unit to point back at it, one
      * cannot exist without the other.
      */
+    /**
+     * A maintenance move, proven against one event shared by the whole batch.
+     *
+     * The per-unit form below costs one document read per unit, because each
+     * unit reads a different event. Sending ten clamps for repair therefore
+     * exhausted the twenty-call budget at six — measured, not guessed. Here
+     * every unit in the batch reads the *same* event, which Rules charge once
+     * however many units name it, so the cost stops growing with the batch.
+     *
+     * What each unit still proves for itself: the event exists, it lists this
+     * unit, it describes this exact move, and it names the same maintenance
+     * record the unit now points at. So a unit cannot slip into maintenance on
+     * somebody else's event, nor name a record the event does not agree with.
+     */
+    function unitMaintenanceEventValid() {
+      return 'last_lifecycle_event_id' in request.resource.data
+        && request.resource.data.last_lifecycle_event_id
+             != resource.data.get('last_lifecycle_event_id', '')
+        && existsAfter(eventPath(request.resource.data.last_lifecycle_event_id))
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .get('inventory_unit_ids', []).hasAny([request.resource.data.unit_id])
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .from_status == resource.data.status
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .to_status == request.resource.data.status
+        // Going in, the unit and the event must name the same record; coming
+        // back, the event names the record the unit is leaving.
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .get('maintenance_record_id', '')
+             == (request.resource.data.status == 'in_maintenance'
+                 ? request.resource.data.current_maintenance_record_id
+                 : resource.data.get('current_maintenance_record_id', ''));
+    }
+
+    function isMaintenanceMove(from, to) {
+      return (from == 'available' && to == 'in_maintenance')
+        || (from == 'in_maintenance' && to == 'available');
+    }
+
     function unitLifecycleEventValid() {
       return 'last_lifecycle_event_id' in request.resource.data
         && request.resource.data.last_lifecycle_event_id
@@ -846,17 +905,31 @@ service cloud.firestore {
         // what authorizes writes to this unit, so handing it to another crew is
         // a change of security boundary rather than an ordinary field edit.
         && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
-        && canWriteInventoryForTeam(resource.data.organization_id,
-                                    request.resource.data.team_id)
+        // Only when the unit is actually changing hands. Evaluating this on
+        // every write costs more expressions than one evaluation is allowed
+        // once the maintenance checks are in the chain — the same limit that
+        // bit the item rule in decision 73a.
+        && (request.resource.data.team_id == resource.data.team_id
+            || canWriteInventoryForTeam(resource.data.organization_id,
+                                        request.resource.data.team_id))
         && usingTeamAllowed(resource.data.organization_id, request.resource.data)
+        && plannedRefValid()
         // Editing what a unit *is* — its code, condition, location, notes,
         // owning team — leaves the status alone and needs no history. Changing
         // where it is in its life is a different kind of write.
         && (request.resource.data.status == resource.data.status
-            ? request.resource.data.get('last_lifecycle_event_id', '')
-                == resource.data.get('last_lifecycle_event_id', '')
+            ? (request.resource.data.get('last_lifecycle_event_id', '')
+                 == resource.data.get('last_lifecycle_event_id', '')
+               && maintenanceHistoryUnchanged())
             : (unitTransitionAllowed(resource.data.status, request.resource.data.status)
-               && unitLifecycleEventValid()));
+               && (isMaintenanceMove(resource.data.status, request.resource.data.status)
+                   ? (unitMaintenanceEventValid()
+                      // Going out adds the visit; coming back leaves the record
+                      // of it exactly where it is.
+                      && (request.resource.data.status == 'in_maintenance'
+                          ? maintenanceHistoryAppended()
+                          : maintenanceHistoryUnchanged()))
+                   : (unitLifecycleEventValid() && maintenanceHistoryUnchanged()))));
 
       // Equipment leaves the inventory by being retired, which keeps its
       // history. Deleting it would destroy exactly the record this collection
@@ -917,16 +990,161 @@ service cloud.firestore {
     // active records cannot be: Rules have no query capability, so an unknown
     // set of sibling documents cannot be aggregated. That total is a warning in
     // the interface, never a boundary. See decision 45.
+    function maintenanceTrackingModeOf(data) {
+      return 'tracking_mode' in data ? data.tracking_mode : 'bulk';
+    }
+
+    /**
+     * How many units the parent says entered or left maintenance in this write.
+     *
+     * Every unit moving into `in_maintenance` raises that bucket by exactly one,
+     * and every unit leaving lowers it by one, whatever condition it is in. So
+     * the parent's own arithmetic counts the batch — and the parent is written
+     * in the same transaction by rules that already insist its numbers add up.
+     *
+     * This is what stops a record claiming fifty units while one moves. Rules
+     * cannot count how many unit documents a transaction touched, but they can
+     * read one number that only moves when units do.
+     */
+    function maintenanceBucketDelta(itemId) {
+      return getAfter(itemPath(itemId)).data.unit_counts.in_maintenance
+        - get(itemPath(itemId)).data.unit_counts.in_maintenance;
+    }
+
+    /**
+     * Every repair this unit has been through, and how the list may change.
+     *
+     * Append-only, one entry per visit to the shop, added at the moment the
+     * unit leaves. Nothing else may touch it: a metadata edit carries it
+     * through, coming back leaves it alone, and no write may drop or rewrite
+     * what is already there. This is what lets a unit page answer "has this
+     * clamp been repaired before" from the unit itself, rather than by
+     * searching a collection for events that claim it.
+     */
+    function historyOf(data) {
+      return 'maintenance_record_ids' in data ? data.maintenance_record_ids : [];
+    }
+
+    function maintenanceHistoryUnchanged() {
+      return historyOf(request.resource.data) == historyOf(resource.data);
+    }
+
+    function maintenanceHistoryAppended() {
+      // Spelled out as size and membership rather than list concatenation:
+      // `concat` on the result of a defaulted `get` does not evaluate here, and
+      // these three conditions say the same thing. Exactly one entry longer,
+      // everything that was there is still there, and the new entry is this
+      // repair — which `isDistinctList` above then keeps from repeating.
+      return 'maintenance_record_ids' in request.resource.data
+        && request.resource.data.maintenance_record_ids.size()
+             == historyOf(resource.data).size() + 1
+        && request.resource.data.maintenance_record_ids
+             .hasAll(historyOf(resource.data))
+        && request.resource.data.maintenance_record_ids
+             .hasAny([request.resource.data.current_maintenance_record_id])
+        && !historyOf(resource.data)
+              .hasAny([request.resource.data.current_maintenance_record_id]);
+    }
+
+    function plannedRefOf(data) {
+      return 'planned_maintenance_record_id' in data
+        ? data.planned_maintenance_record_id : '';
+    }
+
+    /**
+     * Whether a unit's planned-repair pointer may take the value it is taking.
+     *
+     * Unchanged is always allowed, and that is the ordinary case: a plan
+     * survives the unit being taken out, checked in, or lost, because a plan is
+     * an intention about the future and none of those change it.
+     *
+     * Changing it requires the plan itself to be part of the same write, and to
+     * agree. Taking a pointer means the named plan exists, is still planned, and
+     * lists this unit. Dropping one means that plan has moved on — started,
+     * cancelled, or edited to leave this unit out.
+     *
+     * A unit may hold only one plan at a time. Taking a pointer while another is
+     * already set is refused, which is the simplest way to stop the same
+     * microphone being planned into two repairs at once.
+     */
+    function plannedRefValid() {
+      return plannedRefOf(request.resource.data) == plannedRefOf(resource.data)
+        || (plannedRefOf(request.resource.data) != ''
+            ? (plannedRefOf(resource.data) == ''
+               && existsAfter(maintenancePath(plannedRefOf(request.resource.data)))
+               && getAfter(maintenancePath(plannedRefOf(request.resource.data))).data.status
+                    == 'planned'
+               && getAfter(maintenancePath(plannedRefOf(request.resource.data))).data
+                    .get('unit_ids', []).hasAny([request.resource.data.unit_id]))
+            : (existsAfter(maintenancePath(plannedRefOf(resource.data)))
+               && (getAfter(maintenancePath(plannedRefOf(resource.data))).data.status != 'planned'
+                   || !getAfter(maintenancePath(plannedRefOf(resource.data))).data
+                         .get('unit_ids', []).hasAny([resource.data.unit_id]))));
+    }
+
+    /**
+     * The moves that bring equipment back: a repair finishing, or being called
+     * off after it left. Every other step — sent to in_service, in_service to
+     * ready — is paperwork about equipment that has not moved.
+     */
+    function isMaintenanceClosing(from, to) {
+      return from in ['sent', 'in_service', 'ready']
+        && to in ['returned', 'cancelled'];
+    }
+
+    /**
+     * What the parent's maintenance count must do for a given repair move.
+     *
+     * Starting takes the equipment; ending brings it back; everything else —
+     * editing a plan, stepping a live repair through the shop's stages,
+     * cancelling something that never left — moves nothing at all.
+     */
+    function serializedMaintenanceDelta(before, after) {
+      return before.status == 'planned'
+        ? (after.status in ['sent', 'in_service', 'ready']
+           // The moment a plan becomes real, and the only moment its equipment
+           // moves. The new list is what leaves, since a plan's list is still
+           // editable right up until this write.
+           ? maintenanceBucketDelta(before.item_id) == after.unit_ids.size()
+           // Editing the plan, or calling it off before it ever started.
+           : maintenanceBucketDelta(before.item_id) == 0)
+        : (isMaintenanceClosing(before.status, after.status)
+           // Phase 11D has no partial return: the whole list comes home.
+           ? maintenanceBucketDelta(before.item_id) == -before.unit_ids.size()
+           : maintenanceBucketDelta(before.item_id) == 0);
+    }
+
+    /** A list with no repeats, so a count cannot be padded with one id. */
+    function isDistinctList(values) {
+      return values.toSet().size() == values.size();
+    }
+
     function maintenanceFieldsValid(maintenanceId) {
       return hasExactly(
                ['maintenance_id', 'organization_id', 'item_id', 'team_id', 'quantity_sent',
                 'issue_description', 'status', 'created_by_uid', 'created_at', 'updated_at'],
                ['sent_at', 'return_method', 'expected_return_at', 'returned_at',
                 'service_provider_name', 'service_provider_phone', 'service_provider_email',
-                'cost', 'repair_notes'])
+                'cost', 'repair_notes', 'tracking_mode', 'unit_ids'])
         && request.resource.data.maintenance_id == maintenanceId
         && request.resource.data.quantity_sent is int
         && request.resource.data.quantity_sent > 0
+        // A serialized repair names the equipment it took. The quantity stays,
+        // mirroring the list, so everything that already reads it — the
+        // dashboard, the in-service sum — keeps working untouched.
+        && (maintenanceTrackingModeOf(request.resource.data) == 'serialized'
+            ? (request.resource.data.unit_ids is list
+               && request.resource.data.unit_ids.size() > 0
+               && request.resource.data.unit_ids.size() <= 200
+               && isDistinctList(request.resource.data.unit_ids)
+               // `planned` is allowed here and means something different from
+               // every other status: an intention, with no physical effect. The
+               // equipment is not reserved, not taken out of availability, and
+               // free to be used until the repair actually starts. What each
+               // status must do to the parent's counts is settled below.
+               && request.resource.data.quantity_sent
+                    == request.resource.data.unit_ids.size())
+            : !('unit_ids' in request.resource.data))
         && request.resource.data.issue_description is string
         && request.resource.data.issue_description.size() > 0
         && request.resource.data.issue_description.size() <= 1000
@@ -969,6 +1187,25 @@ service cloud.firestore {
                             request.resource.data.team_id)
         && quantityFitsItem(request.resource.data.item_id,
                             request.resource.data.quantity_sent)
+        // A serialized repair takes the equipment with it. The parent has to
+        // show exactly that many units entering maintenance in this same write,
+        // which is what a record cannot fake: claiming fifty while moving one
+        // leaves a delta of one against a list of fifty.
+        && (maintenanceTrackingModeOf(request.resource.data) == 'serialized'
+            ? (request.resource.data.status == 'planned'
+               // A plan moves nothing. The equipment stays exactly where it is,
+               // which is the whole point: planning a repair for next week must
+               // not stop anyone using the microphone this week.
+               ? maintenanceBucketDelta(request.resource.data.item_id) == 0
+               // Recording a repair is not the same as starting one. Equipment
+               // sent on Monday may not be entered until Wednesday, by which
+               // time it is already being worked on — so any stage where the
+               // equipment is away may be the one it is first written down at.
+               // What it may not be is finished.
+               : (request.resource.data.status in ['sent', 'in_service', 'ready']
+                  && maintenanceBucketDelta(request.resource.data.item_id)
+                       == request.resource.data.unit_ids.size()))
+            : true)
         && request.resource.data.created_by_uid == uid()
         && request.resource.data.created_at == request.time;
 
@@ -986,7 +1223,21 @@ service cloud.firestore {
         // Only a changed quantity is re-checked, so an item whose total was
         // reduced later does not freeze edits to unrelated fields.
         && (request.resource.data.quantity_sent == resource.data.quantity_sent
-            || quantityFitsItem(resource.data.item_id, request.resource.data.quantity_sent));
+            || quantityFitsItem(resource.data.item_id, request.resource.data.quantity_sent))
+        // What equipment a repair took is settled when it leaves. Rewriting the
+        // list afterwards would rewrite what happened, and the units' own
+        // history would no longer agree with it. Send a different set by
+        // cancelling this record and creating another.
+        && maintenanceTrackingModeOf(request.resource.data)
+             == maintenanceTrackingModeOf(resource.data)
+        // What equipment a repair took is settled the moment it takes it. While
+        // a repair is still only planned, nothing has been taken, so the list is
+        // still a decision rather than a record.
+        && (resource.data.status == 'planned'
+            || request.resource.data.get('unit_ids', []) == resource.data.get('unit_ids', []))
+        && (maintenanceTrackingModeOf(resource.data) == 'serialized'
+            ? serializedMaintenanceDelta(resource.data, request.resource.data)
+            : true);
 
       // Repair history is permanent. Documents say it should not be deleted
       // casually, and nothing in the MVP authorizes deleting it at all.
@@ -1333,14 +1584,28 @@ service cloud.firestore {
     // is what ties the two together, so an event cannot be filed for a unit the
     // actor could not have moved.
 
+    // A maintenance move covers a batch, so its event names a list of units and
+    // the record that moved them. Every other move is one unit, one event.
+    function isBatchEvent() {
+      return request.resource.data.event_type in
+        ['sent_to_maintenance', 'returned_from_maintenance'];
+    }
+
     function assetEventFieldsValid(eventId) {
-      return hasExactly(
-               ['event_id', 'organization_id', 'inventory_item_id', 'inventory_unit_id',
-                'event_type', 'from_status', 'to_status', 'actor_uid', 'occurred_at'],
-               ['using_team_id', 'using_member_uid', 'retirement_reason', 'note'])
+      return (isBatchEvent()
+              ? hasExactly(
+                  ['event_id', 'organization_id', 'inventory_item_id', 'inventory_unit_ids',
+                   'maintenance_record_id', 'event_type', 'from_status', 'to_status',
+                   'actor_uid', 'occurred_at'],
+                  ['note'])
+              : hasExactly(
+                  ['event_id', 'organization_id', 'inventory_item_id', 'inventory_unit_id',
+                   'event_type', 'from_status', 'to_status', 'actor_uid', 'occurred_at'],
+                  ['using_team_id', 'using_member_uid', 'retirement_reason', 'note']))
         && request.resource.data.event_id == eventId
         && request.resource.data.event_type in
-             ['marked_in_use', 'checked_in', 'marked_lost', 'marked_found', 'retired']
+             ['marked_in_use', 'checked_in', 'marked_lost', 'marked_found', 'retired',
+              'sent_to_maintenance', 'returned_from_maintenance']
         && request.resource.data.from_status in
              ['available', 'in_use', 'in_maintenance', 'lost', 'retired']
         && request.resource.data.to_status in
@@ -1363,8 +1628,52 @@ service cloud.firestore {
         && (!('note' in request.resource.data)
             || (request.resource.data.note is string
                 && request.resource.data.note.size() <= 2000))
+        && (!isBatchEvent()
+            || (request.resource.data.inventory_unit_ids is list
+                && request.resource.data.inventory_unit_ids.size() > 0
+                && request.resource.data.inventory_unit_ids.size() <= 200
+                && request.resource.data.maintenance_record_id is string
+                && request.resource.data.maintenance_record_id.size() > 0
+                // The verbs and the moves have to agree with each other.
+                && (request.resource.data.event_type == 'sent_to_maintenance'
+                    ? (request.resource.data.from_status == 'available'
+                       && request.resource.data.to_status == 'in_maintenance')
+                    : (request.resource.data.from_status == 'in_maintenance'
+                       && request.resource.data.to_status == 'available'))))
         && request.resource.data.actor_uid == uid()
         && request.resource.data.occurred_at == request.time;
+    }
+
+    /**
+     * A batch event, checked against the record it belongs to and one of the
+     * units it claims.
+     *
+     * The maintenance record is read once and carries the authoritative unit
+     * list, so the event cannot describe a different batch than the record it
+     * names. The sample unit is what proves the batch actually happened rather
+     * than being written on its own: an event with no transition behind it
+     * fails here.
+     *
+     * What this does not prove is that *every* listed unit moved. Verifying all
+     * of them costs one read each, which is the exact expense this design
+     * exists to avoid. Each unit does prove its own membership from its side,
+     * so a unit cannot be moved without appearing here — the untestable
+     * direction is an event listing a unit that stayed put.
+     */
+    function batchEventMatchesRecord(data) {
+      return existsAfter(maintenancePath(data.maintenance_record_id))
+        && getAfter(maintenancePath(data.maintenance_record_id)).data.organization_id
+             == data.organization_id
+        && getAfter(maintenancePath(data.maintenance_record_id)).data.item_id
+             == data.inventory_item_id
+        && getAfter(maintenancePath(data.maintenance_record_id)).data
+             .get('unit_ids', []) == data.inventory_unit_ids
+        && existsAfter(unitPath(data.inventory_unit_ids[0]))
+        && getAfter(unitPath(data.inventory_unit_ids[0])).data
+             .get('last_lifecycle_event_id', '') == data.event_id
+        && getAfter(unitPath(data.inventory_unit_ids[0])).data.status == data.to_status
+        && canWriteInventoryForTeam(data.organization_id,
+                                    getAfter(unitPath(data.inventory_unit_ids[0])).data.team_id);
     }
 
     // The unit as it will be once this batch commits. This is what stops an
@@ -1396,7 +1705,9 @@ service cloud.firestore {
       allow get, list: if canViewInventory(resource.data.organization_id);
 
       allow create: if assetEventFieldsValid(eventId)
-        && assetEventMatchesUnit(request.resource.data);
+        && (isBatchEvent()
+            ? batchEventMatchesRecord(request.resource.data)
+            : assetEventMatchesUnit(request.resource.data));
 
       // History is what happened. Correcting it would defeat the purpose.
       allow update, delete: if false;

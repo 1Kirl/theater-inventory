@@ -106,6 +106,8 @@ const EVENT_LABELS: Record<AssetEventType, string> = {
   marked_lost: 'Marked Lost',
   marked_found: 'Found',
   retired: 'Retired',
+  sent_to_maintenance: 'Sent for repair',
+  returned_from_maintenance: 'Back from repair',
 }
 
 export function eventLabel(event: Pick<AssetEvent, 'event_type'>): string {
@@ -180,4 +182,44 @@ export function unitRowControls(params: {
     canEdit: editable,
     canViewDetails: true,
   }
+}
+
+/**
+ * What a unit row says about repairs, beside what it says about itself.
+ *
+ * A plan is an overlay, never the primary badge: a microphone planned for repair
+ * next week is still In Use today, and reading it as anything else would be
+ * wrong. The lifecycle status stays first and the plan sits under it.
+ */
+export interface UnitMaintenanceIndicator {
+  /** Away at the shop right now. Links to the repair. */
+  currentRepairId: string | null
+  /** Intended for a repair that has not started. Reserves nothing. */
+  plannedRepairId: string | null
+  label: string | null
+}
+
+export function unitMaintenanceIndicator(
+  unit: Pick<InventoryUnit, 'status' | 'current_maintenance_record_id'
+    | 'planned_maintenance_record_id'>,
+): UnitMaintenanceIndicator {
+  // A unit at the shop is not also planned for one: starting a repair clears
+  // the plan, so the two are never both shown.
+  if (unit.status === 'in_maintenance' && unit.current_maintenance_record_id) {
+    return {
+      currentRepairId: unit.current_maintenance_record_id,
+      plannedRepairId: null,
+      label: null,
+    }
+  }
+
+  if (unit.planned_maintenance_record_id) {
+    return {
+      currentRepairId: null,
+      plannedRepairId: unit.planned_maintenance_record_id,
+      label: 'Planned for maintenance',
+    }
+  }
+
+  return { currentRepairId: null, plannedRepairId: null, label: null }
 }

@@ -23,7 +23,8 @@ export interface InventoryUnitInput {
   /** Set only while the unit is in use. */
   usingTeamId?: string | null
   usingMemberUid?: string | null
-  checkedOutAt?: Timestamp | null
+  /** A stored timestamp, or `serverTimestamp()` when a loan starts now. */
+  checkedOutAt?: Timestamp | FieldValue | null
   lastKnownLocation?: string | undefined
   lastInspectedAt?: Timestamp | null
   notes?: string | undefined
@@ -33,12 +34,32 @@ export interface InventoryUnitInput {
    * a change to it that is not accompanied by a real transition.
    */
   lastLifecycleEventId?: string | undefined
+  /** Set while away for repair, cleared on return. */
+  currentMaintenanceRecordId?: string | null
+  /** Every repair this unit has been through. Append-only. */
+  maintenanceRecordIds?: readonly string[] | undefined
+  /** A repair intended for this unit that has not started. Advisory only. */
+  plannedMaintenanceRecordId?: string | null
 }
 
 function optionalText(value: string | undefined) {
   const trimmed = value?.trim()
   return trimmed && trimmed.length > 0 ? trimmed : undefined
 }
+
+/**
+ * Everything a unit write must carry through.
+ *
+ * Listed here rather than left to each caller because a full-document write
+ * that forgets a field deletes it. Phase 11D learned this the hard way: the
+ * lifecycle service built its own object, and marking a unit as in use silently
+ * unlinked it from its maintenance plan and erased its repair history. Rules
+ * caught the first and the user saw a permission error; nothing would have
+ * caught the second.
+ *
+ * Every unit write goes through the builders below, and every optional field
+ * appears in one of them.
+ */
 
 /**
  * Fields the user may set.
@@ -78,6 +99,16 @@ function editableFields(params: { input: InventoryUnitInput }) {
       : {}),
     ...(params.input.lastLifecycleEventId
       ? { last_lifecycle_event_id: params.input.lastLifecycleEventId }
+      : {}),
+    // Only while the equipment is actually away; Rules pair it with the status.
+    ...(input.status === 'in_maintenance' && params.input.currentMaintenanceRecordId
+      ? { current_maintenance_record_id: params.input.currentMaintenanceRecordId }
+      : {}),
+    ...(params.input.maintenanceRecordIds && params.input.maintenanceRecordIds.length > 0
+      ? { maintenance_record_ids: [...params.input.maintenanceRecordIds] }
+      : {}),
+    ...(params.input.plannedMaintenanceRecordId
+      ? { planned_maintenance_record_id: params.input.plannedMaintenanceRecordId }
       : {}),
     ...(lastKnownLocation ? { last_known_location: lastKnownLocation } : {}),
     ...(input.lastInspectedAt ? { last_inspected_at: input.lastInspectedAt } : {}),

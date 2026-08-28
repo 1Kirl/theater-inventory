@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   eventDetail, eventLabel, lifecycleActions, lifecyclePanel, noActionsReason, retirementLabel,
-  unitRowControls,
+  unitMaintenanceIndicator, unitRowControls,
 } from '@/features/inventory/unit-lifecycle-view'
 import { canTransition } from '@/domain/inventory'
 import { ASSET_EVENT_TYPES } from '@/types/asset-event'
@@ -404,5 +404,98 @@ describe('what a unit row in the equipment list offers', () => {
           .toBe(panel.visible && panel.actions.length > 0)
       }
     }
+  })
+})
+
+describe('what a unit says about repairs', () => {
+  it('says nothing when there is no repair in sight', () => {
+    expect(unitMaintenanceIndicator({ status: 'available' }))
+      .toEqual({ currentRepairId: null, plannedRepairId: null, label: null })
+  })
+
+  it('links to the repair a unit is away for', () => {
+    const shown = unitMaintenanceIndicator({
+      status: 'in_maintenance', current_maintenance_record_id: 'rec-a',
+    })
+
+    expect(shown.currentRepairId).toBe('rec-a')
+    expect(shown.plannedRepairId).toBeNull()
+  })
+
+  it('marks a unit that is only planned for a repair', () => {
+    const shown = unitMaintenanceIndicator({
+      status: 'available', planned_maintenance_record_id: 'plan-a',
+    })
+
+    expect(shown.plannedRepairId).toBe('plan-a')
+    expect(shown.label).toBe('Planned for maintenance')
+  })
+
+  it('marks a unit that is in use and also planned', () => {
+    // The case the whole planning model exists for: a microphone somebody is
+    // using today, booked for repair next week.
+    const shown = unitMaintenanceIndicator({
+      status: 'in_use', planned_maintenance_record_id: 'plan-a',
+    })
+
+    expect(shown.label).toBe('Planned for maintenance')
+    expect(shown.currentRepairId).toBeNull()
+  })
+
+  it('marks a lost unit that was planned, rather than dropping the plan', () => {
+    const shown = unitMaintenanceIndicator({
+      status: 'lost', planned_maintenance_record_id: 'plan-a',
+    })
+
+    expect(shown.plannedRepairId).toBe('plan-a')
+  })
+
+  it('never shows a unit as both at the shop and planned for it', () => {
+    // Starting a repair clears the plan, so this state should not arise; if it
+    // somehow did, the current repair is the truthful one.
+    const shown = unitMaintenanceIndicator({
+      status: 'in_maintenance',
+      current_maintenance_record_id: 'rec-a',
+      planned_maintenance_record_id: 'plan-a',
+    })
+
+    expect(shown.currentRepairId).toBe('rec-a')
+    expect(shown.plannedRepairId).toBeNull()
+    expect(shown.label).toBeNull()
+  })
+})
+
+describe('a plan does not take a unit\'s controls away', () => {
+  const planned = { planned_maintenance_record_id: 'plan-a' }
+
+  it('still lets an available planned unit be taken out', () => {
+    // Planning reserves nothing. The microphone can still be used this week.
+    expect(lifecycleActions({ status: 'available', condition: 'good', ...planned })
+      .map((one) => one.to)).toEqual(['in_use', 'lost', 'retired'])
+  })
+
+  it('still lets a planned unit that is out be checked in', () => {
+    expect(lifecycleActions({ status: 'in_use', condition: 'good', ...planned })
+      .map((one) => one.to)).toEqual(['available', 'lost'])
+  })
+
+  it('offers a planned unit exactly what an unplanned one gets', () => {
+    for (const status of UNIT_STATUSES) {
+      const withPlan = lifecycleActions({ status, condition: 'good', ...planned })
+      const without = lifecycleActions({ status, condition: 'good' })
+
+      expect(withPlan.map((one) => one.to), status).toEqual(without.map((one) => one.to))
+    }
+  })
+
+  it('still exposes status management on the unit row', () => {
+    const row = unitRowControls({
+      unit: { status: 'available', condition: 'good', team_id: 'team-lighting', ...planned },
+      role: 'admin',
+      membership: null,
+    })
+
+    expect(row.canManageStatus).toBe(true)
+    expect(row.canEdit).toBe(true)
   })
 })

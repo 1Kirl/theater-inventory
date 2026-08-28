@@ -26,6 +26,19 @@ export interface MaintenanceRecord {
   organization_id: string
   item_id: string
   team_id: string
+
+  /**
+   * How the repaired equipment is counted. Absent means `bulk`, which is every
+   * record written before individual tracking existed.
+   *
+   * A bulk repair is a quantity: four of the twenty-four clamps went out, and
+   * which four was never recorded. A serialized repair names the exact pieces.
+   */
+  tracking_mode?: 'bulk' | 'serialized'
+  /** Serialized only. Fixed when the equipment leaves; see decision 84. */
+  unit_ids?: string[]
+
+  /** Mirrors `unit_ids.length` for a serialized record. */
   quantity_sent: number
   issue_description: string
   status: MaintenanceStatus

@@ -130,6 +130,39 @@ export interface InventoryUnit {
    */
   last_lifecycle_event_id?: string
 
+  /**
+   * The repair this unit is away for, while it is away.
+   *
+   * Current state, not history: set when the equipment leaves, removed when it
+   * comes back. Rules require it exactly when `status == 'in_maintenance'`, so
+   * a unit can neither be at the shop anonymously nor claim to be there after
+   * returning. The unit page reads the record by id rather than searching.
+   */
+  current_maintenance_record_id?: string
+  /**
+   * A repair this unit is *intended* for, which has not started.
+   *
+   * Advisory only. It reserves nothing, blocks nothing, and is not a lifecycle
+   * state: a unit planned for repair can still be taken out, checked in, lost,
+   * or retired, and its status badge keeps saying what it actually is. The
+   * pointer exists so a unit page can say "planned for maintenance" and link to
+   * the plan without searching a collection for records that claim it.
+   *
+   * At most one open plan per unit. Rules refuse a second while the first is
+   * still there, which is the simplest way to stop a teacher accidentally
+   * planning the same microphone into two repairs.
+   */
+  planned_maintenance_record_id?: string
+  /**
+   * Every repair this unit has been through, oldest first.
+   *
+   * Append-only, one entry per visit, added at the moment the equipment leaves.
+   * This is what lets one physical asset answer "has this been repaired before"
+   * from its own document — the shared batch event names many units at once and
+   * is not a trustworthy per-unit index.
+   */
+  maintenance_record_ids?: string[]
+
   created_by_uid: string
   created_at: Timestamp
   updated_at: Timestamp

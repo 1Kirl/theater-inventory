@@ -1,5 +1,6 @@
 import { conditionSummary } from '@/domain/inventory'
 import { currentlyInService, isOverdue, openRecords } from '@/domain/maintenance'
+import { isSerializedMaintenance } from '@/domain/unit-maintenance'
 import { isOpenAction, requirementAvailability } from '@/domain/production'
 import { dateKeyOf, sortEvents, toDateKey } from '@/domain/calendar'
 import { hasModuleAccess } from '@/domain/module-access'
@@ -89,7 +90,17 @@ export function summarizeInventory(items: readonly InventoryItem[]): InventorySu
 export interface MaintenanceSummary {
   /** Repair jobs still open, counted as records. */
   openCount: number
-  /** Units currently away, summed by the existing in-service rule. */
+  /**
+   * Equipment currently away for repair.
+   *
+   * Two sources, deliberately. A bulk repair is a quantity nobody counted piece
+   * by piece, so its own record is the only thing that knows. A serialized item
+   * counts its units, and those counts are what the equipment itself says — so
+   * they win over a repair record that might disagree.
+   *
+   * Serialized repair records are excluded from the record-based half, or the
+   * same equipment would be counted twice.
+   */
   inServiceQuantity: number
   overdueCount: number
   recent: MaintenanceRecord[]
@@ -105,14 +116,25 @@ export function summarizeMaintenance(
   records: readonly MaintenanceRecord[],
   now: Date,
   limit = 5,
+  /** Serialized items, whose own counts are authoritative for their equipment. */
+  items: readonly InventoryItem[] = [],
 ): MaintenanceSummary {
   const open = openRecords(records)
+
+  // A bulk repair is the only record of its own quantity. A serialized one is
+  // not: its equipment counts itself, so the record is skipped here and the
+  // items are counted instead. Counting both would count the same clamp twice.
+  const bulkRecords = records.filter((record) => !isSerializedMaintenance(record))
+  const serializedInMaintenance = items.reduce(
+    (total, item) => total + (item.unit_counts?.in_maintenance ?? 0),
+    0,
+  )
 
   return {
     openCount: open.length,
     // The existing rule: sent, in service, or ready. Not the same set as an
     // open job, because a planned repair has not left the building yet.
-    inServiceQuantity: currentlyInService(records),
+    inServiceQuantity: currentlyInService(bulkRecords) + serializedInMaintenance,
     overdueCount: records.filter((record) => isOverdue(record, now)).length,
     recent: [...records].sort(newestFirst).slice(0, limit),
   }

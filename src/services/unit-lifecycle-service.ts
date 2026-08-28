@@ -10,6 +10,7 @@ import {
   isOperationallyAvailable, mirrorsOf, withStatusChanged, type ItemMirrors,
 } from '@/domain/inventory-unit'
 import { buildAssetEventDocument, eventTypeFor } from '@/domain/asset-event-payloads'
+import { buildInventoryUnitUpdate } from '@/domain/inventory-unit-payloads'
 import { buildInventoryItemUpdate } from '@/domain/inventory-payloads'
 import type { AssetEvent } from '@/types/asset-event'
 import type { InventoryItem, InventoryUnit, RetirementReason, UnitStatus } from '@/types/inventory'
@@ -85,17 +86,6 @@ export function lifecycleRefusal(action: LifecycleAction): string | null {
   }
 
   return null
-}
-
-/** The unit fields that describe a current loan, and only a current loan. */
-function usageFieldsFor(action: LifecycleAction, now: () => unknown) {
-  if (action.to !== 'in_use') return {}
-
-  return {
-    using_team_id: action.usingTeamId as string,
-    ...(action.usingMemberUid ? { using_member_uid: action.usingMemberUid } : {}),
-    checked_out_at: now(),
-  }
 }
 
 function itemInputWithMirrors(item: InventoryItem, mirrors: ItemMirrors) {
@@ -180,33 +170,46 @@ export async function performLifecycleAction(action: LifecycleAction): Promise<v
     const previousTeam = unit.using_team_id ?? null
     const previousMember = unit.using_member_uid ?? null
 
-    transaction.set(unitRef, {
-      unit_id: unit.unit_id,
-      organization_id: unit.organization_id,
-      inventory_item_id: unit.inventory_item_id,
-      team_id: unit.team_id,
-      asset_code: unit.asset_code,
-      condition: unit.condition,
-      status: action.to,
-      storage_location: unit.storage_location,
-      ...(action.to === 'retired' && action.retirementReason
-        ? { retirement_reason: action.retirementReason }
-        : {}),
-      // Borrowing details describe a unit that is out. Checking it in, losing
-      // it, or retiring it all end the loan, so they are dropped from the
-      // current state — the event above keeps them.
-      ...usageFieldsFor(action, serverTimestamp),
-      // The event this status came from. Rules require it to change on every
-      // transition and to name an event that describes exactly this move, which
-      // is what makes a status change without history impossible.
-      last_lifecycle_event_id: eventRef.id,
-      ...(unit.last_known_location ? { last_known_location: unit.last_known_location } : {}),
-      ...(unit.last_inspected_at ? { last_inspected_at: unit.last_inspected_at } : {}),
-      ...(unit.notes ? { notes: unit.notes } : {}),
-      created_by_uid: unit.created_by_uid,
-      created_at: unit.created_at,
-      updated_at: serverTimestamp(),
-    })
+    // Built by the shared payload builder rather than by hand. A unit write
+    // replaces the whole document, so a field this code forgets is a field the
+    // unit loses — which is how an earlier version of this function silently
+    // unlinked units from their maintenance plans and erased their repair
+    // history. The builder is the one place that knows every field.
+    transaction.set(unitRef, buildInventoryUnitUpdate({
+      unitId: unit.unit_id,
+      organizationId: unit.organization_id,
+      inventoryItemId: unit.inventory_item_id,
+      createdByUid: unit.created_by_uid,
+      createdAt: unit.created_at,
+      now: serverTimestamp,
+      input: {
+        assetCode: unit.asset_code,
+        owningTeamId: unit.team_id,
+        condition: unit.condition,
+        status: action.to,
+        storageLocation: unit.storage_location,
+        retirementReason: action.retirementReason ?? null,
+        // Borrowing details describe a unit that is out. Checking it in, losing
+        // it, or retiring it all end the loan, so the builder drops them for
+        // any status but `in_use` — the event above keeps them.
+        usingTeamId: action.to === 'in_use' ? (action.usingTeamId ?? null) : null,
+        usingMemberUid: action.to === 'in_use' ? (action.usingMemberUid ?? null) : null,
+        checkedOutAt: action.to === 'in_use' ? serverTimestamp() : null,
+        lastKnownLocation: unit.last_known_location,
+        lastInspectedAt: unit.last_inspected_at ?? null,
+        notes: unit.notes,
+        // The event this status came from. Rules require it to change on every
+        // transition and to name an event that describes exactly this move,
+        // which is what makes a status change without history impossible.
+        lastLifecycleEventId: eventRef.id,
+        // Carried through untouched. None of these lifecycle moves is a
+        // maintenance operation, so none of them may disturb what the unit
+        // says about repairs — past, present, or intended.
+        currentMaintenanceRecordId: unit.current_maintenance_record_id ?? null,
+        maintenanceRecordIds: unit.maintenance_record_ids,
+        plannedMaintenanceRecordId: unit.planned_maintenance_record_id ?? null,
+      },
+    }))
 
     const next = withStatusChanged(mirrorsOf(item), {
       condition: unit.condition,

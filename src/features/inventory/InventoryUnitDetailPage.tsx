@@ -15,6 +15,9 @@ import {
   eventDetail, eventLabel, lifecyclePanel, retirementLabel,
 } from '@/features/inventory/unit-lifecycle-view'
 import { listUnitHistory } from '@/services/unit-lifecycle-service'
+import { getMaintenanceRecord } from '@/services/maintenance-service'
+import { MAINTENANCE_STATUS_LABELS } from '@/domain/maintenance'
+import type { MaintenanceRecord } from '@/types/maintenance'
 import { getUserProfiles } from '@/services/user-service'
 import type { AssetEvent } from '@/types/asset-event'
 import { getInventoryItem } from '@/services/inventory-service'
@@ -42,6 +45,9 @@ export function InventoryUnitDetailPage() {
   const [history, setHistory] = useState<AssetEvent[]>([])
   const [actorNames, setActorNames] = useState<Map<string, string>>(new Map())
   const [action, setAction] = useState<{ to: UnitStatus | null; label: string } | null>(null)
+  const [currentMaintenance, setCurrentMaintenance] = useState<MaintenanceRecord | null>(null)
+  const [pastMaintenance, setPastMaintenance] = useState<MaintenanceRecord[]>([])
+  const [plannedMaintenance, setPlannedMaintenance] = useState<MaintenanceRecord | null>(null)
 
   const load = useCallback((): Promise<void> => {
     if (!unitId) return Promise.resolve()
@@ -50,6 +56,25 @@ export function InventoryUnitDetailPage() {
       const unit = await getInventoryUnit(unitId as string)
       const item = unit ? await getInventoryItem(unit.inventory_item_id) : null
       const codes = unit ? await listAssetCodes(unit.organization_id).catch(() => []) : []
+
+      // Read by id from the unit's own fields: the current repair from its
+      // pointer, the past ones from its list. No collection search, no index,
+      // and nothing shown that the unit does not itself vouch for.
+      const currentMaintenance = unit?.current_maintenance_record_id
+        ? await getMaintenanceRecord(unit.current_maintenance_record_id).catch(() => null)
+        : null
+      // Read by id from the unit's own pointer. A plan is not a repair, so it
+      // gets its own section rather than being folded into the current one.
+      const plannedMaintenance = unit?.planned_maintenance_record_id
+        ? await getMaintenanceRecord(unit.planned_maintenance_record_id).catch(() => null)
+        : null
+      const pastMaintenance = (
+        await Promise.all(
+          (unit?.maintenance_record_ids ?? [])
+            .filter((id) => id !== unit?.current_maintenance_record_id)
+            .map((id) => getMaintenanceRecord(id).catch(() => null)),
+        )
+      ).filter((record): record is MaintenanceRecord => record !== null)
 
       const history = unit
         ? await listUnitHistory({
@@ -72,13 +97,19 @@ export function InventoryUnitDetailPage() {
       }
       const actorNames = names
 
-      return { unit, item, codes, history, actorNames }
+      return {
+        unit, item, codes, history, actorNames, currentMaintenance, pastMaintenance,
+        plannedMaintenance,
+      }
     }
 
     return read().then(
       (loaded) => {
         setUnit(loaded.unit); setItem(loaded.item); setCodes(loaded.codes)
-        setHistory(loaded.history); setActorNames(loaded.actorNames); setError(null)
+        setHistory(loaded.history); setActorNames(loaded.actorNames)
+        setCurrentMaintenance(loaded.currentMaintenance)
+        setPlannedMaintenance(loaded.plannedMaintenance)
+        setPastMaintenance(loaded.pastMaintenance); setError(null)
       },
       (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setUnit(null) },
     )
@@ -246,9 +277,132 @@ export function InventoryUnitDetailPage() {
         </Card>
       ) : null}
 
+      {currentMaintenance ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Current repair</CardTitle>
+            <CardDescription>
+              This unit is away. The details live on the repair record rather than being copied
+              here.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground text-sm">Status</dt>
+                <dd className="pt-1 text-sm">
+                  {MAINTENANCE_STATUS_LABELS[currentMaintenance.status]}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-sm">Service provider</dt>
+                <dd className="pt-1 text-sm">
+                  {currentMaintenance.service_provider_name ?? 'Not recorded'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-sm">Expected back</dt>
+                <dd className="pt-1 text-sm">
+                  {currentMaintenance.expected_return_at
+                    ? currentMaintenance.expected_return_at.toDate().toLocaleDateString()
+                    : 'Not recorded'}
+                </dd>
+              </div>
+            </dl>
+            <Button asChild size="sm" variant="outline">
+              <Link to={paths.maintenanceRecord(currentMaintenance.maintenance_id)}>
+                View repair
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {plannedMaintenance && !currentMaintenance ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Planned maintenance</CardTitle>
+            <CardDescription>
+              This unit is intended for a repair that has not started. It is not reserved and may
+              still be used; availability is checked again when the repair begins.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <dl className="grid gap-4 sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground text-sm">Service provider</dt>
+                <dd className="pt-1 text-sm">
+                  {plannedMaintenance.service_provider_name ?? 'Not recorded'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-sm">Planned for</dt>
+                <dd className="pt-1 text-sm">
+                  {plannedMaintenance.sent_at
+                    ? plannedMaintenance.sent_at.toDate().toLocaleDateString()
+                    : 'No date set'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground text-sm">Issue</dt>
+                <dd className="pt-1 text-sm">{plannedMaintenance.issue_description}</dd>
+              </div>
+            </dl>
+            <Button asChild size="sm" variant="outline">
+              <Link to={paths.maintenanceRecord(plannedMaintenance.maintenance_id)}>
+                View plan
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {pastMaintenance.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Repair history</CardTitle>
+            <CardDescription>
+              Every repair this exact piece of equipment has been through.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-3">
+              {[...pastMaintenance]
+                .sort((left, right) =>
+                  (right.created_at?.toMillis() ?? 0) - (left.created_at?.toMillis() ?? 0))
+                .map((record) => (
+                  <li key={record.maintenance_id} className="border-l-2 pl-4">
+                    <p className="text-muted-foreground text-xs">
+                      {record.sent_at
+                        ? record.sent_at.toDate().toLocaleDateString()
+                        : record.created_at?.toDate().toLocaleDateString() ?? ''}
+                      {record.returned_at
+                        ? ` — back ${record.returned_at.toDate().toLocaleDateString()}`
+                        : ''}
+                    </p>
+                    <p className="font-medium">
+                      {record.service_provider_name ?? 'Repair'}
+                    </p>
+                    <p className="text-sm">{record.issue_description}</p>
+                    <p className="text-muted-foreground text-sm">
+                      {MAINTENANCE_STATUS_LABELS[record.status]}
+                      {typeof record.cost === 'number'
+                        ? ` · ${record.cost.toLocaleString()}`
+                        : ''}
+                    </p>
+                    <Button asChild size="sm" variant="ghost" className="-ml-3 mt-1">
+                      <Link to={paths.maintenanceRecord(record.maintenance_id)}>View record</Link>
+                    </Button>
+                  </li>
+                ))}
+            </ul>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">History</CardTitle>
+          <CardTitle className="text-base">Lifecycle history</CardTitle>
           <CardDescription>
             What has happened to this piece of equipment. Newest first.
           </CardDescription>

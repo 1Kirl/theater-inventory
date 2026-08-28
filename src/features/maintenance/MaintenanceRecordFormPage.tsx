@@ -9,7 +9,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useOrganization } from '@/features/organizations/useOrganization'
-import { canEditTeamScopedRecord } from '@/domain/module-access'
+import { assignableTeamIds, canEditTeamScopedRecord } from '@/domain/module-access'
+import { isSerialized } from '@/domain/inventory'
+import { CONDITION_LABELS } from '@/domain/inventory'
+import {
+  SERIALIZED_CREATE_STATUSES, canPlanForMaintenance, canSendToMaintenance, ineligibleReason,
+  isSerializedMaintenance, planIneligibleReason, validateMaintenanceSelection,
+} from '@/domain/unit-maintenance'
+import { listUnitsForItem } from '@/services/inventory-unit-service'
+import {
+  planUnitsForMaintenance, sendUnitsToMaintenance,
+} from '@/services/unit-maintenance-service'
+import type { InventoryUnit } from '@/types/inventory'
 import {
   MAINTENANCE_STATUS_LABELS,
   overCapacityWarning,
@@ -109,6 +120,47 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
   }, [items, role, membership])
 
   const selectedItem = items.find((item) => item.item_id === state.itemId) ?? null
+  // A serialized item is repaired by naming the equipment, not by counting it.
+  const serialized = selectedItem !== null && isSerialized(selectedItem)
+
+  const [units, setUnits] = useState<InventoryUnit[]>([])
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([])
+  const [unitSearch, setUnitSearch] = useState('')
+  const [serializedStatus, setSerializedStatus] = useState<MaintenanceStatus>('sent')
+
+  const assignable = assignableTeamIds(role, membership, teams.map((team) => team.team_id))
+
+  // The effect starts the read and nothing else; state settles in the
+  // continuations, including the case where there is nothing to read.
+  const itemForUnits = serialized && organization ? selectedItem : null
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function read() {
+      if (!itemForUnits || !organization) return []
+      return listUnitsForItem({
+        organizationId: organization.organization_id,
+        itemId: itemForUnits.item_id,
+      })
+    }
+
+    read().then(
+      (loaded) => { if (!cancelled) { setUnits(loaded); setSelectedUnitIds([]) } },
+      () => { if (!cancelled) { setUnits([]); setSelectedUnitIds([]) } },
+    )
+
+    return () => { cancelled = true }
+  }, [itemForUnits, organization])
+
+  const visibleUnits = useMemo(() => {
+    const needle = unitSearch.trim().toLowerCase()
+    return units.filter((unit) => (
+      needle.length === 0
+      || unit.asset_code.toLowerCase().includes(needle)
+      || unit.storage_location.toLowerCase().includes(needle)
+    ))
+  }, [units, unitSearch])
 
   // State settles in the promise continuations rather than synchronously, so
   // the effect starts the read and nothing else.
@@ -221,17 +273,63 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
       return
     }
 
+    if (state.issueDescription.trim().length === 0) {
+      setError('Describe what is wrong with the equipment.')
+      return
+    }
+
+    if (serialized) {
+      // Individually tracked equipment goes by name. The quantity is whatever
+      // was chosen, and the repair starts the moment it leaves.
+      const selection = validateMaintenanceSelection({
+        item: selectedItem,
+        units,
+        selectedIds: [...selectedUnitIds],
+        teamIds: assignable,
+      })
+      if (!selection.valid) {
+        setError(selection.message)
+        return
+      }
+
+      const chosen = units.filter((unit) => selection.unitIds.includes(unit.unit_id))
+
+      setSubmitting(true)
+      try {
+        // Planning writes a pointer and nothing else; sending takes the
+        // equipment. Two different operations behind one form.
+        const details = {
+            issueDescription: state.issueDescription,
+            sentAt: toDate(state.sentAt),
+            returnMethod: (state.returnMethod || null) as ReturnMethod | null,
+            expectedReturnAt: toDate(state.expectedReturnAt),
+            serviceProviderName: state.providerName,
+            serviceProviderPhone: state.providerPhone,
+            serviceProviderEmail: state.providerEmail,
+            cost: state.cost.trim() ? Number(state.cost) : null,
+            repairNotes: state.repairNotes,
+        }
+
+        const { maintenanceId } = serializedStatus === 'planned'
+          ? await planUnitsForMaintenance({ item: selectedItem, units: chosen, input: details })
+          : await sendUnitsToMaintenance({
+            item: selectedItem, units: chosen, status: serializedStatus, input: details,
+          })
+
+        navigate(paths.maintenanceRecord(maintenanceId), { replace: true })
+      } catch (caught) {
+        setError(toOrganizationErrorMessage(caught))
+        setSubmitting(false)
+      }
+      return
+    }
+
     const quantityCheck = validateQuantitySent({
       quantitySent: quantity,
       itemQuantityTotal: selectedItem.quantity_total,
     })
     if (!quantityCheck.valid) {
       setError(quantityCheck.message)
-      return
-    }
-
-    if (state.issueDescription.trim().length === 0) {
-      setError('Describe what is wrong with the equipment.')
       return
     }
 
@@ -253,7 +351,21 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
     setSubmitting(true)
     try {
       if (mode === 'edit' && existing) {
-        await updateMaintenanceRecord({ existing, input })
+        await updateMaintenanceRecord({
+          existing,
+          // The equipment a repair took is settled when it leaves, and its
+          // status moves through the workflow on the record page. This form
+          // edits the paperwork around them.
+          input: isSerializedMaintenance(existing)
+            ? {
+              ...input,
+              trackingMode: 'serialized' as const,
+              unitIds: existing.unit_ids ?? [],
+              quantitySent: existing.quantity_sent,
+              status: existing.status,
+            }
+            : input,
+        })
         navigate(paths.maintenanceRecord(existing.maintenance_id), { replace: true })
       } else {
         const { maintenanceId } = await createMaintenanceRecord({
@@ -339,20 +451,136 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
               ) : null}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${fieldId}-quantity`}>Quantity sent</Label>
-              <Input
-                id={`${fieldId}-quantity`}
-                type="number"
-                min={1}
-                step={1}
-                value={state.quantitySent}
-                onChange={(event) => set('quantitySent', event.target.value)}
-                disabled={submitting}
-                required
-              />
-            </div>
+            {serialized ? (
+              <div className="space-y-3 sm:col-span-2">
+                <div>
+                  <Label>Select equipment to send</Label>
+                  <p className="text-muted-foreground text-xs">
+                    Individually tracked equipment goes by name, so the repair records exactly
+                    which pieces left. Only equipment on the shelf can be sent.
+                  </p>
+                </div>
 
+                <Input
+                  value={unitSearch}
+                  onChange={(event) => setUnitSearch(event.target.value)}
+                  placeholder="Search asset code or location"
+                  disabled={submitting}
+                  aria-label="Search units"
+                />
+
+                {units.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    This item has no individual equipment recorded yet.
+                  </p>
+                ) : (
+                  <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                    {visibleUnits.map((unit) => {
+                      const planning = serializedStatus === 'planned'
+                      const allowedNow = planning
+                        ? canPlanForMaintenance(unit)
+                        : canSendToMaintenance(unit)
+                      const eligible = allowedNow && assignable.includes(unit.team_id)
+                      const reason = !allowedNow
+                        ? (planning ? planIneligibleReason(unit) : ineligibleReason(unit))
+                        : 'Owned by a crew you cannot manage'
+                      const checked = selectedUnitIds.includes(unit.unit_id)
+
+                      return (
+                        <li key={unit.unit_id}>
+                          <label
+                            className={`flex items-start gap-3 rounded-md border p-3 ${
+                              eligible ? 'cursor-pointer' : 'opacity-60'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              checked={checked}
+                              disabled={!eligible || submitting}
+                              onChange={(event) => setSelectedUnitIds((current) => (
+                                event.target.checked
+                                  ? [...current, unit.unit_id]
+                                  : current.filter((id) => id !== unit.unit_id)
+                              ))}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-mono text-sm font-medium">
+                                {unit.asset_code}
+                              </span>
+                              <span className="text-muted-foreground block text-sm">
+                                {CONDITION_LABELS[unit.condition]} · {unit.storage_location}
+                              </span>
+                              {eligible ? null : (
+                                <span className="text-muted-foreground block text-xs">
+                                  {reason}
+                                </span>
+                              )}
+                            </span>
+                          </label>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+
+                <p className="text-sm font-medium tabular-nums">
+                  Selected {selectedUnitIds.length}
+                  {selectedUnitIds.length === 1 ? ' unit' : ' units'}
+                </p>
+
+                <div className="space-y-2">
+                  <Label htmlFor={`${fieldId}-serial-status`}>Current repair status</Label>
+                  <Select
+                    value={serializedStatus}
+                    onValueChange={(value) => setSerializedStatus(value as MaintenanceStatus)}
+                    disabled={submitting}
+                  >
+                    <SelectTrigger id={`${fieldId}-serial-status`} className="sm:max-w-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SERIALIZED_CREATE_STATUSES.map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {MAINTENANCE_STATUS_LABELS[status]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-xs">
+                    Where the repair already is. Equipment sent on Monday might not be entered
+                    until Wednesday, by which time the shop may already be working on it.
+                  </p>
+                </div>
+
+                <Alert>
+                  <AlertDescription>
+                    {serializedStatus === 'planned'
+                      ? 'Planning this repair does not reserve the equipment or take it out of '
+                        + 'availability. The equipment may still be used. Availability will be '
+                        + 'checked again when the repair starts.'
+                      : 'Whichever stage you record, the chosen equipment leaves the inventory '
+                        + 'now and comes back together when the repair is returned or cancelled.'}
+                  </AlertDescription>
+                </Alert>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor={`${fieldId}-quantity`}>Quantity sent</Label>
+                <Input
+                  id={`${fieldId}-quantity`}
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={state.quantitySent}
+                  onChange={(event) => set('quantitySent', event.target.value)}
+                  disabled={submitting}
+                  required
+                />
+              </div>
+            )}
+
+            {serialized ? null : (
             <div className="space-y-2">
               <Label htmlFor={`${fieldId}-status`}>Status</Label>
               <Select
@@ -368,6 +596,7 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
                 </SelectContent>
               </Select>
             </div>
+            )}
 
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor={`${fieldId}-issue`}>Issue</Label>

@@ -13,7 +13,7 @@ import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inven
 import { BulkGenerateUnitsDialog } from '@/features/inventory/BulkGenerateUnitsDialog'
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
 import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
-import { unitRowControls } from '@/features/inventory/unit-lifecycle-view'
+import { unitMaintenanceIndicator, unitRowControls } from '@/features/inventory/unit-lifecycle-view'
 import { teamNameOf } from '@/features/inventory/inventory-view'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { listAssetCodes, listUnitsForItem } from '@/services/inventory-unit-service'
@@ -129,12 +129,31 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                       {UNIT_STATUS_LABELS[unit.status]}
                     </Badge>
                   </div>
+                  {unitMaintenanceIndicator(unit).label ? (
+                    <p className="text-muted-foreground text-xs">
+                      {unitMaintenanceIndicator(unit).label}
+                    </p>
+                  ) : null}
                   <p className="text-muted-foreground mt-1 text-sm">
                     {teamNameOf(unit, teams)} · {CONDITION_LABELS[unit.condition]}
                   </p>
                   <p className="text-muted-foreground text-sm">{unit.storage_location}</p>
 
                   <div className="mt-3 flex flex-wrap gap-2">
+                    {unit.current_maintenance_record_id ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={paths.maintenanceRecord(unit.current_maintenance_record_id)}>
+                          View repair
+                        </Link>
+                      </Button>
+                    ) : null}
+                    {unit.planned_maintenance_record_id ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={paths.maintenanceRecord(unit.planned_maintenance_record_id)}>
+                          View plan
+                        </Link>
+                      </Button>
+                    ) : null}
                     {unitRowControls({ unit, role, membership }).canManageStatus ? (
                       <Button size="sm" variant="outline" onClick={() => setManaging(unit)}>
                         Manage status
@@ -180,6 +199,13 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                         <Badge variant={unitBadgeVariant(unit.status)}>
                           {UNIT_STATUS_LABELS[unit.status]}
                         </Badge>
+                        {/* Secondary to the real status: a plan is an intention
+                            about next week, not where the equipment is now. */}
+                        {unitMaintenanceIndicator(unit).label ? (
+                          <span className="text-muted-foreground mt-1 block text-xs">
+                            {unitMaintenanceIndicator(unit).label}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {teamNameOf(unit, teams)}
@@ -190,6 +216,20 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <div className="flex justify-end gap-1">
+                          {unit.current_maintenance_record_id ? (
+                            <Button asChild size="sm" variant="ghost">
+                              <Link to={paths.maintenanceRecord(unit.current_maintenance_record_id)}>
+                                View repair
+                              </Link>
+                            </Button>
+                          ) : null}
+                          {unit.planned_maintenance_record_id ? (
+                            <Button asChild size="sm" variant="ghost">
+                              <Link to={paths.maintenanceRecord(unit.planned_maintenance_record_id)}>
+                                View plan
+                              </Link>
+                            </Button>
+                          ) : null}
                           {unitRowControls({ unit, role, membership }).canManageStatus ? (
                             <Button size="sm" variant="ghost" onClick={() => setManaging(unit)}>
                               Manage status

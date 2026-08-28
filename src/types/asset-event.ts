@@ -14,7 +14,26 @@ export const ASSET_EVENT_TYPES = [
   'marked_lost',
   'marked_found',
   'retired',
+  'sent_to_maintenance',
+  'returned_from_maintenance',
 ] as const
+
+/**
+ * The two moves that happen to a whole batch at once.
+ *
+ * Equipment goes to the repair shop together and comes back together, so one
+ * event covers the batch and every unit in it names that same event. Security
+ * Rules read a shared document once however many units point at it, which is
+ * what makes a fifty-clamp repair possible at all — the per-unit shape ran out
+ * of access calls at six.
+ */
+export const BATCH_EVENT_TYPES = ['sent_to_maintenance', 'returned_from_maintenance'] as const
+
+export type BatchEventType = (typeof BATCH_EVENT_TYPES)[number]
+
+export function isBatchEventType(type: AssetEventType): type is BatchEventType {
+  return (BATCH_EVENT_TYPES as readonly string[]).includes(type)
+}
 
 export type AssetEventType = (typeof ASSET_EVENT_TYPES)[number]
 
@@ -31,11 +50,16 @@ export interface AssetEvent {
   event_id: string
   organization_id: string
   inventory_item_id: string
-  inventory_unit_id: string
+  /** Single-unit events only. A batch event carries `inventory_unit_ids`. */
+  inventory_unit_id?: string
 
   event_type: AssetEventType
   from_status: UnitStatus
   to_status: UnitStatus
+
+  /** Batch events only: every unit the repair took, and the record that took them. */
+  inventory_unit_ids?: string[]
+  maintenance_record_id?: string
 
   /**
    * Who had the equipment. On `marked_in_use` this is who is taking it; on

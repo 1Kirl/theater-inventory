@@ -315,9 +315,14 @@ export async function updateInventoryUnit(params: {
     usingTeamId: params.existing.using_team_id ?? null,
     usingMemberUid: params.existing.using_member_uid ?? null,
     checkedOutAt: params.existing.checked_out_at ?? null,
-    // Carried through: Rules refuse an edit that changes it without a real
-    // transition, and an edit is not one.
+    // Carried through: Rules refuse an edit that changes any of these without
+    // the operation that owns them. An edit is not a lifecycle move and not a
+    // maintenance operation, so it must leave all of them exactly as they are —
+    // and a full-document write that omits one deletes it.
     lastLifecycleEventId: params.existing.last_lifecycle_event_id,
+    currentMaintenanceRecordId: params.existing.current_maintenance_record_id ?? null,
+    maintenanceRecordIds: params.existing.maintenance_record_ids,
+    plannedMaintenanceRecordId: params.existing.planned_maintenance_record_id ?? null,
   }
   validateInput(input)
 

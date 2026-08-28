@@ -1961,3 +1961,267 @@ more rows than the total claimed — the numbers were right and the word was
 wrong. The serialized summary now says **Active**, and shows **Retired**
 separately when there is anything to show. No mirror semantics changed, and no
 unit is hidden to make a number agree.
+
+### 82. Repairs name the equipment, once there is equipment to name
+
+A bulk repair records a quantity — four of the twenty-four clamps went out, and
+which four was never written down. That stays exactly as it was: bulk items keep
+`quantity_sent`, keep `planned`, and keep their existing workflow untouched.
+
+A serialized repair names the pieces. `maintenance_records` gains
+`tracking_mode` and `unit_ids`, and `quantity_sent` mirrors the list so
+everything that already reads it keeps working.
+
+### 82a. A serialized repair starts at `sent`
+
+There is no `planned` stage for individually tracked equipment. A planned repair
+holding a list of units would be a reservation, and two planned repairs could
+name the same clamp — which needs locking infrastructure this project has no
+business building. The record exists because the equipment left, so it starts
+where that puts it.
+
+Bulk repairs keep `planned`, because a bulk quantity is not taken from anywhere
+until it goes.
+
+### 82b. Only from the shelf
+
+A unit enters maintenance from `available` and nothing else. Equipment that is
+out gets checked in first, something lost gets found first. Each of those is a
+lifecycle move with its own history, and letting a repair perform one silently
+would be a shortcut around exactly the record this phase exists to keep.
+
+Condition is not a factor either way. A clamp in perfect condition can go for a
+service, one marked unusable is what a repair is for, and coming back is not a
+claim that anything was fixed — condition never changes automatically, in either
+direction.
+
+### 83. One event for the batch, because six units was not enough
+
+The per-unit lifecycle event of decision 75 costs one document read per unit:
+the unit reads its event and the event reads its unit. Measured against the
+published rules, a batch ran out of access calls at **six units**. Sending ten
+clamps for repair is an ordinary afternoon in a school theatre, so that was a
+blocker rather than a limitation.
+
+A maintenance batch now shares one event. Every unit names the same document, and
+Rules charge for distinct documents rather than for each reference — so the cost
+stops growing with the batch. Measured after the change: **200 units, for a
+member and an admin alike, including a batch split across two crews**. Two
+hundred is the declared cap, not the ceiling; the budget had room above it.
+
+### 83a. What holds the batch together
+
+Four documents have to agree, and each is checked against the others:
+
+- every **unit** proves it is listed in the event, that the event describes its
+  exact move, and that it names the same repair the unit now points at
+- the **event** is checked against the record it names, and against one unit
+  that really did move
+- the **record**'s `quantity_sent` must equal its `unit_ids`, which must contain
+  no repeats, and is immutable once written
+- the **parent item**'s `in_maintenance` count must move by exactly the size of
+  the list — up when the equipment leaves, down when it returns, and not at all
+  for a workflow step in between
+
+That last one is what closes the interesting hole. Rules cannot count how many
+unit documents a transaction touched, but every unit entering maintenance raises
+that bucket by exactly one, whatever condition it is in. A record claiming fifty
+units while one moves produces a delta of one against a list of fifty, and is
+refused.
+
+### 83b. What Rules still cannot prove
+
+An inventory editor who falsifies **all four documents consistently** — the
+units, the parent counts, the record, and the event — is not stopped. This is
+not perfect integrity and should not be described as such.
+
+It is, however, the same trust boundary this project already accepted for
+client-maintained serialized mirrors in decisions 66 and 75b: Rules check that
+stored numbers are internally consistent and cannot check that they match
+reality. The strengthened checks bring maintenance inside that existing boundary
+rather than opening a new one, which is why it is accepted here. There is no
+server; on Spark there cannot be.
+
+### 84. A unit carries its own repair history
+
+`inventory_units` gains two fields, and they do different jobs.
+
+`current_maintenance_record_id` is current state: set when the equipment leaves,
+required exactly while `status == 'in_maintenance'`, and removed when it comes
+back. The unit page reads the repair by id — no query, no index.
+
+`maintenance_record_ids` is history: append-only, one entry per visit, added at
+the moment the equipment leaves and never touched again. Rules enforce that a
+status change into maintenance appends exactly one entry, that returning leaves
+the list alone, and that no ordinary edit may add, drop, reorder, or repeat
+anything in it.
+
+The alternative was to find a unit's repairs by searching events for ones whose
+array claims it. That would have shown the user history the rules cannot vouch
+for — precisely the thing decision 83a exists to prevent — and needed a
+composite index besides. A unit that names its own repairs needs neither.
+
+### 85. Which number says how much equipment is away
+
+`Currently In Service` reads from two places on purpose:
+
+- **bulk** items: the repair records, exactly as before, because a bulk quantity
+  is not counted anywhere else
+- **serialized** items: `unit_counts.in_maintenance` on the item, because the
+  equipment counts itself
+
+Serialized repair records are excluded from the record-based half, or the same
+clamp would be counted twice. The effect is that a malformed repair record
+cannot inflate the dashboard: the equipment's own state wins.
+
+`Active Repairs` stays record-based. It counts repair jobs, not pieces of
+equipment, so none of this touches it. The Lost KPI is unchanged.
+
+### 86. All at once, or not at all
+
+Phase 11D has no partial return. Every unit on a repair comes back together, on
+`returned` or on `cancelled`. A record that is half returned cannot say which
+half, and the parent-delta check that keeps the batch honest depends on the whole
+list moving.
+
+Changing which equipment a repair took means cancelling it and sending a new
+one. `unit_ids` is immutable from the moment the record exists, because rewriting
+it would rewrite what happened while the units' own histories still said
+otherwise.
+
+### 87. Recording a repair is not the same as starting one
+
+Decision 82a said a serialized repair does not start as `planned`. The
+implementation read that as "always create it as `sent`", which is a different
+and wrong thing.
+
+Microphones sent to the shop on Monday might not be entered into the app until
+Wednesday, by which time they are already being worked on. Forcing the teacher
+to file that as Sent and then click through to In Service asks them to type
+something untrue and then correct it.
+
+So a serialized repair may be recorded at **sent**, **in_service**, or **ready** —
+any stage where the equipment is away. It still may not be recorded as
+`planned` (the equipment has gone) or as `returned`/`cancelled` (a repair that
+is over has nothing to record).
+
+The stage changes nothing about the equipment. All three mean one thing to a
+clamp: it is at the repair shop. The units move `available → in_maintenance`
+exactly once, the parent counts move once, the pointer is set once, one entry is
+appended to each unit's repair history, and one shared lifecycle event is
+written. Every other rule — the parent delta, the unique ids, the quantity
+mirror, the permissions — applies identically.
+
+### 87a. `sent_to_maintenance` still reads correctly
+
+The shared event keeps its name even when the record is created as In Service or
+Ready. It describes the unit transition, not the paperwork: the equipment
+entered maintenance, which is exactly what happened. Renaming it would touch the
+event vocabulary, the Rules, and every existing document for no gain in
+accuracy.
+
+### 87b. Advancing a repair is on the list, not just the page
+
+The same discoverability problem as decision 74: the workflow buttons existed
+only on the record page, so advancing a repair meant knowing to open it first.
+The maintenance list now carries **Manage status** on any serialized record that
+still has somewhere to go, beside **View details**.
+
+`maintenanceWorkflowSteps` is the one source for what a repair can do next, read
+by the list and the record page alike, so a control offered in one place cannot
+be missing or different in the other. Finished repairs offer nothing, bulk
+repairs keep their existing behaviour entirely, and there is no editable status
+dropdown anywhere — returning or cancelling moves a whole batch of equipment and
+has to stay an explicit action.
+
+### 88. Planning a repair is not a state the equipment is in
+
+Decision 82a excluded `planned` from serialized repairs, on the grounds that a
+plan holding a list of units would be a reservation two repairs could both
+claim. That reasoning was about *reservation*, and the fix was to remove the
+feature rather than the reservation.
+
+Planning is a real workflow — "we will send these three microphones next week" —
+so it comes back, and nothing about it reserves anything.
+
+The two state systems answer different questions and are kept apart:
+
+- **Unit lifecycle** answers *where is this piece of equipment right now*
+- **Maintenance status** answers *what is happening with this repair*
+
+They coexist. A microphone can be In Use and planned for maintenance at the same
+time, and that is not a conflict — it is Monday's plan and Tuesday's rehearsal.
+It can even be Lost and planned, which is a problem for the teacher rather than
+for the model.
+
+So there is no `planned_maintenance` unit status, no reservation, no lock, and
+no lifecycle action is taken away because a plan exists. The status badge keeps
+saying what the equipment actually is; the plan is a quieter second line under
+it.
+
+### 88a. The pointer, and why one at a time
+
+`inventory_units.planned_maintenance_record_id` is a single optional field. A
+unit may be in at most one open plan, and Rules refuse a second while the first
+is there.
+
+An array would allow a microphone to sit in three overlapping plans, which is
+not a workflow anybody wants and would need real scheduling to make sense of. A
+single pointer makes "already planned" a structural fact the UI can show and the
+rules can enforce, without inventing reservation infrastructure to prevent it.
+
+The field is metadata. It does not imply unavailable, reserved, or checked out.
+It exists so a unit page can say "planned for maintenance" and link to the plan —
+which matters more once QR labels arrive and one scan has to explain everything
+about a piece of equipment.
+
+### 88b. Availability is checked when the repair starts, not before
+
+This is the consequence of not reserving. A plan can be created over a
+microphone that is currently out, and starting that repair later can therefore
+fail — which is correct, and reported by name:
+
+> 2 planned units are not currently available: MIC-002 — Out with a crew, check
+> it in first, MIC-007 — Missing, mark it found first. Check them in, resolve
+> their status, or update the planned equipment before starting this repair.
+
+The start is all or nothing. There is no partial start any more than there is a
+partial return.
+
+### 88c. What a plan writes, and what it does not
+
+| | plan create/edit/cancel | start |
+|---|---|---|
+| unit status | unchanged | `available → in_maintenance` |
+| parent counts | unchanged | move by the batch size |
+| `current_maintenance_record_id` | never | set |
+| `maintenance_record_ids` | never | appended once |
+| `asset_events` | none | one shared event |
+| planning pointer | set / moved / cleared | cleared |
+
+A plan is not repair history: `maintenance_record_ids` gains an entry when the
+equipment actually leaves, so a plan created and cancelled leaves no trace on the
+unit at all. Rules enforce every row of that table — a plan write must show a
+parent maintenance delta of exactly zero.
+
+### 88d. What the planning pointer can and cannot be trusted to say
+
+Rules prove that a unit's pointer names a plan that exists, is still planned, and
+lists that unit; that taking a pointer requires the plan to be written in the
+same batch; that a unit cannot hold two; and that ordinary edits and lifecycle
+moves cannot add, drop, or change one. Normal lifecycle transitions carry it
+through untouched, which is what keeps In Use and planned coexisting.
+
+What they do not prove is that every unit a plan lists actually points back. A
+plan could name a unit that was never written, and that unit would simply not
+show the indicator — a display gap, not a correctness one, and it corrects itself
+when the repair starts, because starting writes every listed unit. This is the
+same shape of limitation as decision 83b, and smaller, because a plan moves no
+equipment.
+
+### 88e. Editable while planned, settled once started
+
+`unit_ids` may change while a repair is still a plan — units added, removed, or
+swapped — because nothing has been taken yet and the list is still a decision.
+The moment the repair starts it becomes a record of what left, and Rules make it
+immutable from then on, as decision 86 already required.

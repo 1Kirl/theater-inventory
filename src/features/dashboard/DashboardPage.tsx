@@ -87,7 +87,11 @@ export function DashboardPage() {
   const events = ready(data.calendar)
 
   const inventorySummary = items ? summarizeInventory(items) : null
-  const maintenanceSummary = records ? summarizeMaintenance(records, now) : null
+  // Serialized items are passed in so their own unit counts, rather than the
+  // repair records, are what says how much equipment is away.
+  const maintenanceSummary = records
+    ? summarizeMaintenance(records, now, 5, items ?? [])
+    : null
   const productionsSummary = production
     ? summarizeProductions({
       productions: production.productions,

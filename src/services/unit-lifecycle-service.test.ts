@@ -474,3 +474,122 @@ describe('lifecycleRefusal is what the buttons ask', () => {
     expect(lifecycleRefusal({ unit: unit(), to: 'lost', note: 'x'.repeat(2001) })).not.toBeNull()
   })
 })
+
+/**
+ * Fields a lifecycle move must leave alone.
+ *
+ * A unit write replaces the whole document, so anything this service forgets to
+ * carry is deleted. That is not hypothetical: an earlier version built the
+ * document by hand and dropped every maintenance link, so marking a planned
+ * unit as in use silently unlinked it from its plan — Security Rules refused
+ * the write and the browser showed a permission error — and marking any unit
+ * lost would have erased its entire repair history with nothing to catch it.
+ */
+describe('a lifecycle move preserves what it does not own', () => {
+  const LINKED = unit({
+    planned_maintenance_record_id: 'plan-a',
+    maintenance_record_ids: ['rec-old-1', 'rec-old-2'],
+  })
+
+  beforeEach(() => {
+    STORED_UNIT = LINKED
+  })
+
+  it('keeps the maintenance plan when a unit is taken out', () => {
+    // The exact browser regression: Available + Planned → In Use + Planned.
+    return performLifecycleAction({
+      unit: LINKED, to: 'in_use', usingTeamId: 'team-costume',
+    }).then(() => {
+      const written = unitWrite(attempts[0])
+
+      expect(written?.status).toBe('in_use')
+      expect(written?.planned_maintenance_record_id).toBe('plan-a')
+      expect(written?.using_team_id).toBe('team-costume')
+      expect(written?.checked_out_at).toBeDefined()
+    })
+  })
+
+  it('keeps the repair history when a unit is taken out', () => {
+    return performLifecycleAction({
+      unit: LINKED, to: 'in_use', usingTeamId: 'team-costume',
+    }).then(() => {
+      expect(unitWrite(attempts[0])?.maintenance_record_ids)
+        .toEqual(['rec-old-1', 'rec-old-2'])
+    })
+  })
+
+  it('keeps both when a unit is checked back in', async () => {
+    STORED_UNIT = unit({
+      status: 'in_use',
+      using_team_id: 'team-costume',
+      using_member_uid: 'uid-alex',
+      checked_out_at: Timestamp.fromMillis(2_000),
+      planned_maintenance_record_id: 'plan-a',
+      maintenance_record_ids: ['rec-old-1'],
+    })
+
+    await performLifecycleAction({ unit: STORED_UNIT, to: 'available' })
+
+    const written = unitWrite(attempts[0])
+    expect(written?.status).toBe('available')
+    expect(written?.planned_maintenance_record_id).toBe('plan-a')
+    expect(written?.maintenance_record_ids).toEqual(['rec-old-1'])
+    // The loan itself is over, and those fields do go.
+    expect(written?.using_team_id).toBeUndefined()
+    expect(written?.using_member_uid).toBeUndefined()
+    expect(written?.checked_out_at).toBeUndefined()
+  })
+
+  it.each(['lost', 'retired'] as const)('keeps both when a unit is %s', async (to) => {
+    await performLifecycleAction({
+      unit: LINKED,
+      to,
+      ...(to === 'retired' ? { retirementReason: 'disposed' as const } : {}),
+    })
+
+    const written = unitWrite(attempts[0])
+    expect(written?.status).toBe(to)
+    // A plan is not deleted on the unit's behalf; it becomes something the user
+    // has to resolve, which is what they should see.
+    expect(written?.planned_maintenance_record_id).toBe('plan-a')
+    expect(written?.maintenance_record_ids).toEqual(['rec-old-1', 'rec-old-2'])
+  })
+
+  it('keeps both when a lost unit is found again', async () => {
+    STORED_UNIT = unit({
+      status: 'lost',
+      planned_maintenance_record_id: 'plan-a',
+      maintenance_record_ids: ['rec-old-1'],
+    })
+
+    await performLifecycleAction({ unit: STORED_UNIT, to: 'available' })
+
+    const written = unitWrite(attempts[0])
+    expect(written?.planned_maintenance_record_id).toBe('plan-a')
+    expect(written?.maintenance_record_ids).toEqual(['rec-old-1'])
+  })
+
+  it('does not invent a maintenance link on a unit that has none', async () => {
+    STORED_UNIT = unit()
+
+    await performLifecycleAction({ unit: STORED_UNIT, to: 'lost' })
+
+    const written = unitWrite(attempts[0])
+    expect(written?.planned_maintenance_record_id).toBeUndefined()
+    expect(written?.maintenance_record_ids).toBeUndefined()
+    expect(written?.current_maintenance_record_id).toBeUndefined()
+  })
+
+  it('writes no maintenance record and no maintenance event', async () => {
+    await performLifecycleAction({
+      unit: LINKED, to: 'in_use', usingTeamId: 'team-costume',
+    })
+
+    const written = attempts[0]?.writes ?? []
+    expect(written.filter((w) => w.path.startsWith('maintenance_records/'))).toHaveLength(0)
+    // One ordinary lifecycle event, not a maintenance batch event.
+    const events = written.filter((w) => w.path.startsWith('asset_events/'))
+    expect(events).toHaveLength(1)
+    expect(events[0]?.data.event_type).toBe('marked_in_use')
+  })
+})

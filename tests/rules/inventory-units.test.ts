@@ -332,10 +332,24 @@ describe('inventory_units — status and condition vocabulary', () => {
     // update may not restamp created_at.
     const SECOND = 'unitSECONDSECONDSEC1'
 
+    // A unit away for repair names the record that took it; from Phase 11D on
+    // that pairing is required, and `tests/rules/maintenance-batch-prototype.test.ts`
+    // covers it in full.
     await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
-      unitPayload({ status: 'in_maintenance', condition: 'needs_repair' })))
+      { ...unitPayload({ status: 'in_maintenance', condition: 'needs_repair' }),
+        current_maintenance_record_id: 'recEXISTINGAAAAAAAAA' }))
     await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', SECOND),
       unitPayload({ unitId: SECOND, status: 'lost', condition: 'unusable' })))
+  })
+
+  it('349a. a unit in maintenance must name the record that took it', async () => {
+    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      unitPayload({ status: 'in_maintenance', condition: 'needs_repair' })))
+  })
+
+  it('349b. a unit that is not in maintenance may not name one', async () => {
+    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      { ...unitPayload(), current_maintenance_record_id: 'recEXISTINGAAAAAAAAA' }))
   })
 
   it('350. a retired unit must say why, and only a retired unit may', async () => {

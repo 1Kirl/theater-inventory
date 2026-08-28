@@ -4,6 +4,13 @@ import { Plus, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog'
+import { canEditTeamScopedRecord } from '@/domain/module-access'
+import { maintenanceWorkflowSteps } from '@/domain/unit-maintenance'
+import { MAINTENANCE_STATUS_LABELS } from '@/domain/maintenance'
+import { SerializedMaintenanceActions } from '@/features/maintenance/SerializedMaintenanceActions'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -35,6 +42,19 @@ function formatDate(stamp: MaintenanceRecord['sent_at']): string {
 export function MaintenanceListPage() {
   const navigate = useNavigate()
   const { organization, membership, role, teams } = useOrganization()
+  const [managing, setManaging] = useState<MaintenanceRecord | null>(null)
+
+  /**
+   * Whether this row can move the repair along.
+   *
+   * A finished repair has nothing left to do, a bulk repair has no serialized
+   * workflow, and editing follows the team snapshot on the record — the same
+   * check the detail page makes.
+   */
+  function canManage(record: MaintenanceRecord): boolean {
+    return maintenanceWorkflowSteps(record).length > 0
+      && canEditTeamScopedRecord(role, membership, 'maintenance', record.team_id)
+  }
   const organizationId = organization?.organization_id ?? null
 
   const [records, setRecords] = useState<MaintenanceRecord[] | null>(null)
@@ -205,6 +225,7 @@ export function MaintenanceListPage() {
                   <TableHead>Service provider</TableHead>
                   <TableHead>Sent</TableHead>
                   <TableHead>Expected back</TableHead>
+                  <TableHead className="w-0 text-right">Manage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -236,6 +257,25 @@ export function MaintenanceListPage() {
                       <TableCell className="text-muted-foreground">{record.service_provider_name ?? '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.sent_at)}</TableCell>
                       <TableCell className="text-muted-foreground">{formatDate(record.expected_return_at)}</TableCell>
+                      {/* Advancing a repair should not require discovering that
+                          the row opens a page with the buttons on it. */}
+                      <TableCell
+                        className="text-right"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="flex justify-end gap-1">
+                          {canManage(record) ? (
+                            <Button size="sm" variant="ghost" onClick={() => setManaging(record)}>
+                              Manage status
+                            </Button>
+                          ) : null}
+                          <Button asChild size="sm" variant="ghost">
+                            <Link to={paths.maintenanceRecord(record.maintenance_id)}>
+                              View details
+                            </Link>
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   )
                 })}
@@ -248,22 +288,37 @@ export function MaintenanceListPage() {
               const team = teamDisplay(record, items, teams)
               return (
                 <li key={record.maintenance_id}>
-                  <Link to={paths.maintenanceRecord(record.maintenance_id)} className="block">
-                    <Card>
-                      <CardContent className="space-y-2 pt-6">
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="min-w-0 flex-1 font-medium">{itemNameById(record.item_id, items)}</span>
-                          <StatusCell record={record} />
-                        </div>
-                        <p className="text-muted-foreground text-xs">
-                          {team.label} · {record.quantity_sent} unit{record.quantity_sent === 1 ? '' : 's'}
-                        </p>
-                        <p className="text-muted-foreground text-xs">
-                          {record.service_provider_name ?? 'No provider recorded'} · expected {formatDate(record.expected_return_at)}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </Link>
+                  <Card>
+                    <CardContent className="space-y-2 pt-6">
+                      <div className="flex items-start justify-between gap-2">
+                        <Link
+                          to={paths.maintenanceRecord(record.maintenance_id)}
+                          className="min-w-0 flex-1 font-medium hover:underline"
+                        >
+                          {itemNameById(record.item_id, items)}
+                        </Link>
+                        <StatusCell record={record} />
+                      </div>
+                      <p className="text-muted-foreground text-xs">
+                        {team.label} · {record.quantity_sent} unit{record.quantity_sent === 1 ? '' : 's'}
+                      </p>
+                      <p className="text-muted-foreground text-xs">
+                        {record.service_provider_name ?? 'No provider recorded'} · expected {formatDate(record.expected_return_at)}
+                      </p>
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {canManage(record) ? (
+                          <Button size="sm" variant="outline" onClick={() => setManaging(record)}>
+                            Manage status
+                          </Button>
+                        ) : null}
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={paths.maintenanceRecord(record.maintenance_id)}>
+                            View details
+                          </Link>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </li>
               )
             })}
@@ -274,6 +329,30 @@ export function MaintenanceListPage() {
           </p>
         </>
       )}
+
+      {managing ? (
+        <Dialog
+          open={managing !== null}
+          onOpenChange={(open) => { if (!open) setManaging(null) }}
+        >
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{itemNameById(managing.item_id, items)}</DialogTitle>
+              <DialogDescription>
+                Currently {MAINTENANCE_STATUS_LABELS[managing.status].toLowerCase()}.
+                Returning or cancelling brings every piece back at once.
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* The same actions the record page offers, from the same helper. */}
+            <SerializedMaintenanceActions
+              record={managing}
+              variant="inline"
+              onDone={async () => { setManaging(null); await load() }}
+            />
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   )
 }

@@ -495,3 +495,88 @@ describe('no other summary lets a preview cap reach its count', () => {
     expect(summary.active).toHaveLength(2)
   })
 })
+
+describe('what counts as equipment currently away for repair', () => {
+  function bulkRecord(overrides: Partial<MaintenanceRecord> = {}): MaintenanceRecord {
+    return {
+      maintenance_id: 'rec-bulk',
+      status: 'in_service',
+      quantity_sent: 4,
+      created_at: Timestamp.fromMillis(1_000),
+      ...overrides,
+    } as MaintenanceRecord
+  }
+
+  function serializedRecord(overrides: Partial<MaintenanceRecord> = {}): MaintenanceRecord {
+    return {
+      ...bulkRecord({ maintenance_id: 'rec-serial', ...overrides }),
+      tracking_mode: 'serialized',
+      unit_ids: ['u1', 'u2', 'u3'],
+      quantity_sent: 3,
+    } as MaintenanceRecord
+  }
+
+  function serializedItem(inMaintenance: number): InventoryItem {
+    return {
+      item_id: 'item-1',
+      tracking_mode: 'serialized',
+      quantity_total: 10,
+      quantity_available: 10 - inMaintenance,
+      condition_counts: EMPTY_CONDITION_COUNTS,
+      unit_counts: {
+        active_total: 10,
+        available: 10 - inMaintenance,
+        unusable_on_hand: 0,
+        in_use: 0,
+        in_maintenance: inMaintenance,
+        lost: 0,
+        retired: 0,
+      },
+    } as InventoryItem
+  }
+
+  const now = new Date('2026-08-29T00:00:00Z')
+
+  it('counts a bulk repair from its own record, as before', () => {
+    expect(summarizeMaintenance([bulkRecord()], now, 5, []).inServiceQuantity).toBe(4)
+  })
+
+  it('counts serialized equipment from the item, not the repair record', () => {
+    // The units count themselves. The record is skipped so the same clamp is
+    // not counted twice.
+    const summary = summarizeMaintenance([serializedRecord()], now, 5, [serializedItem(3)])
+
+    expect(summary.inServiceQuantity).toBe(3)
+  })
+
+  it('does not double count when both are present', () => {
+    const summary = summarizeMaintenance(
+      [bulkRecord(), serializedRecord()], now, 5, [serializedItem(3)],
+    )
+
+    expect(summary.inServiceQuantity).toBe(7)
+  })
+
+  it('trusts the item over a repair record that disagrees', () => {
+    // A record claiming ten while the equipment says three: the equipment wins.
+    const summary = summarizeMaintenance(
+      [serializedRecord({ quantity_sent: 10 })], now, 5, [serializedItem(3)],
+    )
+
+    expect(summary.inServiceQuantity).toBe(3)
+  })
+
+  it('counts nothing for a serialized item with nothing away', () => {
+    expect(summarizeMaintenance([], now, 5, [serializedItem(0)]).inServiceQuantity).toBe(0)
+  })
+
+  it('still counts repair records, serialized or not, as open jobs', () => {
+    // Active Repairs counts repairs, not pieces of equipment, so it is
+    // unaffected by any of this.
+    const summary = summarizeMaintenance(
+      [bulkRecord(), serializedRecord()], now, 5, [serializedItem(3)],
+    )
+
+    expect(summary.openCount).toBe(2)
+  })
+})

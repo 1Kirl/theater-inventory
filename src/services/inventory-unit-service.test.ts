@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Timestamp } from 'firebase/firestore'
-import type { InventoryItem } from '@/types/inventory'
+import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 import type { PromotionDraft } from '@/domain/inventory-unit'
 import { EMPTY_CONDITION_COUNTS, EMPTY_UNIT_COUNTS } from '@/domain/inventory'
 
@@ -99,7 +99,9 @@ vi.mock('firebase/firestore', async (importOriginal) => {
   }
 })
 
-const { createInventoryUnits, promoteToSerialized } = await import('@/services/inventory-unit-service')
+const {
+  createInventoryUnits, promoteToSerialized, updateInventoryUnit,
+} = await import('@/services/inventory-unit-service')
 
 const BULK_ITEM: InventoryItem = {
   item_id: 'item-1',
@@ -130,6 +132,24 @@ const SERIALIZED_ITEM: InventoryItem = {
 let STORED_ITEM: InventoryItem = BULK_ITEM
 
 const TEAMS = ['team-lighting', 'team-costume']
+
+/** A stored unit, for the tests that edit one. */
+function unit(overrides: Partial<InventoryUnit> = {}): InventoryUnit {
+  return {
+    unit_id: 'u1',
+    organization_id: 'org-1',
+    inventory_item_id: 'item-1',
+    team_id: 'team-lighting',
+    asset_code: 'CLAMP-001',
+    condition: 'good',
+    status: 'available',
+    storage_location: 'Shelf',
+    created_by_uid: 'uid-admin',
+    created_at: Timestamp.fromMillis(1_000),
+    updated_at: Timestamp.fromMillis(1_000),
+    ...overrides,
+  } as InventoryUnit
+}
 
 function itemWriteOf(attempt: Attempt | undefined) {
   return attempt?.writes.find((write) => write.path === 'inventory_items/item-1')?.data as
@@ -726,5 +746,67 @@ describe('the parent write a unit operation sends', () => {
     // The item stays Lighting's catalog entry; the unit is Scenic's property.
     expect(parent?.data.team_id).toBe('team-lighting')
     expect(unit?.data.team_id).toBe('team-costume')
+  })
+})
+
+describe('a metadata edit preserves every maintenance link', () => {
+  // Same class of bug as the lifecycle service: a full-document write that
+  // omits a field deletes it, and an edit owns none of these.
+  const LINKED = unit({
+    planned_maintenance_record_id: 'plan-a',
+    maintenance_record_ids: ['rec-old-1', 'rec-old-2'],
+    last_lifecycle_event_id: 'evt-earlier',
+  })
+
+  it('keeps the plan, the history, and the last event through a condition change', async () => {
+    STORED_ITEM = SERIALIZED_ITEM
+
+    await updateInventoryUnit({
+      existing: LINKED,
+      teamIds: TEAMS,
+      input: {
+        assetCode: LINKED.asset_code,
+        owningTeamId: LINKED.team_id,
+        condition: 'needs_repair',
+        storageLocation: 'Scene Shop',
+      },
+    })
+
+    const written = attempts[0]?.writes
+      .find((write) => write.path.startsWith('inventory_units/'))?.data
+
+    expect(written?.condition).toBe('needs_repair')
+    expect(written?.storage_location).toBe('Scene Shop')
+    expect(written?.planned_maintenance_record_id).toBe('plan-a')
+    expect(written?.maintenance_record_ids).toEqual(['rec-old-1', 'rec-old-2'])
+    expect(written?.last_lifecycle_event_id).toBe('evt-earlier')
+    // And the status it does not own.
+    expect(written?.status).toBe('available')
+  })
+
+  it('keeps the current repair link on a unit that is away', async () => {
+    const away = unit({
+      status: 'in_maintenance',
+      current_maintenance_record_id: 'rec-now',
+      maintenance_record_ids: ['rec-now'],
+    })
+    STORED_ITEM = SERIALIZED_ITEM
+
+    await updateInventoryUnit({
+      existing: away,
+      teamIds: TEAMS,
+      input: {
+        assetCode: away.asset_code,
+        owningTeamId: away.team_id,
+        condition: away.condition,
+        storageLocation: 'Repair bench',
+      },
+    })
+
+    const written = attempts[0]?.writes
+      .find((write) => write.path.startsWith('inventory_units/'))?.data
+
+    expect(written?.current_maintenance_record_id).toBe('rec-now')
+    expect(written?.maintenance_record_ids).toEqual(['rec-now'])
   })
 })

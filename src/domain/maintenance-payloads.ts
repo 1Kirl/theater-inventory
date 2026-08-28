@@ -11,6 +11,10 @@ import type { MaintenanceStatus, ReturnMethod } from '@/types/maintenance'
 export type Now = () => FieldValue
 
 export interface MaintenanceInput {
+  /** Absent means bulk, which is how every record before this phase was written. */
+  trackingMode?: 'bulk' | 'serialized'
+  /** Serialized only: the exact equipment, fixed when it leaves. */
+  unitIds?: readonly string[]
   quantitySent: number
   issueDescription: string
   status: MaintenanceStatus
@@ -37,8 +41,16 @@ function editableFields(input: MaintenanceInput) {
   const providerEmail = optionalText(input.serviceProviderEmail)
   const repairNotes = optionalText(input.repairNotes)
 
+  const serialized = input.trackingMode === 'serialized'
+
   return {
-    quantity_sent: input.quantitySent,
+    // Written on every record from this phase on, so the shape is explicit
+    // rather than inferred from the absence of a unit list.
+    ...(input.trackingMode ? { tracking_mode: input.trackingMode } : {}),
+    ...(serialized && input.unitIds ? { unit_ids: [...input.unitIds] } : {}),
+    // Mirrors the list for a serialized repair, and stays what it always was
+    // for a bulk one — so the dashboard and the in-service sum keep working.
+    quantity_sent: serialized && input.unitIds ? input.unitIds.length : input.quantitySent,
     issue_description: input.issueDescription.trim(),
     status: input.status,
     ...(input.sentAt ? { sent_at: input.sentAt } : {}),

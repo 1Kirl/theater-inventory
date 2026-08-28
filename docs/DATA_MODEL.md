@@ -869,6 +869,48 @@ Queried by `organization_id` + `inventory_unit_id`, two equality filters that
 single-field indexes already serve; ordering is done in the client, so
 `firestore.indexes.json` stays empty.
 
+## 13f. Unit-level maintenance
+
+`maintenance_records` gains two optional fields:
+
+```ts
+tracking_mode?: 'bulk' | 'serialized'   // absent means bulk
+unit_ids?: string[]                     // serialized only, immutable once written
+```
+
+`quantity_sent` stays authoritative for a bulk repair and mirrors
+`unit_ids.length` for a serialized one, so the dashboard and the in-service sum
+keep working unchanged.
+
+`inventory_units` gains two more:
+
+```ts
+current_maintenance_record_id?: string  // required exactly while in_maintenance
+maintenance_record_ids?: string[]       // append-only, one entry per visit
+planned_maintenance_record_id?: string  // at most one open plan; reserves nothing
+```
+
+`planned_maintenance_record_id` is advisory metadata, not a lifecycle state. A
+unit carrying one may still be used, checked in, lost, or retired; the plan
+survives all of it. Availability is checked again when the repair starts, and
+starting clears the pointer.
+
+A serialized repair is one transaction over the whole batch: every unit, the
+parent's counts, the record, and **one shared** `asset_events` entry naming all
+of them. Sharing the event is what keeps the Rules access-call cost flat — a
+per-unit event ran out at six units; the shared one carries 200.
+
+Rules require the parent's `unit_counts.in_maintenance` to move by exactly
+`unit_ids.length` when a repair starts, by `-unit_ids.length` when it ends, and
+not at all for the workflow steps in between. That is how a record claiming more
+equipment than actually moved is caught.
+
+Serialized repairs may be recorded at `planned` (an intention, which moves no
+equipment) or at `sent`, `in_service`, or `ready` — any stage where the equipment
+is away. Never at `returned` or `cancelled`. Whichever is chosen, the units move `available → in_maintenance`
+exactly once. Return and
+cancellation move every listed unit back together; there is no partial return.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

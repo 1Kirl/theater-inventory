@@ -10,6 +10,12 @@ import { canEditTeamScopedRecord } from '@/domain/module-access'
 import { isOverdue } from '@/domain/maintenance'
 import { statusLabel, statusTone, teamDisplay } from '@/features/maintenance/maintenance-view'
 import { getInventoryItem } from '@/services/inventory-service'
+import { getInventoryUnit } from '@/services/inventory-unit-service'
+import { CONDITION_LABELS } from '@/domain/inventory'
+import { isSerializedMaintenance } from '@/domain/unit-maintenance'
+import { SerializedMaintenanceActions } from '@/features/maintenance/SerializedMaintenanceActions'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import type { InventoryUnit } from '@/types/inventory'
 import { getMaintenanceRecord } from '@/services/maintenance-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { MaintenanceRecord } from '@/types/maintenance'
@@ -31,17 +37,28 @@ export function MaintenanceRecordDetailPage() {
   // State settles in the promise continuations rather than synchronously, so
   // the effect starts the read and nothing else. Returning the promise keeps
   // `load` awaitable for callers that refresh after a write.
+  const [units, setUnits] = useState<InventoryUnit[]>([])
+
   const load = useCallback((): Promise<void> => {
     if (!recordId) return Promise.resolve()
 
     async function read() {
       const record = await getMaintenanceRecord(recordId as string)
       const item = record ? await getInventoryItem(record.item_id).catch(() => null) : null
-      return { record, item }
+
+      // Read by id: the record names its equipment, so there is nothing to
+      // search for and no index to add.
+      const units = await Promise.all(
+        (record?.unit_ids ?? []).map((id) => getInventoryUnit(id).catch(() => null)),
+      )
+
+      return { record, item, units: units.filter((unit): unit is InventoryUnit => unit !== null) }
     }
 
     return read().then(
-      (loaded) => { setRecord(loaded.record); setItem(loaded.item); setError(null) },
+      (loaded) => {
+        setRecord(loaded.record); setItem(loaded.item); setUnits(loaded.units); setError(null)
+      },
       (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setRecord(null) },
     )
   }, [recordId])
@@ -139,8 +156,15 @@ export function MaintenanceRecordDetailPage() {
               <dd className="font-medium">{team.name}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground text-sm">Quantity sent</dt>
-              <dd className="text-xl font-semibold tabular-nums">{record.quantity_sent}</dd>
+              <dt className="text-muted-foreground text-sm">
+                {isSerializedMaintenance(record) ? 'Equipment sent' : 'Quantity sent'}
+              </dt>
+              <dd className="text-xl font-semibold tabular-nums">
+                {record.quantity_sent}
+                {isSerializedMaintenance(record)
+                  ? ` unit${record.quantity_sent === 1 ? '' : 's'}`
+                  : ''}
+              </dd>
             </div>
             <div>
               <dt className="text-muted-foreground text-sm">Return method</dt>
@@ -153,6 +177,50 @@ export function MaintenanceRecordDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      {isSerializedMaintenance(record) && canEdit ? (
+        <SerializedMaintenanceActions record={record} onDone={load} />
+      ) : null}
+
+      {isSerializedMaintenance(record) ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Equipment</CardTitle>
+            <CardDescription>
+              The exact pieces this repair took. A bulk repair records a quantity; this one
+              records which.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {units.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                {(record.unit_ids?.length ?? 0) > 0
+                  ? 'This equipment could not be loaded.'
+                  : 'No equipment is attached to this repair.'}
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {units.map((unit) => (
+                  <li
+                    key={unit.unit_id}
+                    className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border p-3"
+                  >
+                    <Link
+                      to={paths.inventoryUnit(unit.unit_id)}
+                      className="font-mono text-sm font-medium hover:underline"
+                    >
+                      {unit.asset_code}
+                    </Link>
+                    <span className="text-muted-foreground text-sm">
+                      {CONDITION_LABELS[unit.condition]} · {UNIT_STATUS_LABELS[unit.status]}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader><CardTitle className="text-base">Dates</CardTitle></CardHeader>
