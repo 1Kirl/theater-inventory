@@ -302,7 +302,6 @@ describe('unit payload builders', () => {
     unitId: 'u-1',
     organizationId: 'org-1',
     inventoryItemId: 'i-1',
-    teamId: 't-lighting',
     uid: 'u-admin',
     now,
   }
@@ -312,6 +311,7 @@ describe('unit payload builders', () => {
       ...base,
       input: {
         assetCode: 'CLAMP-017',
+        owningTeamId: 't-lighting',
         condition: 'good',
         status: 'available',
         storageLocation: 'Lighting Storage',
@@ -375,8 +375,8 @@ describe('unit payload builders', () => {
       createdByUid: 'u-author',
       createdAt,
       input: {
-        assetCode: 'CLAMP-017', condition: 'fair', status: 'available',
-        storageLocation: 'Lighting Storage',
+        assetCode: 'CLAMP-017', owningTeamId: 't-lighting', condition: 'fair',
+        status: 'available', storageLocation: 'Lighting Storage',
       },
     })
 

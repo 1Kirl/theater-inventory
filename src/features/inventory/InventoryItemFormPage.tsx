@@ -20,19 +20,25 @@ import {
   CONDITION_KEYS,
   CONDITION_LABELS,
   EMPTY_CONDITION_COUNTS,
+  EMPTY_UNIT_COUNTS,
   conditionCountsTotal,
+  isSerialized,
+  trackingModeOf,
   validateInventoryQuantities,
 } from '@/domain/inventory'
 import { createInventoryItem, getInventoryItem, updateInventoryItem } from '@/services/inventory-service'
 import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
-import { INVENTORY_CATEGORIES, type ConditionCounts, type InventoryItem } from '@/types/inventory'
+import {
+  INVENTORY_CATEGORIES, type ConditionCounts, type InventoryItem, type TrackingMode,
+} from '@/types/inventory'
 import { paths } from '@/routes/paths'
 
 interface FormState {
   name: string
   category: string
   teamId: string
+  trackingMode: TrackingMode
   quantityTotal: string
   quantityAvailable: string
   conditionCounts: Record<string, string>
@@ -45,6 +51,7 @@ const BLANK: FormState = {
   name: '',
   category: '',
   teamId: '',
+  trackingMode: 'bulk',
   quantityTotal: '0',
   quantityAvailable: '0',
   conditionCounts: Object.fromEntries(CONDITION_KEYS.map((key) => [key, '0'])),
@@ -71,6 +78,7 @@ function fromItem(item: InventoryItem): FormState {
     name: item.name,
     category: item.category,
     teamId: item.team_id,
+    trackingMode: trackingModeOf(item),
     quantityTotal: String(item.quantity_total),
     quantityAvailable: String(item.quantity_available),
     conditionCounts: Object.fromEntries(
@@ -140,8 +148,13 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
     }))
   }
 
-  const counts = toCounts(state)
-  const total = toNumber(state.quantityTotal)
+  const serialized = state.trackingMode === 'serialized'
+  // A serialized item's numbers are the sum of its units, so the aggregate
+  // fields are not shown at all rather than shown and ignored.
+  const lockedToUnits = mode === 'edit' && existing !== null && isSerialized(existing)
+
+  const counts = serialized ? EMPTY_CONDITION_COUNTS : toCounts(state)
+  const total = serialized ? 0 : toNumber(state.quantityTotal)
   const classified = conditionCountsTotal(counts)
   const unclassified = Number.isFinite(total) ? Math.max(total - classified, 0) : 0
 
@@ -156,23 +169,33 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
       return
     }
 
-    const quantities = validateInventoryQuantities({
-      quantityTotal: total,
-      quantityAvailable: toNumber(state.quantityAvailable),
-      conditionCounts: counts,
-    })
-    if (!quantities.valid) {
-      setError(quantities.message)
-      return
+    if (!serialized) {
+      const quantities = validateInventoryQuantities({
+        quantityTotal: total,
+        quantityAvailable: toNumber(state.quantityAvailable),
+        conditionCounts: counts,
+      })
+      if (!quantities.valid) {
+        setError(quantities.message)
+        return
+      }
     }
 
     const input = {
       name: state.name,
       category: state.category,
       teamId: state.teamId,
-      quantityTotal: total,
-      quantityAvailable: toNumber(state.quantityAvailable),
-      conditionCounts: counts,
+      trackingMode: state.trackingMode,
+      // A new serialized item starts with explicit zeroes rather than an
+      // absent field, so the document says what it is before it has any units.
+      ...(serialized
+        ? { unitCounts: (lockedToUnits ? existing.unit_counts : null) ?? EMPTY_UNIT_COUNTS }
+        : {}),
+      quantityTotal: serialized && lockedToUnits ? existing.quantity_total : total,
+      quantityAvailable: serialized && lockedToUnits
+        ? existing.quantity_available
+        : toNumber(state.quantityAvailable),
+      conditionCounts: serialized && lockedToUnits ? existing.condition_counts : counts,
       location: state.location,
       lastInspectedAt: state.lastInspected
         ? Timestamp.fromDate(new Date(`${state.lastInspected}T00:00:00`))
@@ -261,7 +284,11 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
 
             <div className="space-y-2">
               <Label htmlFor={`${fieldId}-team`}>Owning team</Label>
-              <Select value={state.teamId} onValueChange={(value) => set('teamId', value)} disabled={submitting}>
+              <Select
+                value={state.teamId}
+                onValueChange={(value) => set('teamId', value)}
+                disabled={submitting || lockedToUnits}
+              >
                 <SelectTrigger id={`${fieldId}-team`}><SelectValue placeholder="Choose a team" /></SelectTrigger>
                 <SelectContent>
                   {teamChoices.map((team) => (
@@ -269,7 +296,12 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
                   ))}
                 </SelectContent>
               </Select>
-              {teamChoices.length === 0 ? (
+              {lockedToUnits ? (
+                <p className="text-muted-foreground text-xs">
+                  The owning team is fixed once an item is tracked as individual
+                  equipment, because every unit carries it.
+                </p>
+              ) : teamChoices.length === 0 ? (
                 <p className="text-muted-foreground text-xs">
                   {role === 'admin'
                     ? 'Create a team in Organization Settings first.'
@@ -306,9 +338,49 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
                 disabled={submitting}
               />
             </div>
+
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor={`${fieldId}-tracking`}>How is this tracked?</Label>
+              <Select
+                value={state.trackingMode}
+                onValueChange={(value) => set('trackingMode', value as TrackingMode)}
+                disabled={submitting || mode === 'edit'}
+              >
+                <SelectTrigger id={`${fieldId}-tracking`} className="sm:max-w-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bulk">Bulk Quantity</SelectItem>
+                  <SelectItem value="serialized">Individual Equipment</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">
+                {mode === 'edit'
+                  ? lockedToUnits
+                    ? 'This item is tracked as individual equipment. Its totals come from its units.'
+                    : 'Bulk items can be converted to individual equipment from the item page.'
+                  : state.trackingMode === 'bulk'
+                    ? 'One number for the whole pile — gel frames, cable ties, lumber.'
+                    : 'One record per physical piece, each with its own asset code — dimmers, mics, radios.'}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
+        {serialized && !lockedToUnits ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Units</CardTitle>
+              <CardDescription>
+                Save the item first, then add its units from the item page. Totals
+                and condition are counted from the units themselves.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        ) : null}
+
+        {serialized ? null : (
+        <>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Quantity</CardTitle>
@@ -376,6 +448,8 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
             </p>
           </CardContent>
         </Card>
+        </>
+        )}
 
         <Card>
           <CardHeader><CardTitle className="text-base">Notes</CardTitle></CardHeader>

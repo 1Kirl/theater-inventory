@@ -597,6 +597,34 @@ service cloud.firestore {
                                      request.resource.data.team_id);
     }
 
+    // The mirrors of a serialized item: the numbers counted from its units.
+    //
+    // A serialized item's team is a catalog default, not a claim on the
+    // equipment. Scenic's clamp under a Lighting-owned item belongs to Scenic,
+    // and recording that it broke means writing these numbers — so requiring
+    // Lighting's team would lock the owner out of their own unit.
+    //
+    // The path is deliberately narrow. Only these fields may move, the item must
+    // be serialized on both sides, and everything else about it stays behind the
+    // ordinary team policy. What it costs is that any inventory editor in the
+    // organization can adjust a serialized item's counts. Rules cannot count
+    // documents, so they could never confirm the numbers match the units anyway;
+    // what they still enforce is that whatever is written adds up.
+    function isSerializedMirrorUpdate() {
+      return trackingModeOf(resource.data) == 'serialized'
+        && trackingModeOf(request.resource.data) == 'serialized'
+        && changedOnly(['unit_counts', 'quantity_total', 'quantity_available',
+                        'condition_counts', 'updated_at']);
+    }
+
+    function canUpdateSerializedMirrors(organizationId) {
+      return isSignedIn() && (
+        isAdminOf(organizationId)
+        || (isActiveMemberOf(organizationId)
+            && inventoryLevel(organizationId) == 'edit')
+      );
+    }
+
     match /inventory_items/{itemId} {
 
       // Organization-wide read for anyone with the module, Admin included.
@@ -619,10 +647,22 @@ service cloud.firestore {
         // honest alternative.
         && !(trackingModeOf(resource.data) == 'serialized'
              && trackingModeOf(request.resource.data) == 'bulk')
-        // Editable as it stands, and editable where it is going.
-        && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
-        && canWriteInventoryForTeam(resource.data.organization_id,
-                                    request.resource.data.team_id);
+        // A ternary rather than an `or`: evaluating both arms costs more
+        // expressions than one rule evaluation is allowed, and only one of them
+        // can apply to a given write anyway.
+        && (isSerializedMirrorUpdate()
+            // The mirrors a unit operation moves, which any inventory editor may
+            // write because the unit they own may sit under another crew's item.
+            ? canUpdateSerializedMirrors(resource.data.organization_id)
+            // Anything else about the item: editable as it stands, and editable
+            // where it is going. Unchanged for bulk items and for metadata.
+            // The second check runs only when the team is actually moving.
+            // Evaluating it unconditionally costs more expressions than one
+            // rule evaluation is allowed once the mirror path is in the chain.
+            : (canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
+               && (request.resource.data.team_id == resource.data.team_id
+                   || canWriteInventoryForTeam(resource.data.organization_id,
+                                               request.resource.data.team_id))));
 
       // No delete flow in the MVP. Maintenance history and, from Phase 5,
       // production requirements reference these items.
@@ -660,6 +700,32 @@ service cloud.firestore {
         && (!('using_member_uid' in data) || 'using_team_id' in data);
     }
 
+    // Who a unit may be lent to.
+    //
+    // For a member this is a real boundary, and it is free: the membership
+    // document is already read to authorize the write at all, so holding them to
+    // their own assigned teams is a second field of a document Rules have in
+    // hand. Owning team and using team may still differ, which is the point —
+    // Scenic's ladder in Lighting's hands is a thing that happens, and a member
+    // on both crews can record it. What they cannot do is attribute equipment to
+    // a crew they are not on.
+    //
+    // For an Admin, Rules check the shape and stop there. Reading the team
+    // document would be referential integrity rather than authorization: an
+    // Admin may already write any inventory in their organization, so a bad
+    // `using_team_id` from an Admin is a data-quality problem, not an escalation.
+    // It is also unaffordable. The read is charged per distinct team, and
+    // `tests/rules/inventory-unit-transactions.test.ts` measures the ceiling for
+    // one batch at seven — a department with eight crews would see a legitimate
+    // conversion fail with a permission error it could do nothing about. The
+    // service checks the team against the organization's real teams before the
+    // transaction opens.
+    function usingTeamAllowed(organizationId, data) {
+      return !('using_team_id' in data)
+        || isAdminOf(organizationId)
+        || data.using_team_id in membershipData(organizationId).team_ids;
+    }
+
     function unitFieldsValid(unitId) {
       return hasExactly(
                ['unit_id', 'organization_id', 'inventory_item_id', 'team_id', 'asset_code',
@@ -675,10 +741,15 @@ service cloud.firestore {
         && request.resource.data.storage_location.size() > 0
         && request.resource.data.storage_location.size() <= 120
         && unitStatusValid(request.resource.data)
+        // Non-empty, not merely present: an `in_use` unit naming an empty team
+        // would satisfy the status check below while recording nothing about
+        // who actually has the equipment.
         && (!('using_team_id' in request.resource.data)
-            || request.resource.data.using_team_id is string)
+            || (request.resource.data.using_team_id is string
+                && request.resource.data.using_team_id.size() > 0))
         && (!('using_member_uid' in request.resource.data)
-            || request.resource.data.using_member_uid is string)
+            || (request.resource.data.using_member_uid is string
+                && request.resource.data.using_member_uid.size() > 0))
         && (!('checked_out_at' in request.resource.data)
             || request.resource.data.checked_out_at is timestamp)
         && (!('last_known_location' in request.resource.data)
@@ -689,16 +760,22 @@ service cloud.firestore {
         && (!('notes' in request.resource.data)
             || (request.resource.data.notes is string
                 && request.resource.data.notes.size() <= 2000))
-        && request.resource.data.updated_at == request.time;
+        && request.resource.data.updated_at == request.time
+        && request.resource.data.team_id is string
+        && request.resource.data.team_id.size() > 0;
     }
 
-    // Checked once, at creation. Afterwards the three copied fields are
-    // immutable, so re-reading the parent on every edit would buy nothing and
-    // cost two access calls that a later transaction needs.
+    // The unit and its parent must belong to the same organization. Checked once,
+    // at creation; `organization_id` and `inventory_item_id` are immutable
+    // afterwards, so re-reading the parent on every edit would buy nothing.
+    //
+    // The parent's team is deliberately not checked. Units of one item may be
+    // owned by different crews — Lighting's clamps and Scenic's clamps are the
+    // same catalog entry and different property — so the parent's team is a
+    // default at creation rather than a claim about every unit.
     function unitParentAgrees(data) {
       return exists(itemPath(data.inventory_item_id))
-        && get(itemPath(data.inventory_item_id)).data.organization_id == data.organization_id
-        && get(itemPath(data.inventory_item_id)).data.team_id == data.team_id;
+        && get(itemPath(data.inventory_item_id)).data.organization_id == data.organization_id;
     }
 
     match /inventory_units/{unitId} {
@@ -710,21 +787,27 @@ service cloud.firestore {
       allow create: if unitFieldsValid(unitId)
         && canWriteInventoryForTeam(request.resource.data.organization_id,
                                     request.resource.data.team_id)
+        && usingTeamAllowed(request.resource.data.organization_id, request.resource.data)
         && unitParentAgrees(request.resource.data)
         && request.resource.data.created_by_uid == uid()
         && request.resource.data.created_at == request.time;
 
       allow update: if unitFieldsValid(unitId)
-        // Identity, the parent link, the owning team, and authorship are fixed.
-        // The owning team especially: it is what the rule above authorizes
-        // against, so a writable copy could widen who may edit the unit.
+        // Identity, the parent link, and authorship are fixed. The owning team
+        // is not: a unit can change hands between crews.
         && request.resource.data.unit_id == resource.data.unit_id
         && request.resource.data.organization_id == resource.data.organization_id
         && request.resource.data.inventory_item_id == resource.data.inventory_item_id
-        && request.resource.data.team_id == resource.data.team_id
         && request.resource.data.created_by_uid == resource.data.created_by_uid
         && request.resource.data.created_at == resource.data.created_at
-        && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id);
+        // Editable as it stands, and editable where it is going — the same test
+        // an item's team move gets, and for the same reason. The owning team is
+        // what authorizes writes to this unit, so handing it to another crew is
+        // a change of security boundary rather than an ordinary field edit.
+        && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
+        && canWriteInventoryForTeam(resource.data.organization_id,
+                                    request.resource.data.team_id)
+        && usingTeamAllowed(resource.data.organization_id, request.resource.data);
 
       // Equipment leaves the inventory by being retired, which keeps its
       // history. Deleting it would destroy exactly the record this collection

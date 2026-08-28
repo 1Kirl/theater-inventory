@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { Timestamp } from 'firebase/firestore'
 import {
-  dashboardAccess, hasAnyAccess, isOpenRepair, summarizeCalendar, summarizeInventory,
+  dashboardAccess, hasAnyAccess, summarizeCalendar, summarizeInventory,
   summarizeMaintenance, summarizeProductions, upcomingEvents,
 } from '@/features/dashboard/dashboard-summary'
 import { EMPTY_CONDITION_COUNTS } from '@/domain/inventory'
-import { currentlyInService } from '@/domain/maintenance'
+import { currentlyInService, isOpenStatus } from '@/domain/maintenance'
 import { shortageOf } from '@/domain/production'
 import type { ConditionCounts, InventoryItem } from '@/types/inventory'
 import type { MaintenanceRecord } from '@/types/maintenance'
@@ -197,9 +197,9 @@ describe('summarizeMaintenance', () => {
 
   it('counts a repair as open until it is returned or cancelled', () => {
     expect(summarizeMaintenance(records, NOW).openCount).toBe(3)
-    expect(isOpenRepair({ status: 'planned' })).toBe(true)
-    expect(isOpenRepair({ status: 'returned' })).toBe(false)
-    expect(isOpenRepair({ status: 'cancelled' })).toBe(false)
+    expect(isOpenStatus('planned')).toBe(true)
+    expect(isOpenStatus('returned')).toBe(false)
+    expect(isOpenStatus('cancelled')).toBe(false)
   })
 
   it('reuses the existing in-service rule rather than restating it', () => {

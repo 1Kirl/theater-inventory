@@ -21,6 +21,12 @@ export const paths = {
   inventoryNew: '/inventory/new',
   inventoryItem: (itemId: string) => `/inventory/${itemId}`,
   inventoryItemEdit: (itemId: string) => `/inventory/${itemId}/edit`,
+  /**
+   * One physical unit. Top-level rather than nested under its item, because a
+   * unit is reached from a shelf label as often as from the item page, and a
+   * URL that carries only the unit's own id survives the item being renamed.
+   */
+  inventoryUnit: (unitId: string) => `/equipment/${unitId}`,
   maintenance: '/maintenance',
   maintenanceNew: '/maintenance/new',
   maintenanceRecord: (recordId: string) => `/maintenance/${recordId}`,

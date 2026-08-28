@@ -781,6 +781,49 @@ reads those fields keeps working without learning that units exist.
 For a bulk item they remain what they always were: numbers a person maintains,
 with condition counts allowed to fall short of the total.
 
+### 13c-i. Unit ownership
+
+`inventory_units.team_id` is the unit's own owning team, not a copy of its
+parent's. Units of one item may belong to different crews, and a unit may change
+hands: the field is settable at creation and editable afterwards, with Rules
+checking the actor's authority over both the team it has and the team it is
+going to.
+
+For a **bulk** item, `inventory_items.team_id` is the owning team exactly as
+before. For a **serialized** item it is the default a new unit starts from, and
+is not presented as the ownership of every unit. Likewise `location` and
+`last_inspected_at`: unchanged for bulk items, and not shown as shared facts for
+serialized ones.
+
+### 13c-ii. Who may write what
+
+| Write | Bulk | Serialized |
+|---|---|---|
+| Item metadata (name, category, team, location, notes) | item's team | item's team |
+| Item mirrors (`unit_counts`, quantities, `condition_counts`) | item's team | **any inventory editor** |
+| Unit create / edit | — | the unit's own team |
+| Unit ownership transfer | — | both the old and the new team |
+
+The mirrors are the exception because a unit's owner may sit under another
+crew's item, and every unit operation moves those numbers.
+
+### 13d. How the mirrors are kept in step
+
+Units and their parent's mirrors are written together in one transaction. The
+parent is read inside that transaction, so concurrent writers are serialized
+rather than losing each other's counts, and the whole batch either lands or does
+not.
+
+An entire batch fits in one transaction. Security Rules charge for each distinct
+document read, and every unit of an item reads the same parent, so a batch of
+units costs one access call regardless of size — measured at four hundred units
+plus their parent in `tests/rules/inventory-unit-transactions.test.ts`. What the
+budget of twenty actually limits is a batch spanning many *different* parents.
+
+Rules can check that the stored numbers are internally consistent. They cannot
+count documents, so they cannot check that the numbers match reality; that is
+what the transaction is for.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

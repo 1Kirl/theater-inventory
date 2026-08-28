@@ -29,6 +29,8 @@ const VIEWER = 'uid-unit-viewer'
 const EDITOR = 'uid-unit-editor'
 const COSTUME_EDITOR = 'uid-unit-costume'
 const NO_ACCESS = 'uid-unit-none'
+/** On both crews, for the cases where a unit changes hands. */
+const BOTH_TEAMS = 'uid-unit-both'
 
 const ITEM_LIGHTING = 'itemLIGHTINGAAAAAAAA'
 const ITEM_COSTUME = 'itemCOSTUMEBBBBBBBBB'
@@ -37,6 +39,7 @@ const ITEM_OTHER_ORG = 'itemOTHERORGCCCCCCCC'
 const UNIT_LIGHTING = 'unitLIGHTINGAAAAAAAA'
 const UNIT_COSTUME = 'unitCOSTUMEBBBBBBBBBB'
 const NEW_UNIT = 'unitNEWNEWNEWNEWNEW1'
+const SECOND_UNIT = 'unitSECONDAAAAAAAAAA'
 
 beforeAll(async () => { environment = await createTestEnvironment() })
 afterAll(async () => environment.cleanup())
@@ -78,10 +81,10 @@ function unitPayload(o: {
     unitId: o.unitId ?? NEW_UNIT,
     organizationId: o.organizationId ?? ORG_A,
     inventoryItemId: o.inventoryItemId ?? ITEM_LIGHTING,
-    teamId: o.teamId ?? TEAM_LIGHTING,
     uid: o.uid ?? ADMIN,
     now: serverTimestamp,
     input: {
+      owningTeamId: o.teamId ?? TEAM_LIGHTING,
       assetCode: 'CLAMP-017',
       condition: o.condition ?? 'good',
       status: o.status ?? 'available',
@@ -148,6 +151,10 @@ beforeEach(async () => {
   })
   await seedMembership(environment, {
     organizationId: ORG_A, uid: COSTUME_EDITOR, teamIds: [TEAM_COSTUME], permissions: EDIT_INVENTORY,
+  })
+  await seedMembership(environment, {
+    organizationId: ORG_A, uid: BOTH_TEAMS, teamIds: [TEAM_LIGHTING, TEAM_COSTUME],
+    permissions: EDIT_INVENTORY,
   })
   await seedMembership(environment, {
     organizationId: ORG_A, uid: NO_ACCESS, teamIds: [TEAM_LIGHTING],
@@ -237,11 +244,44 @@ describe('inventory_units — creating', () => {
       unitPayload({ uid: VIEWER })))
   })
 
-  it('341. a unit whose team disagrees with its parent is refused', async () => {
-    // The copied team is what authorizes later edits, so it has to be the
-    // parent's, not one the caller picked.
-    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+  it('341. a unit may be owned by a team other than its parent\'s', async () => {
+    // Lighting's clamps and Scenic's clamps are the same catalog entry and
+    // different property. The parent's team is a default at creation, not a
+    // claim about every unit under it.
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
       unitPayload({ inventoryItemId: ITEM_LIGHTING, teamId: TEAM_COSTUME })))
+  })
+
+  it('341a. two units of one item may be owned by different teams', async () => {
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      unitPayload({ unitId: NEW_UNIT, inventoryItemId: ITEM_LIGHTING, teamId: TEAM_LIGHTING })))
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', SECOND_UNIT),
+      unitPayload({ unitId: SECOND_UNIT, inventoryItemId: ITEM_LIGHTING, teamId: TEAM_COSTUME })))
+  })
+
+  it('341b. a member cannot own a unit by a team from another organization', async () => {
+    // Held to their own memberships, which are per-organization, so a team from
+    // elsewhere is not among them.
+    await assertFails(setDoc(doc(db(EDITOR), 'inventory_units', NEW_UNIT),
+      unitPayload({ inventoryItemId: ITEM_LIGHTING, teamId: TEAM_OTHER_ORG, uid: EDITOR })))
+  })
+
+  it('341c. a member cannot own a unit by a team that does not exist', async () => {
+    await assertFails(setDoc(doc(db(EDITOR), 'inventory_units', NEW_UNIT),
+      unitPayload({ inventoryItemId: ITEM_LIGHTING, teamId: 'teamDOESNOTEXIST0001',
+                    uid: EDITOR })))
+  })
+
+  it('341e. an owning team must at least be a non-empty string', async () => {
+    // What Rules still guarantee for an Admin. That the team exists is checked
+    // by the service, which can afford the read a 200-unit batch cannot.
+    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      { ...unitPayload({ inventoryItemId: ITEM_LIGHTING }), team_id: '' }))
+  })
+
+  it('341d. a member cannot create a unit owned by a team they are not on', async () => {
+    await assertFails(setDoc(doc(db(EDITOR), 'inventory_units', NEW_UNIT),
+      unitPayload({ inventoryItemId: ITEM_LIGHTING, teamId: TEAM_COSTUME, uid: EDITOR })))
   })
 
   it('342. a unit pointing at another organization\'s item is refused', async () => {
@@ -335,6 +375,24 @@ describe('inventory_units — status and condition vocabulary', () => {
       { ...unitPayload({ status: 'in_use', usingTeamId: TEAM_COSTUME }),
         using_team_id: null, using_member_uid: EDITOR }))
   })
+
+  it('353a. an in-use unit cannot name an empty borrowing team', async () => {
+    // The field is present, so the status check is satisfied; what it holds
+    // says nothing about who has the equipment.
+    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      { ...unitPayload({ status: 'in_use', usingTeamId: TEAM_COSTUME }), using_team_id: '' }))
+  })
+
+  it('353b. an in-use unit cannot name an empty borrowing member', async () => {
+    await assertFails(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      { ...unitPayload({ status: 'in_use', usingTeamId: TEAM_COSTUME }), using_member_uid: '' }))
+  })
+
+  it('353c. an in-use unit with a real borrowing team is accepted', async () => {
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'inventory_units', NEW_UNIT),
+      { ...unitPayload({ status: 'in_use', usingTeamId: TEAM_COSTUME }),
+        using_member_uid: EDITOR }))
+  })
 })
 
 describe('inventory_units — updating', () => {
@@ -357,9 +415,32 @@ describe('inventory_units — updating', () => {
       { condition: 'fair', updated_at: serverTimestamp() }))
   })
 
-  it('357. the owning team is immutable, because it is what authorizes the edit', async () => {
-    await assertFails(updateDoc(doc(db(ADMIN), 'inventory_units', UNIT_LIGHTING),
+  it('357. an admin may hand a unit to another team', async () => {
+    // Ownership changes when equipment changes hands, so it is editable — but
+    // it is the field that authorizes edits, so both ends are checked.
+    await assertSucceeds(updateDoc(doc(db(ADMIN), 'inventory_units', UNIT_LIGHTING),
       { team_id: TEAM_COSTUME, updated_at: serverTimestamp() }))
+  })
+
+  it('357a. a member cannot hand a unit to a team they are not on', async () => {
+    // Editable as it stands, not editable where it would be going.
+    await assertFails(updateDoc(doc(db(EDITOR), 'inventory_units', UNIT_LIGHTING),
+      { team_id: TEAM_COSTUME, updated_at: serverTimestamp() }))
+  })
+
+  it('357b. a member on both crews may move a unit between them', async () => {
+    await assertSucceeds(updateDoc(doc(db(BOTH_TEAMS), 'inventory_units', UNIT_LIGHTING),
+      { team_id: TEAM_COSTUME, updated_at: serverTimestamp() }))
+  })
+
+  it('357c. a member cannot move a unit to a team that does not exist', async () => {
+    await assertFails(updateDoc(doc(db(EDITOR), 'inventory_units', UNIT_LIGHTING),
+      { team_id: 'teamDOESNOTEXIST0001', updated_at: serverTimestamp() }))
+  })
+
+  it('357d. a unit cannot be moved to an empty team', async () => {
+    await assertFails(updateDoc(doc(db(ADMIN), 'inventory_units', UNIT_LIGHTING),
+      { team_id: '', updated_at: serverTimestamp() }))
   })
 
   it('358. the parent link is immutable', async () => {

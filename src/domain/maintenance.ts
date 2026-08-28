@@ -29,6 +29,30 @@ export function isActiveStatus(status: MaintenanceStatus): boolean {
   return ACTIVE_STATUSES.includes(status)
 }
 
+/**
+ * Statuses that finish a repair. Everything else is still open.
+ *
+ * This is a different question from `ACTIVE_STATUSES` and both are needed. That
+ * one asks how much equipment is physically away right now, which `planned`
+ * is not. This one asks whether a repair is unfinished, which `planned` very
+ * much is — it is a commitment somebody made and has not yet closed.
+ *
+ * Defined as the complement so a status added later blocks by default rather
+ * than silently slipping through as finished.
+ */
+export const CLOSED_STATUSES: readonly MaintenanceStatus[] = ['returned', 'cancelled']
+
+export function isOpenStatus(status: MaintenanceStatus): boolean {
+  return !CLOSED_STATUSES.includes(status)
+}
+
+/** Repairs that have not been closed out, whether or not they have left yet. */
+export function openRecords<T extends Pick<MaintenanceRecord, 'status'>>(
+  records: readonly T[],
+): T[] {
+  return records.filter((record) => isOpenStatus(record.status))
+}
+
 export function isMaintenanceStatus(value: string): value is MaintenanceStatus {
   return (MAINTENANCE_STATUSES as readonly string[]).includes(value)
 }
@@ -51,7 +75,7 @@ export function isOverdue(
   now: Date,
 ): boolean {
   if (!record.expected_return_at) return false
-  if (record.status === 'returned' || record.status === 'cancelled') return false
+  if (!isOpenStatus(record.status)) return false
 
   return record.expected_return_at.toDate().getTime() < now.getTime()
 }

@@ -8,14 +8,13 @@ import type { ConditionKey, RetirementReason, UnitStatus } from '@/types/invento
  * a permission-denied rather than a soft failure. Keeping the shape here lets
  * the Rules tests exercise the payload the application will actually send, the
  * way every other collection in this project already does.
- *
- * No service uses this yet. It exists in Phase 11A so the contract, the Rules,
- * and the tests are settled before anything writes a unit.
  */
 export type Now = () => FieldValue
 
 export interface InventoryUnitInput {
   assetCode: string
+  /** The crew this unit belongs to, which is what authorizes edits to it. */
+  owningTeamId: string
   condition: ConditionKey
   status: UnitStatus
   storageLocation: string
@@ -38,15 +37,20 @@ function optionalText(value: string | undefined) {
 /**
  * Fields the user may set.
  *
- * Identity, the parent link, the owning team, and authorship are not among
- * them: those are what Rules authorize against, and a write that could change
- * them could widen who may edit the unit afterwards.
+ * The owning team is among them. Units of one item can belong to different
+ * crews, and equipment changes hands, so `team_id` is the unit's own rather than
+ * a copy of its parent's. It is still what Rules authorize against, which is why
+ * a move is checked at both ends rather than treated as an ordinary edit.
+ *
+ * Identity, the parent link, and authorship are not settable: those anchor the
+ * document and changing them would make it a different unit.
  */
 function editableFields(input: InventoryUnitInput) {
   const lastKnownLocation = optionalText(input.lastKnownLocation)
   const notes = optionalText(input.notes)
 
   return {
+    team_id: input.owningTeamId,
     asset_code: input.assetCode.trim(),
     condition: input.condition,
     status: input.status,
@@ -76,8 +80,6 @@ export function buildInventoryUnitDocument(params: {
   organizationId: string
   /** Copied from the parent, and immutable afterwards. */
   inventoryItemId: string
-  /** The parent's owning team, copied so Rules need not read the parent. */
-  teamId: string
   uid: string
   now: Now
   input: InventoryUnitInput
@@ -86,7 +88,6 @@ export function buildInventoryUnitDocument(params: {
     unit_id: params.unitId,
     organization_id: params.organizationId,
     inventory_item_id: params.inventoryItemId,
-    team_id: params.teamId,
     ...editableFields(params.input),
     created_by_uid: params.uid,
     created_at: params.now(),
@@ -96,15 +97,14 @@ export function buildInventoryUnitDocument(params: {
 
 /**
  * An update replaces the whole document rather than merging, so a field the
- * user cleared is actually removed. Identity, the parent link, the owning team,
- * authorship, and creation time are carried through unchanged and are immutable
- * in Rules.
+ * user cleared is actually removed. Identity, the parent link, authorship, and
+ * creation time are carried through unchanged and are immutable in Rules; the
+ * owning team comes from the input, because a unit can change hands.
  */
 export function buildInventoryUnitUpdate(params: {
   unitId: string
   organizationId: string
   inventoryItemId: string
-  teamId: string
   createdByUid: string
   createdAt: Timestamp
   now: Now
@@ -114,7 +114,6 @@ export function buildInventoryUnitUpdate(params: {
     unit_id: params.unitId,
     organization_id: params.organizationId,
     inventory_item_id: params.inventoryItemId,
-    team_id: params.teamId,
     ...editableFields(params.input),
     created_by_uid: params.createdByUid,
     created_at: params.createdAt,

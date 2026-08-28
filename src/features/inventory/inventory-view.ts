@@ -20,11 +20,12 @@ export function conditionTone(item: Pick<InventoryItem, 'condition_counts'>): Co
   return 'neutral'
 }
 
+/** Works for an item or a unit: both carry their own `team_id`. */
 export function teamNameOf(
-  item: Pick<InventoryItem, 'team_id'>,
+  record: Pick<InventoryItem, 'team_id'>,
   teams: readonly TheaterTeam[],
 ): string {
-  return teams.find((team) => team.team_id === item.team_id)?.name ?? 'Unknown team'
+  return teams.find((team) => team.team_id === record.team_id)?.name ?? 'Unknown team'
 }
 
 export function unclassifiedOf(

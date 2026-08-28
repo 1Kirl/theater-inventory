@@ -1,5 +1,5 @@
 import { conditionSummary } from '@/domain/inventory'
-import { currentlyInService, isOverdue } from '@/domain/maintenance'
+import { currentlyInService, isOverdue, openRecords } from '@/domain/maintenance'
 import { isOpenAction, requirementAvailability } from '@/domain/production'
 import { dateKeyOf, sortEvents, toDateKey } from '@/domain/calendar'
 import { hasModuleAccess } from '@/domain/module-access'
@@ -75,11 +75,6 @@ export function summarizeInventory(items: readonly InventoryItem[]): InventorySu
   return { itemCount: items.length, totalUnits, availableUnits, needsAttentionCount }
 }
 
-/** A repair job is open until it is returned or cancelled. */
-export function isOpenRepair(record: Pick<MaintenanceRecord, 'status'>): boolean {
-  return record.status !== 'returned' && record.status !== 'cancelled'
-}
-
 export interface MaintenanceSummary {
   /** Repair jobs still open, counted as records. */
   openCount: number
@@ -100,7 +95,7 @@ export function summarizeMaintenance(
   now: Date,
   limit = 5,
 ): MaintenanceSummary {
-  const open = records.filter(isOpenRepair)
+  const open = openRecords(records)
 
   return {
     openCount: open.length,

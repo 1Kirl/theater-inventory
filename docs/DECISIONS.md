@@ -1419,3 +1419,363 @@ A claim-document pattern was considered and rejected: it would double the writes
 for every unit, and a bulk creation of twenty-four clamps would blow the access
 budget. The identifier is `unit_id`, and that is what a QR code will encode. Two
 units sharing a label is untidy, not broken.
+
+### 66. A whole batch of units goes in one transaction, and the ceiling was measured
+
+Decision 65 assumed the access-call budget would force units to be written a few
+at a time. That assumption was wrong, and `tests/rules/inventory-unit-transactions.test.ts`
+is where it was checked against the published Rules rather than reasoned about.
+
+Rules charge for each *distinct* document a batch reads, not for each evaluation.
+Every unit of one item reads the same parent, so the whole batch costs one access
+call. Measured on the emulator: **four hundred units plus their parent commit in a
+single batch**, while twenty-five units under twenty-five different parents fail —
+that second case is where the budget of twenty actually bites.
+
+So `createInventoryUnits` and `promoteToSerialized` each run as one transaction:
+read the parent, compute the mirrors from what it currently says, write every
+unit and the parent together. `MAX_BULK_UNITS` is 200, inside both the measured
+ceiling and Firestore's own limit of 500 writes per transaction.
+
+This is better than one transaction per unit on both counts that matter. There is
+no partial batch to explain, and the parent is read inside the transaction, so
+two people adding units at once cannot compute their counters from the same stale
+total.
+
+### 66a. A failed promotion leaves a working bulk item
+
+Because the conversion is one transaction, an interruption changes nothing: the
+item is still a bulk quantity with its original numbers, and no units exist. A
+half-converted item that looks healthy but is missing units is not a state this
+can reach.
+
+### 67. Units live at `/equipment/:unitId`
+
+Not `/inventory/:itemId/units/:unitId`. A unit is reached from a shelf label as
+often as from its item page, the URL is what a QR code will eventually encode,
+and a path carrying only the unit's own id keeps working when the item is renamed
+or when the unit is the only thing the reader knows. The route sits behind the
+same `inventory` view guard as every other inventory page.
+
+### 68. Lifecycle status is not an editable field
+
+The unit form shows status and does not let anyone change it. Checking equipment
+out, sending it for repair, losing it, and retiring it each have consequences and
+each deserve their own record; a dropdown would let someone move a unit between
+them with none of that. New units start `available` for the same reason — this
+phase has no way to record why a unit would start anywhere else. Condition is
+editable, because condition is an observation rather than an event.
+
+### 68a. A conversion never invents a condition or a borrowing team
+
+Two things a bulk item does not record, which a serialized one requires.
+
+`sum(condition_counts) <= quantity_total` is legal for a bulk item, so ten
+recorded with eight classified leaves two units whose condition nobody ever
+observed. Those drafts start `null` and the review step refuses to convert while
+any remain. Filling them with `good` would have been easy and would have put a
+number in the serialized summary that no one ever looked at.
+
+The same applies to `using_team_id`. An earlier draft of the promotion assigned
+the item's own owning team to any unit marked in use — which reads as reasonable
+and is still a guess: the owning team is who the equipment belongs to, not who
+has it. The review step asks, and Convert stays disabled until every in-use unit
+names a real team of the organization.
+
+Rules enforce the shape — an `in_use` unit must carry a non-empty
+`using_team_id`, and a unit that is not in use must carry none. They cannot check
+that the team exists, because that would cost an access call per unit and a
+batch of two hundred has one to spend. The service checks it against the
+organization's teams before the transaction opens.
+
+### 68b. Unit ids are allocated before the transaction, never inside it
+
+A transaction body re-runs when its read set changes underneath it. Refs
+generated inside the body would differ on each attempt, so a retry would commit
+a second set of units alongside the first. They are allocated once, outside, and
+reused by every attempt.
+
+The parent mirrors are computed absolutely rather than incrementally for the
+same reason: the promotion derives them from the drafts, and unit creation
+derives them from the parent snapshot that attempt just read. Neither adds to a
+running total, so re-running the body produces the same numbers rather than
+double-counting. `src/services/inventory-unit-service.test.ts` runs the body
+twice and asserts both properties.
+
+### 68c. A conversion cannot put a unit into maintenance
+
+`in_maintenance` is a valid lifecycle status and is not offered by the promotion
+wizard. A unit in maintenance is half a record: the other half is a maintenance
+record naming the provider, the date it went out, and when it is expected back,
+and the transition into the status is what creates it. Setting the status alone
+would produce a unit stuck in maintenance with no repair to return from, no
+history explaining it, and no legitimate way out.
+
+So equipment genuinely away for repair cannot be described by a conversion yet.
+The wizard says so rather than offering a status that would lie. Inventing a
+placeholder repair record would have been the other option and is worse: a
+fabricated repair is harder to find and undo later than an item recorded as
+available. With no real user data yet, the limitation costs nothing.
+
+A conversion may start a unit as `available`, `in_use`, or `lost`.
+
+### 68d. New units are available, and only the conversion may say otherwise
+
+The Add Unit and Generate Units paths refuse any status but `available`, in the
+service rather than only in the form. Lifecycle transitions belong to the
+operations that cause them, which arrive in a later phase; until then there is
+no way to record *why* a unit would start anywhere else. The promotion is the
+single exception, because it describes equipment that already has a history, and
+it validates its drafts against its own narrower list.
+
+### 69. Who a unit may be lent to, and where that is enforced
+
+Rules hold a member to their own assigned teams: `using_team_id` must appear in
+their membership's `team_ids`. This costs nothing — the membership document is
+read to authorize the write regardless, so the check reads a second field of a
+document Rules already have in hand. Owning team and using team may still
+differ, which is the point; what a member cannot do is attribute equipment to a
+crew they have nothing to do with.
+
+An Admin is checked for shape only: present and non-empty. The stricter rule —
+reading each team document to prove it belongs to the organization — was
+implemented and measured before being rejected. One batch tolerates **seven**
+distinct borrowing teams before the access-call budget runs out, because that
+read is charged per distinct team. A department with eight crews would have a
+legitimate conversion fail with a permission error it could do nothing about.
+
+The trade is sound because it is not an authorization boundary. An Admin may
+already write any inventory in their organization, so a `using_team_id` naming a
+team that does not exist is a data-quality problem rather than an escalation.
+The service validates it against the organization's real teams before the
+transaction opens, and the wizard only ever offers real teams.
+
+`using_member_uid` stays optional and is not collected anywhere yet.
+
+### 70. An item with open repairs cannot be converted yet
+
+Decision 68c stops a conversion inventing a unit in maintenance. The other side
+of that is this: an item that *already* has an open repair cannot be converted at
+all.
+
+A bulk repair records a quantity — four of the twenty-four clamps went out — and
+never says which four. Serialized maintenance attaches a repair to named units,
+and that does not exist until a later phase. So an open repair has nowhere
+accurate to go across the conversion. The alternatives were to drop it, or to
+make the user file those four units as available, in use, or lost. All three are
+false, and the third is the worst because it looks deliberate.
+
+Returned and cancelled repairs block nothing. They stay as the aggregate records
+they always were, and no attempt is made to attach them to the new units.
+
+**Open** means not `returned` and not `cancelled` — `planned`, `sent`,
+`in_service`, and `ready` all block. This is the definition the Dashboard's
+Active Repairs card already used, which was a local helper in
+`dashboard-summary.ts`; it now lives in `domain/maintenance.ts` as `isOpenStatus`
+and both callers share it, so there is one definition rather than two that could
+drift.
+
+It is deliberately a different question from `ACTIVE_STATUSES`, which powers the
+in-service quantity and excludes `planned`. That asks how much equipment is
+physically away; this asks whether a repair is unfinished, and a planned repair
+is very much unfinished. `isOpenStatus` is defined as the complement of the
+closed statuses so a status added later blocks by default.
+
+### 70a. Where the block is enforced, and what it cannot reach
+
+The wizard's button is disabled with an explanation, and the service refuses
+independently — a form is not a data-integrity boundary.
+
+**Security Rules do not enforce this, and cannot.** Rules evaluate one write at a
+time against documents they can name; they cannot query `maintenance_records` for
+"any open record referencing this item". Rules were left unchanged for this
+requirement rather than weakened to approximate it. The consequence is honest:
+someone writing to Firestore directly, outside the application, could convert an
+item with an open repair. That is the same class of limitation the whole
+serialized-mirror design already carries — Rules check that the stored counts are
+internally consistent and cannot check that they match reality.
+
+Reading the repairs needs the maintenance permission. A user who may edit
+inventory but not read maintenance cannot establish that nothing is open, and the
+service refuses rather than converting on an assumption. Failing closed costs
+that user a conversion; failing open would strand a repair.
+
+### 70b. The residual race, stated plainly
+
+Two people, no server:
+
+1. the wizard reads the repairs and finds none open
+2. someone else files a repair against the same item
+3. the conversion commits
+
+The conversion's transaction reads the *item*, not the repair collection, so it
+cannot detect this. Firestore transactions guard documents the transaction
+touched, and adding the repair collection to that set is not something a
+transaction can express — there is no document to read whose absence means "no
+open repair exists".
+
+Closing it properly needs either a counter on the item that maintenance writes
+transactionally, or a server. The counter is real work and touches the
+maintenance write path, which this phase is not opening; a server is off the
+table on Spark. So the race is left open and written down. The window is a few
+seconds, both actors are staff of the same department, and the outcome is a
+recoverable data-quality problem rather than a loss: the repair still exists and
+still names the item, it simply describes a quantity the item no longer tracks
+that way. With no real user data yet, this is an acceptable trade for the phase.
+
+### 71. A unit's owning team is its own
+
+Phase 11A copied the parent's `team_id` onto every unit and froze it, on the
+assumption that an item's units all belong to one crew. Browser QA showed the
+assumption is wrong: Lighting's clamps and Scenic's clamps are the same catalog
+entry and different property.
+
+So `inventory_units.team_id` is now the authoritative owning team, settable per
+unit and changeable afterwards. `organization_id` and `inventory_item_id` stay
+immutable copies; only the team moved.
+
+The parent item keeps its `team_id`. Renaming it to `default_team_id` was
+considered and rejected — it is a required field on every existing item, read by
+the list, the filters, the AI context, and the Rules for items, and renaming it
+would touch all of them to express something a comment already says. For a bulk
+item it means exactly what it always did. For a serialized item it is the default
+a new unit starts from, and it is no longer *presented* as the ownership of every
+unit, which was the actual problem.
+
+### 71a. What a serialized parent may claim, and what it may not
+
+`location`, `last_inspected_at`, `team_id`, and `updated_at` describe one
+physical object. A serialized item is a grouping of many, each with its own, so
+the list and the detail stop showing them for serialized items rather than
+showing a value that speaks for equipment it does not describe.
+
+`updated_at` is the least obvious of the four and the most quietly misleading: it
+moves whenever *any* unit does, so a clamp untouched since spring reads as
+updated this morning because someone else's clamp came back from repair. It stays
+in the schema — Rules require it on every write — and is simply not presented. `itemPresentation()` is the single
+place that decides, so the list and the detail cannot drift apart.
+
+The fields stay in the schema and stay required. Removing them would break every
+bulk item, and a serialized item still needs somewhere for a new unit's location
+to default from. Recommendation for a later phase, if it ever matters: leave them
+alone. The cost of the current arrangement is one comment; the cost of a rename
+is a migration.
+
+Serialized items show a lifecycle summary instead — total, available, in use, in
+maintenance, lost, unusable on hand — with the condition breakdown kept as it
+was, and the units themselves underneath.
+
+### 71b. Moving a unit between crews is a change of security boundary
+
+`team_id` is what authorizes writes to a unit, so Rules treat a move the way they
+treat an item's: editable as it stands, and editable where it is going. A member
+must hold both the current and the new team; an Admin may assign any team in the
+organization. `teamBelongsToOrganization` rejects a team that does not exist,
+the same check an item's team gets.
+
+That read is charged per distinct team in a batch, and
+`tests/rules/inventory-unit-transactions.test.ts` measures the ceiling at **eight
+distinct owning teams** per batch — comfortably above what a conversion needs,
+because the drafts default to the parent's single team and per-unit exceptions
+are made afterwards as single-document edits with their own budget. Two hundred
+units under one owning team commit fine.
+
+One consequence worth stating: adding or editing a unit also writes the parent's
+mirrors, and that write is authorized against the *parent's* team. So the crew
+that owns the item manages its unit roster, even where individual units belong to
+other crews. That is a defensible split — the item is Lighting's catalog entry
+and Lighting curates it — but it is a real constraint rather than an oversight.
+
+### 72. Phase 11C — lifecycle actions
+
+Recorded here so the next phase starts from a settled contract. Units must get
+explicit lifecycle actions, not a status dropdown:
+
+- Available → Mark as In Use, Mark Lost
+- In Use → Check In, Mark Lost
+- Lost → Mark as Found
+- In Maintenance → reached through the maintenance workflow, never generic edit
+- Retired → reached through an explicit Retire action, never generic edit
+
+Each action updates the unit, the parent's mirrors, and `asset_events` in one
+transaction.
+
+Phase 11C should also extend Add Unit so a newly registered asset may start as
+Available, In Use, or Lost — In Use requiring a using team, member optional. It
+must still not start as In Maintenance or Retired, for the reason in decision
+68c. Phase 11B keeps Add Unit available-only.
+
+Phase 11B exposes lifecycle read-only: the summary on the item, a status on every
+unit row, and a status on the unit page.
+
+### 73. A serialized item's mirrors are writable by any inventory editor
+
+Decision 71 made a unit's team its own and left a contradiction behind: adding or
+editing a unit also writes the parent's counts, and that write was authorized
+against the *parent's* team. So Scenic could own a clamp under a Lighting-owned
+item and still not be able to record that it broke. Browser QA found it, a Rules
+test reproduced it, and it is not acceptable — ownership that cannot be acted on
+is not ownership.
+
+Item updates now take one of two paths, chosen by what the write actually
+changes:
+
+- **Mirror-only** — `unit_counts`, `quantity_total`, `quantity_available`,
+  `condition_counts`, `updated_at`, with the item serialized on both sides.
+  Authorized by an active membership with `inventory: edit`, no team required.
+- **Everything else** — unchanged. Editable as it stands and editable where it is
+  going, exactly as before, which is the whole of bulk behavior and all
+  serialized metadata.
+
+`changedOnly()` is what separates them, the same helper the admin transfer and
+rename rules already use. Name, category, notes, team, location, tracking mode,
+identity, and authorship are all outside the mirror path: a unit owner can move
+the numbers their unit moved and nothing else.
+
+The cost is real and worth stating: any inventory editor in the organization can
+write a serialized item's counts. Rules cannot count documents, so they could
+never confirm those numbers match the units — what they still enforce is that
+whatever is written adds up. A malicious editor could write internally
+consistent but wrong counts, which is the same thing a team-scoped editor could
+already do to their own items. The gain is that legitimate cross-team ownership
+works at all.
+
+Promotion is deliberately *not* on this path: it changes `tracking_mode`, so it
+takes the ordinary branch and still requires the item's team. Converting an item
+is an item-level decision.
+
+### 73a. The expression budget, and what it forced
+
+Adding the mirror path pushed the item update rule past Firestore's limit of
+**1000 expressions evaluated per request** — a legitimate rename by the item's
+own team started failing with an evaluation error rather than a denial. Two
+changes brought it back under:
+
+- the two paths are a ternary rather than an `or`, so only one arm is evaluated
+- the second `canWriteInventoryForTeam` runs only when the team is actually
+  moving, which is the uncommon case
+
+This limit is separate from the twenty access calls and is easy to mistake for a
+permission bug, because that is exactly what it looks like from the client.
+
+### 73b. Owning-team existence: no more eight-team ceiling
+
+Decision 71b checked every unit's owning team against its team document. That
+cost one access call per distinct team and capped a conversion at **eight**
+crews — an arbitrary product limit nobody could have predicted, working directly
+against the promotion wizard's whole point of allowing per-unit ownership.
+
+The check is gone, and the guarantees are split the way `using_team_id` already
+splits them:
+
+- **Member** — `canWriteInventoryForTeam` requires the team to be in their
+  membership's `team_ids`, and that document is read to authorize the write
+  regardless. Free, and it is the real boundary: a member cannot assign a unit
+  to a crew they are not on.
+- **Admin** — Rules require a non-empty string; the service checks the team
+  against the organization's real teams before writing. An Admin already has
+  full inventory authority, so a bad team id is a data-quality problem rather
+  than an escalation.
+
+Measured after the change: 200 units across 12 distinct owning teams commit in
+one batch, and the ladder from 1 to 12 has no failing rung.

@@ -22,6 +22,8 @@ export type OrganizationErrorCode =
   | 'invalid-action-item'
   | 'requirement-not-actionable'
   | 'invalid-calendar-event'
+  | 'invalid-inventory-unit'
+  | 'promotion-blocked-by-maintenance'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

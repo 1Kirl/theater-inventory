@@ -15,6 +15,7 @@ import {
   InventoryItemDetailPage,
   InventoryItemFormPage,
   InventoryListPage,
+  InventoryUnitDetailPage,
   JoinOrganizationPage,
   MaintenanceListPage,
   MaintenanceRecordDetailPage,
@@ -81,6 +82,7 @@ export const router = createBrowserRouter([
                     ],
                   },
                   { path: '/inventory/:itemId', element: <InventoryItemDetailPage /> },
+                  { path: '/equipment/:unitId', element: <InventoryUnitDetailPage /> },
                 ],
               },
               {

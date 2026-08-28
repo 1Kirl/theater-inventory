@@ -10,7 +10,7 @@ import { ACTION_STATUSES, ACTION_TYPES, PRODUCTION_STATUSES } from '@/types/prod
 import { MAINTENANCE_STATUSES } from '@/types/maintenance'
 import { currentlyInService } from '@/domain/maintenance'
 import { isOpenAction } from '@/domain/production'
-import { isOpenRepair } from '@/features/dashboard/dashboard-summary'
+import { isOpenStatus } from '@/domain/maintenance'
 
 /**
  * The demo dataset is data, so it can be wrong quietly.
@@ -173,7 +173,7 @@ describe('maintenance', () => {
   it('produces Dashboard figures that differ from each other', () => {
     // Active Repairs counts jobs; Currently in Service counts units, and a
     // planned repair has not left the building.
-    const open = DEMO_MAINTENANCE.filter(isOpenRepair).length
+    const open = DEMO_MAINTENANCE.filter((record) => isOpenStatus(record.status)).length
     const inService = currentlyInService(
       DEMO_MAINTENANCE.map((record) => ({ status: record.status, quantity_sent: record.quantitySent })),
     )

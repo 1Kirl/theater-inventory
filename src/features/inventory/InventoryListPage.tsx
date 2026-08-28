@@ -43,6 +43,7 @@ import {
   teamNameOf,
   type InventoryFilters,
 } from '@/features/inventory/inventory-view'
+import { itemPresentation, unitBreakdownLine } from '@/features/inventory/inventory-unit-view'
 import { listInventoryItems } from '@/services/inventory-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import { INVENTORY_CATEGORIES, type InventoryItem } from '@/types/inventory'
@@ -307,12 +308,26 @@ export function InventoryListPage() {
                       ) : null}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{item.category}</TableCell>
-                    <TableCell className="text-muted-foreground">{teamNameOf(item, teams)}</TableCell>
+                    {/* Team, location, and inspection describe one physical
+                        thing. A serialized item is a grouping of many, each
+                        with its own, so a single value here would be a claim
+                        about equipment it does not describe. */}
+                    <TableCell className="text-muted-foreground">
+                      {itemPresentation(item).showsParentTeam ? teamNameOf(item, teams) : '—'}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{item.quantity_available}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.quantity_total}</TableCell>
                     <TableCell><ConditionBadge item={item} /></TableCell>
-                    <TableCell className="text-muted-foreground">{item.location}</TableCell>
-                    <TableCell className="text-muted-foreground">{formatDate(item)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {itemPresentation(item).showsParentLocation ? (
+                        item.location
+                      ) : (
+                        <Badge variant="outline">{itemPresentation(item).badge}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {itemPresentation(item).showsParentInspection ? formatDate(item) : '—'}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -331,12 +346,22 @@ export function InventoryListPage() {
                         <ConditionBadge item={item} />
                       </div>
                       <p className="text-muted-foreground text-xs">
-                        {item.category} · {teamNameOf(item, teams)}
+                        {item.category}
+                        {itemPresentation(item).showsParentTeam ? ` · ${teamNameOf(item, teams)}` : ''}
                       </p>
                       <p className="text-sm tabular-nums">
                         {item.quantity_available} of {item.quantity_total} available
                       </p>
-                      <p className="text-muted-foreground text-xs">{item.location}</p>
+                      {itemPresentation(item).showsLifecycleSummary ? (
+                        <>
+                          <Badge variant="outline">{itemPresentation(item).badge}</Badge>
+                          <p className="text-muted-foreground text-xs tabular-nums">
+                            {unitBreakdownLine(item)}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">{item.location}</p>
+                      )}
                       {aiSearch?.reasons.get(item.item_id) ? (
                         <p className="text-muted-foreground text-xs italic">
                           {aiSearch.reasons.get(item.item_id)}
