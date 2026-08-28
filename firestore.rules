@@ -732,7 +732,8 @@ service cloud.firestore {
                 'condition', 'status', 'storage_location', 'created_by_uid', 'created_at',
                 'updated_at'],
                ['retirement_reason', 'using_team_id', 'using_member_uid', 'checked_out_at',
-                'last_known_location', 'last_inspected_at', 'notes'])
+                'last_known_location', 'last_inspected_at', 'notes',
+                'last_lifecycle_event_id'])
         && request.resource.data.unit_id == unitId
         && request.resource.data.asset_code is string
         && request.resource.data.asset_code.size() > 0
@@ -760,9 +761,49 @@ service cloud.firestore {
         && (!('notes' in request.resource.data)
             || (request.resource.data.notes is string
                 && request.resource.data.notes.size() <= 2000))
+        && (!('last_lifecycle_event_id' in request.resource.data)
+            || (request.resource.data.last_lifecycle_event_id is string
+                && request.resource.data.last_lifecycle_event_id.size() > 0))
         && request.resource.data.updated_at == request.time
         && request.resource.data.team_id is string
         && request.resource.data.team_id.size() > 0;
+    }
+
+    // The lifecycle, as the domain defines it. Rules enforce the same shape the
+    // application does, because the application is not the security boundary:
+    // a direct write must not be able to bring a retired unit back or move one
+    // out of maintenance without the repair workflow.
+    function unitTransitionAllowed(from, to) {
+      return (from == 'available' && to in ['in_use', 'in_maintenance', 'lost', 'retired'])
+        || (from == 'in_use' && to in ['available', 'in_maintenance', 'lost', 'retired'])
+        || (from == 'in_maintenance' && to in ['available', 'lost', 'retired'])
+        || (from == 'lost' && to in ['available', 'retired']);
+    }
+
+    function eventPath(eventId) {
+      return /databases/$(database)/documents/asset_events/$(eventId);
+    }
+
+    /**
+     * A status change has to carry its history.
+     *
+     * Rules cannot search a collection, so they cannot ask "is there an event
+     * for this move". The unit names one instead, and this checks that the
+     * named event is real, is about this unit, and describes this exact move.
+     * Combined with the event rule requiring the unit to point back at it, one
+     * cannot exist without the other.
+     */
+    function unitLifecycleEventValid() {
+      return 'last_lifecycle_event_id' in request.resource.data
+        && request.resource.data.last_lifecycle_event_id
+             != resource.data.get('last_lifecycle_event_id', '')
+        && existsAfter(eventPath(request.resource.data.last_lifecycle_event_id))
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .inventory_unit_id == request.resource.data.unit_id
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .from_status == resource.data.status
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .to_status == request.resource.data.status;
     }
 
     // The unit and its parent must belong to the same organization. Checked once,
@@ -807,7 +848,15 @@ service cloud.firestore {
         && canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
         && canWriteInventoryForTeam(resource.data.organization_id,
                                     request.resource.data.team_id)
-        && usingTeamAllowed(resource.data.organization_id, request.resource.data);
+        && usingTeamAllowed(resource.data.organization_id, request.resource.data)
+        // Editing what a unit *is* — its code, condition, location, notes,
+        // owning team — leaves the status alone and needs no history. Changing
+        // where it is in its life is a different kind of write.
+        && (request.resource.data.status == resource.data.status
+            ? request.resource.data.get('last_lifecycle_event_id', '')
+                == resource.data.get('last_lifecycle_event_id', '')
+            : (unitTransitionAllowed(resource.data.status, request.resource.data.status)
+               && unitLifecycleEventValid()));
 
       // Equipment leaves the inventory by being retired, which keeps its
       // history. Deleting it would destroy exactly the record this collection
@@ -841,6 +890,10 @@ service cloud.firestore {
             && maintenanceLevel(organizationId) == 'edit'
             && teamId in membershipData(organizationId).team_ids)
       );
+    }
+
+    function unitPath(unitId) {
+      return /databases/$(database)/documents/inventory_units/$(unitId);
     }
 
     function itemPath(itemId) {
@@ -1264,6 +1317,89 @@ service cloud.firestore {
       // rehearsal is not history worth keeping the way a repair record is, and
       // IA section 9.2 states this directly.
       allow delete: if canEditCalendar(resource.data.organization_id);
+    }
+
+
+    // ----------------------------------------------------------- asset_events
+
+    // What happened to a piece of equipment. Append-only: an event that could be
+    // edited or deleted is not a history, and the value of this collection is
+    // that it answers "who had this when it went missing" after the unit
+    // document has stopped saying so.
+    //
+    // Reading follows the inventory module, like everything else about
+    // equipment. Writing follows the unit's owning team, because a lifecycle
+    // action is a change to that crew's property — a `getAfter()` on the unit
+    // is what ties the two together, so an event cannot be filed for a unit the
+    // actor could not have moved.
+
+    function assetEventFieldsValid(eventId) {
+      return hasExactly(
+               ['event_id', 'organization_id', 'inventory_item_id', 'inventory_unit_id',
+                'event_type', 'from_status', 'to_status', 'actor_uid', 'occurred_at'],
+               ['using_team_id', 'using_member_uid', 'retirement_reason', 'note'])
+        && request.resource.data.event_id == eventId
+        && request.resource.data.event_type in
+             ['marked_in_use', 'checked_in', 'marked_lost', 'marked_found', 'retired']
+        && request.resource.data.from_status in
+             ['available', 'in_use', 'in_maintenance', 'lost', 'retired']
+        && request.resource.data.to_status in
+             ['available', 'in_use', 'in_maintenance', 'lost', 'retired']
+        && request.resource.data.from_status != request.resource.data.to_status
+        && (request.resource.data.to_status == 'retired'
+            ? ('retirement_reason' in request.resource.data
+               && request.resource.data.retirement_reason in
+                    ['disposed', 'permanently_lost', 'donated', 'sold', 'other'])
+            : !('retirement_reason' in request.resource.data))
+        && (!('using_team_id' in request.resource.data)
+            || (request.resource.data.using_team_id is string
+                && request.resource.data.using_team_id.size() > 0))
+        && (!('using_member_uid' in request.resource.data)
+            || (request.resource.data.using_member_uid is string
+                && request.resource.data.using_member_uid.size() > 0))
+        // A member cannot be recorded without the team they had it for.
+        && (!('using_member_uid' in request.resource.data)
+            || 'using_team_id' in request.resource.data)
+        && (!('note' in request.resource.data)
+            || (request.resource.data.note is string
+                && request.resource.data.note.size() <= 2000))
+        && request.resource.data.actor_uid == uid()
+        && request.resource.data.occurred_at == request.time;
+    }
+
+    // The unit as it will be once this batch commits. This is what stops an
+    // event being filed against a unit the actor has no authority over, and
+    // what keeps the log honest: `to_status` has to be what the unit actually
+    // became, so a history line cannot claim a move that did not happen.
+    function assetEventMatchesUnit(data) {
+      return existsAfter(unitPath(data.inventory_unit_id))
+        && getAfter(unitPath(data.inventory_unit_id)).data.organization_id == data.organization_id
+        && getAfter(unitPath(data.inventory_unit_id)).data.inventory_item_id
+             == data.inventory_item_id
+        // Where the unit was, and where it ended up. Both, so an event cannot be
+        // appended on its own describing a move that already happened or never
+        // did: a standalone write leaves the unit where it is, and a unit cannot
+        // be in two states at once.
+        && exists(unitPath(data.inventory_unit_id))
+        && get(unitPath(data.inventory_unit_id)).data.status == data.from_status
+        && getAfter(unitPath(data.inventory_unit_id)).data.status == data.to_status
+        // And the unit has to point back at this event, which is what stops an
+        // extra event riding along with a legitimate transition.
+        && getAfter(unitPath(data.inventory_unit_id)).data
+             .get('last_lifecycle_event_id', '') == data.event_id
+        && canWriteInventoryForTeam(data.organization_id,
+                                    getAfter(unitPath(data.inventory_unit_id)).data.team_id);
+    }
+
+    match /asset_events/{eventId} {
+
+      allow get, list: if canViewInventory(resource.data.organization_id);
+
+      allow create: if assetEventFieldsValid(eventId)
+        && assetEventMatchesUnit(request.resource.data);
+
+      // History is what happened. Correcting it would defeat the purpose.
+      allow update, delete: if false;
     }
 
     // ---------------------------------------------------------------- default

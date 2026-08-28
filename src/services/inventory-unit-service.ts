@@ -16,7 +16,7 @@ import {
   type ItemMirrors, type PromotionDraft,
 } from '@/domain/inventory-unit'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
-import type { InventoryItem, InventoryUnit } from '@/types/inventory'
+import type { InventoryItem, InventoryUnit, UnitStatus } from '@/types/inventory'
 
 /**
  * Individual physical units, and the parent summary they keep in step.
@@ -155,15 +155,6 @@ function itemInputWithMirrors(item: InventoryItem, mirrors: ItemMirrors) {
 }
 
 /**
- * A new unit is on the shelf.
- *
- * Lifecycle belongs to the operations that cause it — checking equipment out,
- * sending it for repair, reporting it lost — and none of those exist yet, so
- * there is no way to record *why* a unit would start anywhere else. The
- * promotion is the one exception, because it is describing equipment that
- * already has a history; it validates its own drafts separately.
- */
-/**
  * A unit's owning team has to exist.
  *
  * Rules check this too — `teamBelongsToOrganization`, the same test an item's
@@ -179,11 +170,26 @@ function requireRealTeam(teamId: string, teamIds: readonly string[]): void {
   }
 }
 
-function requireNewUnitIsAvailable(input: InventoryUnitInput): void {
-  if (input.status !== 'available') {
+/**
+ * What a newly registered piece of equipment may already be.
+ *
+ * Registering an asset is not the same as acquiring one: a clamp being added to
+ * the system may already be out with a crew, or already missing, and the person
+ * entering it can say so truthfully.
+ *
+ * Maintenance and retirement are not among the options, for the same reason as
+ * everywhere else — a unit in maintenance needs the repair record that explains
+ * it, and a retired one needs the history it is retiring from. Neither can be
+ * conjured at creation.
+ */
+const CREATABLE_STATUSES: readonly UnitStatus[] = ['available', 'in_use', 'lost']
+
+function requireCreatableStatus(input: InventoryUnitInput): void {
+  if (!CREATABLE_STATUSES.includes(input.status)) {
     throw new OrganizationError(
       'invalid-inventory-unit',
-      'A new unit starts as available. Its status changes with what happens to it.',
+      'A new unit can start as available, in use, or lost. Maintenance and retirement come '
+      + 'from what happens to it.',
     )
   }
 }
@@ -214,7 +220,7 @@ export async function createInventoryUnits(params: {
   }
   for (const input of params.units) {
     validateInput(input)
-    requireNewUnitIsAvailable(input)
+    requireCreatableStatus(input)
     requireRealTeam(input.owningTeamId, params.teamIds)
   }
 
@@ -309,6 +315,9 @@ export async function updateInventoryUnit(params: {
     usingTeamId: params.existing.using_team_id ?? null,
     usingMemberUid: params.existing.using_member_uid ?? null,
     checkedOutAt: params.existing.checked_out_at ?? null,
+    // Carried through: Rules refuse an edit that changes it without a real
+    // transition, and an edit is not one.
+    lastLifecycleEventId: params.existing.last_lifecycle_event_id,
   }
   validateInput(input)
 

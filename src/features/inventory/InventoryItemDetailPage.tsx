@@ -181,7 +181,8 @@ export function InventoryItemDetailPage() {
           <CardTitle className="text-base">{serialized ? 'Units' : 'Quantity'}</CardTitle>
           <CardDescription>
             {serialized
-              ? 'Counted from the units below. These numbers are not edited directly.'
+              ? 'Counted from the units below. Retired units are listed for their history but '
+                + 'are not part of the active inventory.'
               : 'Available quantity is maintained by hand. Nothing else changes it.'}
           </CardDescription>
         </CardHeader>
@@ -189,7 +190,10 @@ export function InventoryItemDetailPage() {
           {serialized && counts ? (
             <dl className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <div>
-                <dt className="text-muted-foreground text-sm">Total</dt>
+                {/* Not "Total": retired units stay in the list below for their
+                    history but are out of the inventory, so a plain total would
+                    be smaller than the number of rows a reader can count. */}
+                <dt className="text-muted-foreground text-sm">Active</dt>
                 <dd className="text-2xl font-semibold tabular-nums">{counts.active_total}</dd>
               </div>
               <div>
@@ -212,6 +216,12 @@ export function InventoryItemDetailPage() {
                 <dt className="text-muted-foreground text-sm">Unusable on hand</dt>
                 <dd className="text-2xl font-semibold tabular-nums">{counts.unusable_on_hand}</dd>
               </div>
+              {counts.retired > 0 ? (
+                <div>
+                  <dt className="text-muted-foreground text-sm">Retired</dt>
+                  <dd className="text-2xl font-semibold tabular-nums">{counts.retired}</dd>
+                </div>
+              ) : null}
             </dl>
           ) : (
             <dl className={canSeeMaintenance ? 'grid gap-4 sm:grid-cols-4' : 'grid gap-4 sm:grid-cols-3'}>

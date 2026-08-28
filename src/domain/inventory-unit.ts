@@ -462,3 +462,62 @@ export function validatePromotion(params: {
   // resolved type promises.
   return { valid: true, drafts: params.drafts as ResolvedPromotionDraft[] }
 }
+
+/**
+ * What a lifecycle move does to the parent's numbers.
+ *
+ * Every move is the same shape underneath: the unit leaves one bucket and
+ * enters another, and `bucketOf` already knows which bucket a unit belongs to
+ * from its status and condition together. So rather than five hand-written sets
+ * of increments — which is where an arithmetic bug would hide — this computes
+ * the before and after buckets and moves one unit between them.
+ *
+ * That is also why condition matters here at all. An unusable unit on the shelf
+ * sits in `unusable_on_hand` rather than `available`, so marking it lost moves
+ * it out of a bucket that was never counted as availability, and the available
+ * quantity does not change. The same rule read forwards explains why a found
+ * unusable unit does not become available again.
+ */
+export function withStatusChanged(
+  mirrors: ItemMirrors,
+  change: { condition: ConditionKey; from: UnitStatus; to: UnitStatus },
+): ItemMirrors {
+  if (change.from === change.to) return mirrors
+
+  const before = bucketOf({ status: change.from, condition: change.condition })
+  const after = bucketOf({ status: change.to, condition: change.condition })
+
+  const unitCounts = { ...mirrors.unit_counts }
+  const conditionCounts = { ...mirrors.condition_counts }
+
+  if (before !== null) unitCounts[before] -= 1
+  if (after !== null) unitCounts[after] += 1
+
+  // Retirement is the only move that changes what the active totals cover: a
+  // retired unit leaves the condition breakdown and the item's quantity, and
+  // is counted separately for the rest of its life.
+  if (change.to === 'retired') {
+    unitCounts.retired += 1
+    unitCounts.active_total -= 1
+    conditionCounts[change.condition] -= 1
+  }
+  if (change.from === 'retired') {
+    unitCounts.retired -= 1
+    unitCounts.active_total += 1
+    conditionCounts[change.condition] += 1
+  }
+
+  return {
+    unit_counts: unitCounts,
+    condition_counts: conditionCounts,
+    quantity_total: unitCounts.active_total,
+    quantity_available: unitCounts.available,
+  }
+}
+
+/** A unit is operationally available: on the shelf and fit to use. */
+export function isOperationallyAvailable(
+  unit: Pick<InventoryUnit, 'status' | 'condition'>,
+): boolean {
+  return bucketOf(unit) === 'available'
+}

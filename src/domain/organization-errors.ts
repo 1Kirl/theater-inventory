@@ -24,6 +24,8 @@ export type OrganizationErrorCode =
   | 'invalid-calendar-event'
   | 'invalid-inventory-unit'
   | 'promotion-blocked-by-maintenance'
+  | 'invalid-lifecycle-action'
+  | 'inventory-unit-not-found'
 
 /**
  * Failures the caller is expected to handle and explain, as opposed to the raw

@@ -27,6 +27,12 @@ export interface InventoryUnitInput {
   lastKnownLocation?: string | undefined
   lastInspectedAt?: Timestamp | null
   notes?: string | undefined
+  /**
+   * The event that produced this status. Set only by a lifecycle action; an
+   * ordinary edit carries through whatever was already there, and Rules refuse
+   * a change to it that is not accompanied by a real transition.
+   */
+  lastLifecycleEventId?: string | undefined
 }
 
 function optionalText(value: string | undefined) {
@@ -45,7 +51,8 @@ function optionalText(value: string | undefined) {
  * Identity, the parent link, and authorship are not settable: those anchor the
  * document and changing them would make it a different unit.
  */
-function editableFields(input: InventoryUnitInput) {
+function editableFields(params: { input: InventoryUnitInput }) {
+  const input = params.input
   const lastKnownLocation = optionalText(input.lastKnownLocation)
   const notes = optionalText(input.notes)
 
@@ -69,6 +76,9 @@ function editableFields(input: InventoryUnitInput) {
     ...(input.status === 'in_use' && input.checkedOutAt
       ? { checked_out_at: input.checkedOutAt }
       : {}),
+    ...(params.input.lastLifecycleEventId
+      ? { last_lifecycle_event_id: params.input.lastLifecycleEventId }
+      : {}),
     ...(lastKnownLocation ? { last_known_location: lastKnownLocation } : {}),
     ...(input.lastInspectedAt ? { last_inspected_at: input.lastInspectedAt } : {}),
     ...(notes ? { notes } : {}),
@@ -88,7 +98,7 @@ export function buildInventoryUnitDocument(params: {
     unit_id: params.unitId,
     organization_id: params.organizationId,
     inventory_item_id: params.inventoryItemId,
-    ...editableFields(params.input),
+    ...editableFields(params),
     created_by_uid: params.uid,
     created_at: params.now(),
     updated_at: params.now(),
@@ -114,7 +124,7 @@ export function buildInventoryUnitUpdate(params: {
     unit_id: params.unitId,
     organization_id: params.organizationId,
     inventory_item_id: params.inventoryItemId,
-    ...editableFields(params.input),
+    ...editableFields(params),
     created_by_uid: params.createdByUid,
     created_at: params.createdAt,
     updated_at: params.now(),

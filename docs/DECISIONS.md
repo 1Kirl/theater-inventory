@@ -1779,3 +1779,185 @@ splits them:
 
 Measured after the change: 200 units across 12 distinct owning teams commit in
 one batch, and the ladder from 1 to 12 has no failing rung.
+
+### 74. Lifecycle is a set of actions, not a status field
+
+A unit's status is never edited. It changes because something happened to the
+equipment, and each of those things is a named action with its own consequences:
+taking it out records who has it, checking it in ends that, losing it keeps it in
+the inventory as missing, retiring it takes it out for good.
+
+`canTransition` describes the shape of the lifecycle. `offeredTransitions`
+describes what the application currently knows how to *do*, and it is
+deliberately narrower — the unit page builds its buttons from it, so a button
+cannot appear for a move the service would refuse. The gap is maintenance
+(needs a repair record, decision 68c) and retiring a unit that is out.
+
+| From | Offered | Not offered, and why |
+|---|---|---|
+| Available | In Use, Lost, Retire | Maintenance — no repair record yet |
+| In Use | Check In, Lost | Retire — get it back or report it lost first |
+| Lost | Found, Retire | — |
+| In Maintenance | nothing | the repair workflow owns it |
+| Retired | nothing | terminal |
+
+### 74a. The arithmetic is one function, not five
+
+Every lifecycle move does the same thing to the parent's numbers: the unit
+leaves one bucket and enters another. `bucketOf` already knows which bucket a
+unit belongs to from its status and condition together, so `withStatusChanged`
+computes the before and after and moves one unit between them.
+
+Five hand-written sets of increments is where an arithmetic bug would hide, and
+the condition-dependent cases are exactly the ones that would be got wrong. An
+unusable unit on the shelf sits in `unusable_on_hand`, not `available` — so
+marking it lost leaves the available quantity alone, and a found unusable unit
+does not become available again. Both fall out of the same rule rather than
+being remembered separately.
+
+Retirement is the one move that also changes what the active totals cover: a
+retired unit leaves the condition breakdown and the item's quantity.
+
+### 75. Asset events: append-only, and not the source of truth
+
+`asset_events` records what happened. The unit document remains authoritative
+for what a unit *is* — current state is never replayed from the log, which is why
+events carry only the fields a history line needs rather than a snapshot of the
+whole unit.
+
+Five verbs: `marked_in_use`, `checked_in`, `marked_lost`, `marked_found`,
+`retired`. Renaming a unit, moving it on a shelf, or fixing a note produces no
+event; those are corrections to a description, not things that happened to the
+object.
+
+The borrowing team and member are copied onto the event because the unit is
+about to stop recording them. After a check-in the unit says nothing about who
+had it, and "who had this when it went missing" is precisely the question this
+collection exists to answer.
+
+### 75a. Rules tie an event to the unit it claims
+
+`assetEventMatchesUnit` reads the unit's *post-transaction* state with
+`getAfter()` and requires the event's `to_status` to match, the parent link to
+agree, and the actor to have authority over the unit's owning team. An event
+therefore cannot claim a move that did not happen, cannot be filed against
+another crew's equipment, and cannot be back-filled for a unit nobody touched.
+
+Measured against the real three-document transaction — unit, parent mirrors, and
+event in one batch — this fits within both the access-call budget and the
+1000-expression limit that bit in decision 73a. `getAfter` on the same path is
+charged once no matter how many times the rule reads it.
+
+Events cannot be updated or deleted by anyone, including an Admin. A history
+that can be corrected is not a history.
+
+### 75b. What Rules still cannot check
+
+That the parent's mirrors match the units. Rules cannot count documents, so the
+transaction is what keeps them honest, exactly as in decision 66. Rules verify
+that whatever is written adds up and that the event agrees with the unit.
+
+### 76. Acting on state that moved underneath
+
+The transaction re-reads the unit and refuses if its status is no longer what the
+page was showing. Without that check, pressing Check In on a stale page could
+perform a Mark Found instead — a different move, recorded under the wrong verb.
+The user is told to reload rather than having something else done on their
+behalf. A test drives this case directly.
+
+Event ids are allocated before the transaction opens, for the reason proven in
+decision 68b: a contended body runs again, and an id generated inside it would
+append a second event for one action.
+
+### 77. Registering an asset is not acquiring one
+
+Add Unit now accepts Available, In Use, or Lost. A clamp being entered into the
+system may already be out with a crew or already missing, and saying so is more
+honest than filing it as available and immediately checking it out.
+
+In Maintenance and Retired stay out, for the reasons in decisions 68c and 74.
+Bulk Generate remains available-only: a numbered run of new equipment is new
+equipment, and per-unit exceptions are edited afterwards.
+
+### 78. Lost equipment on the dashboard
+
+Counted from `unit_counts.lost` on the item summaries the dashboard already
+loads. No unit query, no new collection read. Bulk items contribute zero because
+a quantity cannot go missing — only a named piece of equipment can — and
+inventing a "lost quantity" for them would be a number nobody recorded.
+
+### 79. Using team is not owning team
+
+Who may act on a unit follows its **owning** team, which is the security boundary
+Rules enforce. Borrowing does not confer authority: a Lighting member does not
+gain the ability to mutate Scenic's clamp merely because Lighting has it.
+
+Naming a borrowing team is a claim about that crew, so decision 69 still applies
+— a member may only name teams they belong to, and an Admin may name any. The
+Scenic-owned, Lighting-used loan is performed by an Admin or by somebody on both
+crews.
+
+### 80. A lifecycle move cannot happen without its history
+
+An integrity audit found three ways to bypass the log by writing to Firestore
+directly. All three were real, all three are closed, and each was proven with a
+failing test before the fix.
+
+**A unit's status could change with no event at all.** The unit rule had no
+opinion about history, so a well-formed direct write moved a unit and left no
+trace.
+
+**An event could be fabricated on its own.** The rule checked only
+`getAfter(unit).status == to_status`. A standalone write changes nothing, so a
+unit already `in_use` satisfied an event claiming it had just gone out.
+
+**Forbidden transitions went through.** Rules never checked the transition
+model, so a direct write could bring a retired unit back or move one out of
+maintenance without the repair workflow.
+
+The fix is a linkage field, `inventory_units.last_lifecycle_event_id`, and it is
+needed because Rules cannot search a collection: they cannot ask "is there an
+event for this move", so the unit has to name one. The two rules then hold each
+other up:
+
+- a unit whose status changes must name a **new** event which exists after the
+  batch, is about this unit, and whose `from_status`/`to_status` are exactly the
+  statuses the unit is moving between
+- an event may only be created when the unit's status **before** the batch
+  matches its `from_status`, the status **after** matches its `to_status`, and
+  the unit points back at this event
+
+Neither can exist without the other, and neither can describe a move that did
+not happen. Rules also now enforce the transition model itself, so a retired
+unit stays retired however the write is sent.
+
+### 80a. What the linkage does not touch
+
+`last_lifecycle_event_id` is optional. A unit that has never moved does not have
+one, and that includes a unit registered while already out or already missing —
+decision 77 calls that a description of an existing asset rather than a
+transition, and inventing an `available → in_use` history for it would be a
+fabrication of exactly the kind this audit exists to prevent.
+
+An edit that leaves the status alone must leave the field alone: Rules require
+it to be unchanged when the status is unchanged. So asset code, condition,
+location, last inspected, notes, and owning team are all edited exactly as
+before, with no event and no ceremony.
+
+### 80b. What it costs
+
+Measured on the real three-document transaction, for both a member and an
+Admin, across in-use, lost, and retired, and over two chained transitions. All
+within the access-call and 1000-expression limits. Every added read is a
+`get`/`getAfter` on a path the batch already touches, and repeated reads of one
+path are charged once — the same property that made the batch measurements in
+decisions 66 and 75a come out well.
+
+### 81. "Active", not "Total"
+
+Retiring a unit takes it out of `active_total` while its document stays in the
+list for its history. Labelling that number "Total" meant a reader could count
+more rows than the total claimed — the numbers were right and the word was
+wrong. The serialized summary now says **Active**, and shows **Retired**
+separately when there is anything to show. No mirror semantics changed, and no
+unit is hidden to make a number agree.

@@ -13,7 +13,15 @@ import { useOrganization } from '@/features/organizations/useOrganization'
 import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
 import { createInventoryUnit, updateInventoryUnit } from '@/services/inventory-unit-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
-import type { ConditionKey, InventoryItem, InventoryUnit } from '@/types/inventory'
+import type {
+  ConditionKey, InventoryItem, InventoryUnit, UnitStatus,
+} from '@/types/inventory'
+
+/** Radix selects need a non-empty value, and the empty string is not one. */
+const UNSET = '__unset__'
+
+/** What a newly registered asset may already be. Mirrors the service. */
+const CREATABLE_STATUSES: readonly UnitStatus[] = ['available', 'in_use', 'lost']
 
 interface Props {
   item: InventoryItem
@@ -55,6 +63,10 @@ export function InventoryUnitDialog({
   // A new unit starts where the item does, which is information rather than a
   // guess; an existing one keeps its own.
   const [owningTeamId, setOwningTeamId] = useState(existing?.team_id ?? item.team_id)
+  // Registering an asset is not the same as acquiring one: it may already be
+  // out with a crew, or already missing.
+  const [status, setStatus] = useState<UnitStatus>('available')
+  const [usingTeamId, setUsingTeamId] = useState(UNSET)
 
   const trimmed = assetCode.trim()
   const duplicate = trimmed.length > 0 && usedCodes.some(
@@ -71,6 +83,10 @@ export function InventoryUnitDialog({
     }
     if (storageLocation.trim().length === 0) {
       setError('Say where this unit is stored.')
+      return
+    }
+    if (!existing && status === 'in_use' && usingTeamId === UNSET) {
+      setError('Say which team has this unit.')
       return
     }
 
@@ -96,7 +112,8 @@ export function InventoryUnitDialog({
             owningTeamId,
             condition,
             // New units are on the shelf. Nothing else is recordable yet.
-            status: 'available',
+            status,
+            usingTeamId: status === 'in_use' && usingTeamId !== UNSET ? usingTeamId : null,
             storageLocation: storageLocation.trim(),
             notes,
           },
@@ -198,10 +215,56 @@ export function InventoryUnitDialog({
               <Label>Status</Label>
               <p className="text-sm">{UNIT_STATUS_LABELS[existing.status]}</p>
               <p className="text-muted-foreground text-xs">
-                Status changes with what happens to the equipment, not by editing this form.
+                Status changes with what happens to the equipment, not by editing this form. Use
+                the actions on the unit&rsquo;s own page.
               </p>
             </div>
-          ) : null}
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="unit-status">Where is it now?</Label>
+                <Select
+                  value={status}
+                  onValueChange={(value) => setStatus(value as UnitStatus)}
+                  disabled={submitting}
+                >
+                  <SelectTrigger id="unit-status"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {CREATABLE_STATUSES.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {UNIT_STATUS_LABELS[option]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-muted-foreground text-xs">
+                  Equipment being added may already be out or already missing. Repairs and
+                  retirement come from what happens to it later.
+                </p>
+              </div>
+
+              {status === 'in_use' ? (
+                <div className="space-y-2">
+                  <Label htmlFor="unit-using-team">Using team</Label>
+                  <Select
+                    value={usingTeamId}
+                    onValueChange={setUsingTeamId}
+                    disabled={submitting}
+                  >
+                    <SelectTrigger id="unit-using-team">
+                      <SelectValue placeholder="Which team has it?" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNSET}>Which team has it?</SelectItem>
+                      {teamChoices.map((team) => (
+                        <SelectItem key={team.team_id} value={team.team_id}>{team.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
+            </>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="unit-notes">Notes</Label>

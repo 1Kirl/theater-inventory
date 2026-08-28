@@ -181,7 +181,7 @@ describe('summarizeInventory', () => {
 
   it('handles an organization with no inventory', () => {
     expect(summarizeInventory([])).toEqual({
-      itemCount: 0, totalUnits: 0, availableUnits: 0, needsAttentionCount: 0,
+      itemCount: 0, totalUnits: 0, availableUnits: 0, needsAttentionCount: 0, lostUnits: 0,
     })
   })
 })

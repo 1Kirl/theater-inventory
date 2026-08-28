@@ -75,7 +75,7 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
             <CardTitle className="text-base">Units</CardTitle>
             <CardDescription>
               Every physical piece, tracked on its own — each with its own team, location, and
-              status. The totals above are counted from these.
+              status. Retired units stay here for their history and are counted separately above.
             </CardDescription>
           </div>
           {canEdit ? (

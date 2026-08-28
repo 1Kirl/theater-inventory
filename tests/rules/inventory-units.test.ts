@@ -396,9 +396,19 @@ describe('inventory_units — status and condition vocabulary', () => {
 })
 
 describe('inventory_units — updating', () => {
-  it('354. an edit member changes condition and status on their own team\'s unit', async () => {
+  it('354. an edit member changes condition on their own team\'s unit', async () => {
+    // Condition is an observation about the equipment, not a move: no history
+    // is required, and none is written.
     await assertSucceeds(updateDoc(doc(db(EDITOR), 'inventory_units', UNIT_LIGHTING), {
       condition: 'fair',
+      updated_at: serverTimestamp(),
+    }))
+  })
+
+  it('354a. changing status without its history is refused', async () => {
+    // From Phase 11C on, a lifecycle move has to name the event that records
+    // it. `tests/rules/lifecycle-integrity.test.ts` covers this in full.
+    await assertFails(updateDoc(doc(db(EDITOR), 'inventory_units', UNIT_LIGHTING), {
       status: 'in_use',
       using_team_id: TEAM_LIGHTING,
       updated_at: serverTimestamp(),

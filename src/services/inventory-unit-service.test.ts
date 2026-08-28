@@ -131,6 +131,11 @@ let STORED_ITEM: InventoryItem = BULK_ITEM
 
 const TEAMS = ['team-lighting', 'team-costume']
 
+function itemWriteOf(attempt: Attempt | undefined) {
+  return attempt?.writes.find((write) => write.path === 'inventory_items/item-1')?.data as
+    Record<string, unknown> | undefined
+}
+
 function draft(overrides: Partial<PromotionDraft> = {}): PromotionDraft {
   return {
     assetCode: 'CLAMP-001',
@@ -384,26 +389,70 @@ describe('createInventoryUnits — atomicity and retry behaviour', () => {
     expect(parentOf(attempts[1])).toEqual(parentOf(attempts[0]))
   })
 
-  it.each(['in_use', 'in_maintenance', 'lost', 'retired'] as const)(
+  it.each(['in_maintenance', 'retired'] as const)(
     'refuses to create a unit directly as %s',
     async (status) => {
-      // Lifecycle belongs to the operation that causes it, and none of those
-      // exist yet. The promotion is the one exception and validates separately.
+      // Maintenance needs the repair record that explains it; retirement needs
+      // a history to retire from. Neither can be conjured at creation.
       await expect(createInventoryUnits({
         teamIds: TEAMS,
         item: SERIALIZED_ITEM,
         units: [{
           assetCode: 'A-1', owningTeamId: 'team-lighting', condition: 'good', status,
           storageLocation: 'Shelf',
-          ...(status === 'in_use' ? { usingTeamId: 'team-costume' } : {}),
           ...(status === 'retired' ? { retirementReason: 'disposed' as const } : {}),
         }],
-      })).rejects.toThrow(/starts as available/i)
+      })).rejects.toThrow(/available, in use, or lost/i)
 
       expect(attempts).toEqual([])
       expect(looseWrites).toEqual([])
     },
   )
+
+  it('registers a unit that is already out with a crew', async () => {
+    // Adding an asset is not the same as acquiring one. This clamp is already
+    // in somebody's hands, and saying so is more honest than filing it as
+    // available and immediately checking it out.
+    await createInventoryUnits({
+      teamIds: TEAMS,
+      item: SERIALIZED_ITEM,
+      units: [{
+        assetCode: 'A-1', owningTeamId: 'team-lighting', condition: 'good', status: 'in_use',
+        storageLocation: 'Shelf', usingTeamId: 'team-costume',
+      }],
+    })
+
+    const unit = attempts[0]?.writes.find((write) => write.path.startsWith('inventory_units/'))
+    expect(unit?.data.status).toBe('in_use')
+    expect(unit?.data.using_team_id).toBe('team-costume')
+    expect(itemWriteOf(attempts[0])?.unit_counts).toMatchObject({ in_use: 1, available: 0 })
+  })
+
+  it('registers a unit that is already missing', async () => {
+    await createInventoryUnits({
+      teamIds: TEAMS,
+      item: SERIALIZED_ITEM,
+      units: [{
+        assetCode: 'A-1', owningTeamId: 'team-lighting', condition: 'good', status: 'lost',
+        storageLocation: 'Shelf',
+      }],
+    })
+
+    expect(itemWriteOf(attempts[0])?.unit_counts).toMatchObject({ lost: 1, available: 0 })
+  })
+
+  it('still refuses an in-use registration with no borrowing team', async () => {
+    await expect(createInventoryUnits({
+      teamIds: TEAMS,
+      item: SERIALIZED_ITEM,
+      units: [{
+        assetCode: 'A-1', owningTeamId: 'team-lighting', condition: 'good', status: 'in_use',
+        storageLocation: 'Shelf',
+      }],
+    })).rejects.toThrow(/which team has it/i)
+
+    expect(attempts).toEqual([])
+  })
 
   it('creates a unit as available without complaint', async () => {
     await createInventoryUnits({

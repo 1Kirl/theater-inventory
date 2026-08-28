@@ -57,22 +57,33 @@ export interface InventorySummary {
   availableUnits: number
   /** Items whose overall condition is needs-repair or unusable. */
   needsAttentionCount: number
+  /**
+   * Individually tracked units currently missing.
+   *
+   * Read from each serialized item's stored counts rather than by querying
+   * units — the dashboard already loads the items, and counting this way costs
+   * nothing extra. Bulk items contribute zero because a quantity cannot be
+   * missing; only a named piece of equipment can.
+   */
+  lostUnits: number
 }
 
 export function summarizeInventory(items: readonly InventoryItem[]): InventorySummary {
   let totalUnits = 0
   let availableUnits = 0
   let needsAttentionCount = 0
+  let lostUnits = 0
 
   for (const item of items) {
     totalUnits += item.quantity_total
     availableUnits += item.quantity_available
+    lostUnits += item.unit_counts?.lost ?? 0
 
     const summary = conditionSummary(item.condition_counts)
     if (summary === 'needs_repair' || summary === 'unusable') needsAttentionCount += 1
   }
 
-  return { itemCount: items.length, totalUnits, availableUnits, needsAttentionCount }
+  return { itemCount: items.length, totalUnits, availableUnits, needsAttentionCount, lostUnits }
 }
 
 export interface MaintenanceSummary {

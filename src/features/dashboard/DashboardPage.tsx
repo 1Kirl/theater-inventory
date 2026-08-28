@@ -422,6 +422,16 @@ export function DashboardPage() {
                     {inventorySummary.availableUnits} of {inventorySummary.totalUnits} units are
                     marked available.
                   </p>
+                  {/* Only individually tracked equipment can go missing: a bulk
+                      quantity has no piece to lose. Counted from the item
+                      summaries already loaded here. */}
+                  {inventorySummary.lostUnits > 0 ? (
+                    <p className="text-sm font-medium tabular-nums">
+                      {inventorySummary.lostUnits} piece
+                      {inventorySummary.lostUnits === 1 ? ' of equipment is' : 's of equipment are'}
+                      {' '}currently lost.
+                    </p>
+                  ) : null}
                 </>
               )}
             </CardContent>

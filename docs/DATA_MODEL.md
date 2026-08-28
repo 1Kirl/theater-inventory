@@ -824,6 +824,51 @@ Rules can check that the stored numbers are internally consistent. They cannot
 count documents, so they cannot check that the numbers match reality; that is
 what the transaction is for.
 
+## 13e. asset_events
+
+```ts
+interface AssetEvent {
+  event_id: string;
+  organization_id: string;
+  inventory_item_id: string;
+  inventory_unit_id: string;
+
+  event_type: 'marked_in_use' | 'checked_in' | 'marked_lost' | 'marked_found' | 'retired';
+  from_status: UnitStatus;
+  to_status: UnitStatus;
+
+  using_team_id?: string;    // who is taking it, or who had it
+  using_member_uid?: string;
+  retirement_reason?: RetirementReason;   // retirements only
+  note?: string;
+
+  actor_uid: string;
+  occurred_at: Timestamp;
+}
+```
+
+`inventory_units.last_lifecycle_event_id` names the event that produced the
+unit's current status. Optional — absent until a unit first moves, which
+includes one registered while already out or already missing. Rules require it
+to change on every status change and to name an event describing exactly that
+move, and require an event's `from_status`/`to_status` to match the unit before
+and after the same batch. Neither document can exist without the other, so a
+status change cannot happen without history and history cannot be fabricated
+without a status change. An edit that leaves the status alone must leave this
+field alone.
+
+Append-only: no update, no delete, for anyone. Not the source of truth — the unit
+document is authoritative for current state, and events are never replayed to
+derive it.
+
+Written in the same transaction as the unit and its parent's mirrors. Rules link
+the event to the unit's post-transaction state with `getAfter()`, so `to_status`
+must be what the unit actually became.
+
+Queried by `organization_id` + `inventory_unit_id`, two equality filters that
+single-field indexes already serve; ordering is done in the client, so
+`firestore.indexes.json` stays empty.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

@@ -287,6 +287,33 @@ const ALLOWED_TRANSITIONS: Record<UnitStatus, readonly UnitStatus[]> = {
   retired: [],
 }
 
+/**
+ * The moves a person can make from the unit page, which is narrower than what
+ * the model permits.
+ *
+ * `canTransition` describes the shape of the lifecycle. This describes what the
+ * application currently knows how to *do*, and the gap between them is
+ * deliberate. Anything involving maintenance is missing because a unit in
+ * maintenance is half a record — the repair that explains it is the other half,
+ * and creating one is a later phase. Retiring a unit that is out is missing
+ * because the honest first step is to get it back or report it lost.
+ */
+const OFFERED_ACTIONS: Record<UnitStatus, readonly UnitStatus[]> = {
+  available: ['in_use', 'lost', 'retired'],
+  in_use: ['available', 'lost'],
+  in_maintenance: [],
+  lost: ['available', 'retired'],
+  retired: [],
+}
+
+export function isOfferedTransition(from: UnitStatus, to: UnitStatus): boolean {
+  return OFFERED_ACTIONS[from]?.includes(to) ?? false
+}
+
+export function offeredTransitions(from: UnitStatus): readonly UnitStatus[] {
+  return OFFERED_ACTIONS[from] ?? []
+}
+
 export function canTransition(from: UnitStatus, to: UnitStatus): boolean {
   return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false
 }

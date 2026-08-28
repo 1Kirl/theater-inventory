@@ -119,6 +119,17 @@ export interface InventoryUnit {
   last_inspected_at?: Timestamp
   notes?: string
 
+  /**
+   * The `asset_events` entry that produced this unit's current status.
+   *
+   * Absent on a unit that has never moved, which includes one registered while
+   * already out or already missing — that is a description of an existing
+   * asset, not a transition. Present and changed on every status change, which
+   * is what lets Security Rules insist a lifecycle move carries its history:
+   * Rules cannot search a collection, so the unit has to name the event.
+   */
+  last_lifecycle_event_id?: string
+
   created_by_uid: string
   created_at: Timestamp
   updated_at: Timestamp

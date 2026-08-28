@@ -29,4 +29,5 @@ export const COLLECTIONS = {
   productionRequirements: 'production_requirements',
   actionItems: 'action_items',
   calendarEvents: 'calendar_events',
+  assetEvents: 'asset_events',
 } as const
