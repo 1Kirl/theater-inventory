@@ -26,6 +26,9 @@ describe('sidebar navigation', () => {
     expect(navItems.map((item) => [item.label, item.module ?? null])).toEqual([
       ['Dashboard', null],
       ['Inventory', 'inventory'],
+      // The scanner is an inventory tool, so it follows the inventory
+      // permission rather than carrying one of its own.
+      ['Scan', 'inventory'],
       ['Maintenance', 'maintenance'],
       ['Productions', 'productions'],
       ['Action List', 'productions'],

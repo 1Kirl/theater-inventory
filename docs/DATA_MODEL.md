@@ -981,6 +981,35 @@ Derived, never stored:
 No index is needed: nothing queries, filters, or sorts by cost. See decisions 90
 through 90h.
 
+## 13i. The scanner
+
+No collection, no document, no field.
+
+A scanning session is client memory: the mode, one row per unit scanned, and a
+set of units whose writes are in flight. It ends when the page closes. Nothing
+about it is written to Firestore.
+
+What a scan can change is a unit's lifecycle, through the existing single-unit
+transaction — so the record of what happened is `asset_events`, exactly as it is
+for the same move made from the unit page. A separate scan log would be a second
+account of the same facts and would disagree with the first the moment a scan
+failed halfway.
+
+The scanner reads the same canonical label Phase 11E prints:
+
+```
+https://theater-inventory.web.app/equipment/<inventory_units document id>
+```
+
+`parseEquipmentQr` validates it against the canonical origin — exact host, https
+only, no credentials, no query or fragment, exactly two path segments — and
+returns the unit id. It never compares against `window.location`, so a scanner
+running on localhost still recognises the production labels stuck to real
+equipment. Everything else the camera sees is refused.
+
+Authorization is unchanged: inventory view to look, the existing owning-team
+rules to move anything. See decisions 91 through 91f.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

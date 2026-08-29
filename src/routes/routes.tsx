@@ -26,6 +26,7 @@ import {
   ProductionDetailPage,
   ProductionFormPage,
   ProductionListPage,
+  ScannerPage,
 } from '@/routes/lazy-routes'
 
 /**
@@ -103,6 +104,10 @@ export const routes: RouteObject[] = [
                 element: <PermissionGuard module="inventory" level="view" />,
                 children: [
                   { path: paths.inventory, element: <InventoryListPage /> },
+                  // Deliberately inside the current organization's guards,
+                  // unlike the equipment deep link: a scanning session is
+                  // opened in one organization on purpose.
+                  { path: paths.scanner, element: <ScannerPage /> },
                   {
                     element: <PermissionGuard module="inventory" level="edit" />,
                     children: [

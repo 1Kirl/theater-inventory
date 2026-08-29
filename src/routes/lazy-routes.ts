@@ -20,6 +20,7 @@ export const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPa
 export const InventoryItemDetailPage = lazy(() => import('@/features/inventory/InventoryItemDetailPage').then((m) => ({ default: m.InventoryItemDetailPage })))
 export const InventoryItemFormPage = lazy(() => import('@/features/inventory/InventoryItemFormPage').then((m) => ({ default: m.InventoryItemFormPage })))
 export const InventoryUnitDetailPage = lazy(() => import('@/features/inventory/InventoryUnitDetailPage').then((m) => ({ default: m.InventoryUnitDetailPage })))
+export const ScannerPage = lazy(() => import('@/features/scanner/ScannerPage').then((m) => ({ default: m.ScannerPage })))
 export const InventoryListPage = lazy(() => import('@/features/inventory/InventoryListPage').then((m) => ({ default: m.InventoryListPage })))
 export const JoinOrganizationPage = lazy(() => import('@/features/organizations/JoinOrganizationPage').then((m) => ({ default: m.JoinOrganizationPage })))
 export const MaintenanceListPage = lazy(() => import('@/features/maintenance/MaintenanceListPage').then((m) => ({ default: m.MaintenanceListPage })))

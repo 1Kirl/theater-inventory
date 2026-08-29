@@ -120,8 +120,16 @@ describe('the exception did not spread', () => {
     expect(outside).toEqual([])
   })
 
+  it('keeps the scanner inside the active organization, unlike the deep link', () => {
+    // The scanner is the opposite case to /equipment/:unitId. A session is
+    // opened in one organization on purpose, so it stays behind both guards.
+    expect(isUnder(paths.scanner, OrganizationGuard)).toBe(true)
+    expect(isUnder(paths.scanner, PermissionGuard)).toBe(true)
+    expect(isUnder(paths.scanner, AuthGuard)).toBe(true)
+  })
+
   it('keeps every other inventory page behind the inventory permission', () => {
-    for (const path of [paths.inventory, paths.inventoryNew, '/inventory/:itemId']) {
+    for (const path of [paths.inventory, paths.inventoryNew, paths.scanner, '/inventory/:itemId']) {
       expect(isUnder(path, PermissionGuard), path).toBe(true)
       expect(isUnder(path, OrganizationGuard), path).toBe(true)
     }

@@ -1,6 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus, ScanLine, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -126,14 +126,24 @@ export function InventoryListPage() {
             Everything this organization owns. Editing is limited to your own teams.
           </p>
         </div>
-        {canCreate ? (
-          <Button asChild size="sm">
-            <Link to={paths.inventoryNew}>
-              <Plus className="size-4" aria-hidden="true" />
-              Add item
+        <div className="flex flex-wrap gap-2">
+          {/* Scanning is a way in, never the only one: search and the list
+              below stay exactly as they were. */}
+          <Button asChild size="sm" variant="outline">
+            <Link to={paths.scanner}>
+              <ScanLine className="size-4" aria-hidden="true" />
+              Scan equipment
             </Link>
           </Button>
-        ) : null}
+          {canCreate ? (
+            <Button asChild size="sm">
+              <Link to={paths.inventoryNew}>
+                <Plus className="size-4" aria-hidden="true" />
+                Add item
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <Suspense fallback={<div className="bg-muted/40 h-32 animate-pulse rounded-xl" aria-hidden="true" />}>

@@ -18,6 +18,8 @@ export const paths = {
   // Authenticated, inside the application shell
   dashboard: '/',
   inventory: '/inventory',
+  /** The continuous scanner. Inside the active organization, unlike a scanned label. */
+  scanner: '/inventory/scan',
   inventoryNew: '/inventory/new',
   inventoryItem: (itemId: string) => `/inventory/${itemId}`,
   inventoryItemEdit: (itemId: string) => `/inventory/${itemId}/edit`,

@@ -2571,3 +2571,122 @@ during a transition.
 Nothing depends on the inconsistency: the two numbers never meet. A maintenance
 record's cost is what a repair shop charged, and an action item's estimate is
 what a production budgeted; no total adds them together.
+
+### 91. The scanner stores nothing
+
+A scanning session is client memory and nothing else. No collection, no unit
+field, no scan log, no session document.
+
+A scan is an act of looking at equipment. When it changes something, the change
+is a lifecycle move, and `asset_events` already records what happened, to what,
+by whom, and when — that is the history. A parallel scan log would be a second,
+weaker account of the same facts, out of step with the first the moment a scan
+failed halfway.
+
+The session therefore ends when the page closes, and the interface says so
+rather than implying otherwise.
+
+### 91a. jsQR, and why the decoder is separate from the camera
+
+`jsqr@1.4.0` — Apache-2.0, no runtime dependencies, ships its own types, 280KB
+unpacked. It decodes pixels and nothing else, so the camera loop is written here:
+`getUserMedia`, a canvas, a frame every 100ms downscaled to 640px on the long
+edge, and explicit `track.stop()` on the way out.
+
+That is more code than a library that owns the camera too, and it is the reason
+to prefer it. Track cleanup, pausing on a hidden tab, and the decode rate are the
+things that actually go wrong on a phone, and here they are visible rather than
+behind somebody else's abstraction. The alternatives were 2.6MB and 5.8MB
+unpacked and bundle decoders for barcode formats this product has no use for.
+
+`BarcodeDetector` was not used. It is absent from iOS Safari, which is a
+mandatory target, so it could only ever be an optimisation on top of a fallback
+that has to exist anyway — a second code path to test for a saving nobody would
+notice at ten frames a second. It remains available behind the same adapter if
+that ever changes.
+
+### 91b. Camera frames never leave the device
+
+Frames are drawn to a canvas in the browser and read by a decoder written in
+JavaScript. The only thing that leaves `scanner-camera.ts` is the short string a
+QR encodes.
+
+Nothing is uploaded, stored, sent to Firebase, or handed to a third party, and no
+frame outlives the tick it was decoded in. There is no remote QR service in this
+product in either direction: labels are drawn locally by `qrcode.react` and read
+locally by jsQR.
+
+### 91c. Two guards against one sticker becoming two writes
+
+A decoder reading ten frames a second sees the same label dozens of times while
+somebody holds a microphone steady. Two separate guards stop that becoming
+repeated Firestore writes, because they fail differently.
+
+The session recognises a unit already handled. The in-flight set recognises one
+whose write has started and not finished — the case with no result to recognise
+yet, where two decodes a few hundred milliseconds apart would otherwise both look
+new.
+
+Admission is synchronous, and that is the point. `handleDecoded` checks and
+claims in the same turn, before any `await`, so a second decode in the same tick
+cannot be admitted. This is why the session lives in a plain closure rather than
+in React state: a check against a value React had not re-rendered yet would pass
+twice.
+
+Going back to a unit is deliberate. A failed write can be retried through "Scan
+again", which forgets the row so the camera may act on it again; nothing retries
+on its own, because a unit sitting in frame would retry forever.
+
+### 91d. The scanner performs only the move its mode names
+
+Inspect writes nothing. Check out moves `available → in_use`. Check in moves
+`in_use → available`. Every other state produces a warning and no write.
+
+That is narrower than the lifecycle allows, deliberately. `lost → available` is a
+perfectly good transition from the unit page, where somebody has read the history
+and chosen to mark equipment found — but a check-in sweep must never do it
+silently. The person walking a storage room is looking at equipment, not at each
+unit's state, and a tool that quietly resurrected lost equipment because it
+turned up in the returns bin would be worse than one that stops and says
+something. Retired equipment is never reactivated for the same reason.
+
+A planned repair stays advisory, as decision 88 settled: equipment with a plan
+attached is still on the shelf, still checks out, and keeps its plan.
+
+Nothing about how a unit moves is reimplemented here. The scanner calls
+`performLifecycleAction`, which re-reads the unit inside its own transaction and
+maintains the parent's counters, the planned-repair pointer, the repair history,
+and the lifecycle event — the Phase 11D linkage regression cannot return through
+this path, because this path does not build unit documents.
+
+### 91e. One transaction per unit, and partial results are shown
+
+Scanning is continuous; the writes are not batched. Each unit goes through the
+existing single-unit transaction, so a session reads:
+
+```
+MIC-001   Checked out
+MIC-002   You don’t have permission to update this equipment.
+MIC-003   Checked out
+```
+
+An all-or-nothing transaction across a shelf would be a new and much larger piece
+of machinery, and it would make one unauthorised unit discard work that
+succeeded. Per-unit success and failure are both shown; nothing is hidden.
+
+### 91f. A session belongs to the organization it was opened in
+
+Unlike a scanned deep link, which arrives from outside and resolves its own
+organization (decision 89f), a scanner session is opened inside one deliberately.
+
+Equipment from another organization is refused with a warning and no write, and
+the active organization is never switched mid-session — a sweep is a sequence of
+related actions, and moving the whole application out from under it would be
+disorienting at best. The unit's page remains reachable, where the existing
+switch UX handles it properly.
+
+Authorization is unchanged and unmoved. Inspect needs inventory view; checking
+equipment in or out needs whatever the owning team's rules already require. The
+using team is not a permission — being the crew borrowing a microphone has never
+granted the right to edit it — and no client-side check is trusted: every write
+goes to Rules, and a refusal becomes a row in the session saying so.

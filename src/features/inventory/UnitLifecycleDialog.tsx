@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,8 +13,7 @@ import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
 import { lifecyclePanel, retirementLabel } from '@/features/inventory/unit-lifecycle-view'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { performLifecycleAction } from '@/services/unit-lifecycle-service'
-import { listOrganizationDirectory } from '@/services/membership-service'
-import { getUserProfiles } from '@/services/user-service'
+import { membersOfTeam, useTeamMembers } from '@/features/inventory/useTeamMembers'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryUnit, RetirementReason, UnitStatus } from '@/types/inventory'
 
@@ -38,12 +37,6 @@ interface Props {
 
 /** Radix selects need a non-empty value, and the empty string is not one. */
 const UNSET = '__unset__'
-
-interface MemberOption {
-  uid: string
-  displayName: string
-  teamIds: string[]
-}
 
 /**
  * One lifecycle action, confirmed.
@@ -71,7 +64,6 @@ export function UnitLifecycleDialog({
   const [usingMemberUid, setUsingMemberUid] = useState(UNSET)
   const [retirementReason, setRetirementReason] = useState<RetirementReason>('disposed')
   const [note, setNote] = useState('')
-  const [members, setMembers] = useState<MemberOption[]>([])
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -83,34 +75,13 @@ export function UnitLifecycleDialog({
   const needsTeam = move?.to === 'in_use'
   const needsReason = move?.to === 'retired'
 
-  useEffect(() => {
-    if (!needsTeam || !unit.organization_id) return
+  // Shared with the scanner, so both offer the same names under the same rule.
+  const members = useTeamMembers({
+    organizationId: unit.organization_id,
+    enabled: needsTeam,
+  })
 
-    let cancelled = false
-    async function read() {
-      const directory = await listOrganizationDirectory(unit.organization_id)
-      const profiles = await getUserProfiles(directory.map((entry) => entry.uid))
-
-      return directory.map((entry) => ({
-        uid: entry.uid,
-        displayName: profiles.get(entry.uid)?.display_name ?? 'Unknown member',
-        teamIds: entry.team_ids,
-      }))
-    }
-
-    read().then(
-      (loaded) => { if (!cancelled) setMembers(loaded) },
-      // The member is optional, so failing to list them is not worth an error.
-      () => { if (!cancelled) setMembers([]) },
-    )
-
-    return () => { cancelled = true }
-  }, [needsTeam, unit.organization_id])
-
-  // Only people actually on the borrowing crew, once one is chosen.
-  const memberChoices = usingTeamId === UNSET
-    ? []
-    : members.filter((member) => member.teamIds.includes(usingTeamId))
+  const memberChoices = membersOfTeam(members, usingTeamId === UNSET ? null : usingTeamId)
 
   async function confirm() {
     if (submitting || !move) return
