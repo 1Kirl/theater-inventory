@@ -473,6 +473,14 @@ service cloud.firestore {
       return value is int && value >= 0;
     }
 
+    // Money is whole cents, never a float. The ceiling is $1,000,000.00 for one
+    // unit — far above anything a school theater buys, and low enough that a
+    // misplaced decimal point or a pasted wrong field is caught here rather than
+    // showing up in a production budget.
+    function isCostCents(value) {
+      return value is int && value >= 0 && value <= 100000000;
+    }
+
     // The twelve MVP categories from PROJECT_SPEC section 7.4. Free text would
     // defeat the category filter this list exists to serve, so anything outside
     // it is rejected rather than quietly stored. Kept in step with
@@ -563,7 +571,8 @@ service cloud.firestore {
                ['item_id', 'organization_id', 'name', 'category', 'team_id', 'quantity_total',
                 'quantity_available', 'condition_counts', 'location', 'created_by_uid',
                 'created_at', 'updated_at'],
-               ['tracking_mode', 'unit_counts', 'last_inspected_at', 'notes'])
+               ['tracking_mode', 'unit_counts', 'last_inspected_at', 'notes',
+                'unit_cost_cents'])
         && trackingModeOf(request.resource.data) in ['bulk', 'serialized']
         // A bulk item has no units, so it has nothing to summarize. Written as
         // two guarded alternatives rather than a ternary: `&&` short-circuits
@@ -592,6 +601,10 @@ service cloud.firestore {
                 && request.resource.data.notes.size() <= 2000))
         && (!('last_inspected_at' in request.resource.data)
             || request.resource.data.last_inspected_at is timestamp)
+        // Planning data: what one of these would cost to replace. Optional,
+        // because most of an existing catalog has never been priced.
+        && (!('unit_cost_cents' in request.resource.data)
+            || isCostCents(request.resource.data.unit_cost_cents))
         && request.resource.data.updated_at == request.time
         && teamBelongsToOrganization(request.resource.data.organization_id,
                                      request.resource.data.team_id);
@@ -1425,7 +1438,7 @@ service cloud.firestore {
                ['action_item_id', 'organization_id', 'production_id', 'requirement_id',
                 'item_name', 'action_type', 'quantity', 'team_id', 'status',
                 'created_by_uid', 'created_at', 'updated_at'],
-               ['assignee_uid', 'due_date', 'notes'])
+               ['assignee_uid', 'due_date', 'notes', 'estimated_unit_cost_cents'])
         // The document ID is the requirement ID. That is what makes a second
         // action for the same requirement impossible.
         && request.resource.data.action_item_id == requirementId
@@ -1442,6 +1455,10 @@ service cloud.firestore {
                 && request.resource.data.notes.size() <= 2000))
         && (!('due_date' in request.resource.data)
             || request.resource.data.due_date is timestamp)
+        // An estimate per unit. The line total is quantity times this and is
+        // never stored, so there is no second number here to drift out of step.
+        && (!('estimated_unit_cost_cents' in request.resource.data)
+            || isCostCents(request.resource.data.estimated_unit_cost_cents))
         && request.resource.data.updated_at == request.time;
     }
 

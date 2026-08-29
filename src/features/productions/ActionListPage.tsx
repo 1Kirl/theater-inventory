@@ -26,6 +26,7 @@ import {
 } from '@/types/production'
 import type { InventoryItem } from '@/types/inventory'
 import { paths } from '@/routes/paths'
+import { actionEstimateLabel as estimateLabel } from '@/domain/production-costs'
 
 export function ActionListPage() {
   const { organization, membership, role, teams } = useOrganization()
@@ -260,6 +261,7 @@ export function ActionListPage() {
                   <TableHead>Action</TableHead>
                   <TableHead className="text-right">Qty</TableHead>
                   <TableHead className="text-right">Current shortage</TableHead>
+                  <TableHead className="text-right">Estimated</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Due</TableHead>
                 </TableRow>
@@ -277,6 +279,7 @@ export function ActionListPage() {
                     <TableCell><Badge variant="secondary">{ACTION_TYPE_LABELS[action.action_type]}</Badge></TableCell>
                     <TableCell className="text-right tabular-nums">{action.quantity}</TableCell>
                     <TableCell className="text-muted-foreground text-right tabular-nums">{currentShortage(action)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{estimateLabel(action)}</TableCell>
                     <TableCell><StatusControl action={action} /></TableCell>
                     <TableCell className="text-muted-foreground">
                       {action.due_date ? action.due_date.toDate().toLocaleDateString() : '—'}
@@ -301,6 +304,9 @@ export function ActionListPage() {
                     </p>
                     <p className="text-sm tabular-nums">
                       Plan {action.quantity} · current shortage {currentShortage(action)}
+                    </p>
+                    <p className="text-muted-foreground text-sm tabular-nums">
+                      Estimated: {estimateLabel(action)}
                     </p>
                     <div className="pt-1"><StatusControl action={action} /></div>
                   </CardContent>

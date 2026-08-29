@@ -11,6 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   ACTION_STATUS_LABELS, ACTION_TYPE_LABELS, defaultActionQuantity, type RequirementAvailability,
 } from '@/domain/production'
+import {
+  calculateEstimatedCost, centsToInputValue, formatCents, parseMoneyToCents,
+} from '@/domain/money'
+import { actionTypeTakesPrefill } from '@/domain/production-costs'
 import { saveActionItem } from '@/services/action-item-service'
 import { toDateKey } from '@/domain/calendar'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
@@ -23,19 +27,34 @@ interface Props {
   requirement: ProductionRequirement
   availability: RequirementAvailability
   existing: ActionItem | null
+  /**
+   * The matched inventory item's recorded unit cost, when it has one. Used only
+   * to prefill a new Buy: what the shelf costs to restock is what buying more
+   * costs, whereas renting, building, and repairing are different questions
+   * this number cannot answer.
+   */
+  matchedUnitCostCents?: number | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
   onSaved: () => Promise<void> | void
 }
 
 export function ActionItemDialog({
-  requirement, availability, existing, open, onOpenChange, onSaved,
+  requirement, availability, existing, matchedUnitCostCents, open, onOpenChange, onSaved,
 }: Props) {
   const [actionType, setActionType] = useState<ActionType>(existing?.action_type ?? 'buy')
   // Defaults to the current shortage at creation, then belongs to the user.
   const [quantity, setQuantity] = useState(
     String(existing?.quantity ?? defaultActionQuantity(availability)),
   )
+  // Prefilled from the matched inventory item for a new Buy, then the user's.
+  // `touched` is what separates "they accepted the suggestion" from "they have
+  // not looked at it yet", which decides whether switching to Rent clears it.
+  const prefill = existing
+    ? centsToInputValue(existing.estimated_unit_cost_cents)
+    : centsToInputValue(matchedUnitCostCents)
+  const [unitCost, setUnitCost] = useState(existing || actionTypeTakesPrefill('buy') ? prefill : '')
+  const [costTouched, setCostTouched] = useState(existing !== null)
   const [status, setStatus] = useState<ActionStatus>(existing?.status ?? 'todo')
   const [dueDate, setDueDate] = useState(
     // Local parts, matching how the value is parsed back on save.
@@ -48,11 +67,35 @@ export function ActionItemDialog({
   const currentShortage = availability.matched ? availability.shortage : null
   const diverges = currentShortage !== null && Number(quantity) !== currentShortage
 
+  const parsedCost = parseMoneyToCents(unitCost)
+  const lineTotal = parsedCost.valid
+    ? calculateEstimatedCost(Number(quantity), parsedCost.cents)
+    : null
+
+  /**
+   * Changing the kind of work changes what the number means.
+   *
+   * A price suggested for buying is not a rental rate or a repair quote, so an
+   * untouched suggestion is withdrawn rather than silently re-labelled. Anything
+   * the user actually typed is theirs and survives the switch.
+   */
+  function changeActionType(next: ActionType) {
+    setActionType(next)
+    if (costTouched || existing) return
+    setUnitCost(actionTypeTakesPrefill(next) ? prefill : '')
+  }
+
   async function save() {
     if (submitting) return
     setError(null)
     setSubmitting(true)
     try {
+      const cost = parseMoneyToCents(unitCost)
+      if (!cost.valid) {
+        setError(cost.message)
+        return
+      }
+
       await saveActionItem({
         requirement,
         availability,
@@ -60,6 +103,7 @@ export function ActionItemDialog({
         input: {
           actionType,
           quantity: Number(quantity),
+          estimatedUnitCostCents: cost.cents,
           status,
           dueDate: dueDate ? Timestamp.fromDate(new Date(`${dueDate}T00:00:00`)) : null,
           notes,
@@ -88,7 +132,7 @@ export function ActionItemDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="action-type">Action</Label>
-              <Select value={actionType} onValueChange={(v) => setActionType(v as ActionType)} disabled={submitting}>
+              <Select value={actionType} onValueChange={(v) => changeActionType(v as ActionType)} disabled={submitting}>
                 <SelectTrigger id="action-type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ACTION_TYPES.map((type) => (
@@ -102,6 +146,37 @@ export function ActionItemDialog({
               <Input id="action-qty" type="number" min={1} step={1} value={quantity} onChange={(e) => setQuantity(e.target.value)} disabled={submitting} />
             </div>
           </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="action-cost">Estimated unit cost</Label>
+              <Input
+                id="action-cost"
+                inputMode="decimal"
+                placeholder="18.50"
+                value={unitCost}
+                onChange={(e) => { setUnitCost(e.target.value); setCostTouched(true) }}
+                disabled={submitting}
+              />
+            </div>
+            <div className="space-y-2">
+              {/* Derived, never stored: one number cannot drift from the other
+                  if only one of them exists. */}
+              <Label htmlFor="action-cost-total">Estimated cost</Label>
+              <p
+                id="action-cost-total"
+                className="flex h-9 items-center text-sm font-semibold tabular-nums"
+              >
+                {parsedCost.valid
+                  ? lineTotal === null ? 'Not estimated' : formatCents(lineTotal)
+                  : '—'}
+              </p>
+            </div>
+          </div>
+
+          {parsedCost.valid ? null : (
+            <p className="text-destructive text-sm">{parsedCost.message}</p>
+          )}
 
           {currentShortage !== null ? (
             <p className="text-muted-foreground text-sm tabular-nums">

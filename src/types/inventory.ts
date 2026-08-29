@@ -196,6 +196,15 @@ export interface InventoryItem {
   quantity_available: number
   condition_counts: ConditionCounts
   location: string
+  /**
+   * Estimated cost of one quantity unit, in cents. Planning data — what it would
+   * take to replace this — not a purchase record. Absent means unknown, which
+   * shows as "Cost unknown" rather than as free.
+   *
+   * It lives on the item, not on individual units: whether one microphone cost
+   * more than another is purchase history, and this product does not keep any.
+   */
+  unit_cost_cents?: number
   last_inspected_at?: Timestamp
   notes?: string
   created_by_uid: string

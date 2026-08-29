@@ -22,6 +22,8 @@ import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
 import type { MaintenanceRecord } from '@/types/maintenance'
 import { paths } from '@/routes/paths'
+import { activeQuantityOf, estimatedInventoryValue } from '@/domain/inventory-value'
+import { UNKNOWN_COST_LABEL, formatCents, formatCostOrUnknown } from '@/domain/money'
 
 export function InventoryItemDetailPage() {
   const { itemId } = useParams<{ itemId: string }>()
@@ -109,6 +111,8 @@ export function InventoryItemDetailPage() {
   const maintenanceBlock = serialized ? null : promotionMaintenanceBlock(records)
   const counts = item.unit_counts
   const inService = currentlyInService(records)
+  const activeQuantity = activeQuantityOf(item)
+  const inventoryValue = estimatedInventoryValue(item)
   const now = new Date()
 
   return (
@@ -245,6 +249,29 @@ export function InventoryItemDetailPage() {
               </div>
             </dl>
           )}
+
+          <div className="mt-6 grid gap-4 border-t pt-4 sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground text-sm">Estimated unit cost</dt>
+              <dd className="pt-1 text-lg font-semibold tabular-nums">
+                {formatCostOrUnknown(item.unit_cost_cents)}
+              </dd>
+            </div>
+            <div>
+              {/* Replacement estimate for the stock on hand, not an accounting
+                  valuation — nothing here is depreciated and nothing records
+                  what was actually paid. Retired units are excluded. */}
+              <dt className="text-muted-foreground text-sm">Estimated inventory value</dt>
+              <dd className="pt-1 text-lg font-semibold tabular-nums">
+                {inventoryValue === null ? UNKNOWN_COST_LABEL : formatCents(inventoryValue)}
+              </dd>
+              {inventoryValue === null ? null : (
+                <p className="text-muted-foreground pt-1 text-xs">
+                  {activeQuantity} × {formatCostOrUnknown(item.unit_cost_cents)}
+                </p>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
 

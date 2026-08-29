@@ -2,6 +2,7 @@ import type { FieldValue, Timestamp } from 'firebase/firestore'
 import type {
   ActionStatus, ActionType, ProductionStatus, RequirementSource,
 } from '@/types/production'
+import { isValidCostCents } from '@/domain/money'
 
 /**
  * The exact document shapes written to Firestore for Phase 5.
@@ -147,6 +148,8 @@ export function buildRequirementUpdate(params: {
 export interface ActionItemInput {
   actionType: ActionType
   quantity: number
+  /** Cents per unit, or null/undefined for not estimated. */
+  estimatedUnitCostCents?: number | null
   status: ActionStatus
   assigneeUid?: string | null
   dueDate?: Timestamp | null
@@ -159,6 +162,11 @@ function actionFields(input: ActionItemInput) {
   return {
     action_type: input.actionType,
     quantity: input.quantity,
+    // Presence, not truthiness: an action estimated at zero is a decision, and
+    // an action nobody has priced is an open question.
+    ...(isValidCostCents(input.estimatedUnitCostCents)
+      ? { estimated_unit_cost_cents: input.estimatedUnitCostCents }
+      : {}),
     status: input.status,
     ...(input.assigneeUid ? { assignee_uid: input.assigneeUid } : {}),
     ...(input.dueDate ? { due_date: input.dueDate } : {}),

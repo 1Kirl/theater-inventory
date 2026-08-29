@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
 import {
-  ACTION_STATUS_LABELS, ALREADY_AVAILABLE_LABEL, PRODUCTION_STATUS_LABELS, canCreateActionItem,
+  ACTION_STATUS_LABELS, ACTION_TYPE_LABELS, ALREADY_AVAILABLE_LABEL, PRODUCTION_STATUS_LABELS,
+  canCreateActionItem,
 } from '@/domain/production'
 import {
   actionPlaceholder, actionSummary, availabilityLabel, buildRequirementRows, shortageLabel,
@@ -32,6 +33,10 @@ import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
 import type { ActionItem, Production, ProductionRequirement } from '@/types/production'
 import { paths } from '@/routes/paths'
+import {
+  costBreakdown, isCostEstimateComplete, missingCostNote, summarizeProductionCosts,
+} from '@/domain/production-costs'
+import { formatCents } from '@/domain/money'
 
 export function ProductionDetailPage() {
   const { productionId } = useParams<{ productionId: string }>()
@@ -95,6 +100,9 @@ export function ProductionDetailPage() {
     [requirements, items, actions, teams],
   )
   const summary = summarizeProduction(rows)
+  // Derived on every read from the action items themselves. Nothing about the
+  // total is stored on the production, so there is no second copy to drift.
+  const costs = summarizeProductionCosts(actions)
 
   if (production === undefined) return <p className="text-muted-foreground text-sm">Loading production…</p>
   if (error) return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
@@ -184,6 +192,44 @@ export function ProductionDetailPage() {
           {production.description ? (
             <p className="text-muted-foreground mt-4 text-sm whitespace-pre-wrap">{production.description}</p>
           ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Estimated cost</CardTitle>
+          <CardDescription>
+            Added up from this production&rsquo;s action items. Planning estimates, not what has
+            been spent. Cancelled work is left out; work already done is not, because the
+            production still had to pay for it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <p className="text-muted-foreground text-sm">
+              {isCostEstimateComplete(costs) ? 'Estimated production cost' : 'Known estimated cost'}
+            </p>
+            <p className="text-3xl font-semibold tabular-nums">
+              {formatCents(costs.knownTotalCents)}
+            </p>
+          </div>
+
+          {/* Never leave the reader to assume the total is everything: an
+              unestimated action is an unknown cost, not a free one. */}
+          {missingCostNote(costs) ? (
+            <Alert>
+              <AlertDescription>{missingCostNote(costs)}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          <dl className="grid gap-3 sm:grid-cols-4">
+            {costBreakdown(costs).map((row) => (
+              <div key={row.type} className="rounded-md border p-3">
+                <dt className="text-muted-foreground text-sm">{ACTION_TYPE_LABELS[row.type]}</dt>
+                <dd className="text-lg font-semibold tabular-nums">{formatCents(row.cents)}</dd>
+              </div>
+            ))}
+          </dl>
         </CardContent>
       </Card>
 
@@ -301,6 +347,11 @@ export function ProductionDetailPage() {
           requirement={actioning.requirement}
           availability={actioning.availability}
           existing={actioning.action}
+          matchedUnitCostCents={
+            items.find(
+              (entry) => entry.item_id === actioning.requirement.inventory_item_id,
+            )?.unit_cost_cents
+          }
           open
           onOpenChange={(open) => { if (!open) setActioning(null) }}
           onSaved={load}

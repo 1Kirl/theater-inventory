@@ -2417,3 +2417,157 @@ has already read and authorized.
 So that case opens the unit's organization directly and stays on the route. The
 explicit card remains for the case it was written for: a *different* organization
 already open, where switching costs the person something elsewhere.
+
+### 90. Money is whole cents, and one currency
+
+Every amount is an integer number of cents. `0.1 + 0.2` is not `0.3`, and
+`1.15 * 100` is `114.99999999999999` — a budget that is wrong by a hundredth of a
+cent per row is a budget nobody trusts, and one that silently rounds a price down
+stops matching the quote it came from. Cents are exact under addition and under
+multiplication by a whole quantity, which is all the arithmetic this feature
+does. `parseMoneyToCents` reads the digits a person typed rather than parsing a
+float and scaling it.
+
+One currency, US dollars, for the whole product. An organization-level currency
+setting would solve nothing here: a school theater program plans in the currency
+it buys in, and a second one would bring conversion rates, a rate date, and a
+rounding policy without answering any question the program has. Formatting is
+built from the digits — `$1,250.00` — so it does not vary with the browser's
+locale.
+
+The ceiling is $1,000,000.00 for one unit, enforced in Rules as well as in the
+form. Three orders of magnitude above the most expensive thing a school theater
+buys, so it never obstructs real data, and low enough to catch a misplaced
+decimal point or a paste of the wrong field before it reaches a budget. It also
+keeps `quantity × unit cost` far inside exact integer range.
+
+None of this is accounting. No purchase history, no depreciation, no ledger, no
+payments. Every label says "estimated", because that is what these numbers are.
+
+### 90a. Cost belongs to the item, not to each unit
+
+`inventory_items.unit_cost_cents` is optional and means what one quantity unit
+would cost to replace. Serialized units inherit it for estimation and carry no
+cost of their own.
+
+Whether one microphone was bought for more than another is purchase history, and
+this product deliberately keeps none. Duplicating a cost onto every unit would
+create a field that has to be maintained per unit, drifts from its parent, and
+answers a question the MVP does not ask.
+
+Absent means unknown, and unknown is never rendered as `$0.00`. An unpriced
+catalog would otherwise report a program's entire inventory as worth nothing,
+which is a claim rather than a gap. Presence is tested rather than truthiness
+throughout, so an item somebody deliberately recorded as free stays distinct from
+one nobody has priced.
+
+### 90b. Estimated inventory value, not book value
+
+Item Detail shows `active quantity × unit cost`. Retired units are excluded: they
+are kept for their history and are not something the program still has, so
+counting them would overstate what replacing the inventory costs. For a
+serialized item the number comes from `unit_counts.active_total` — the units are
+the source and the parent's `quantity_total` is the mirror.
+
+It is called Estimated Inventory Value and never Book Value or Asset Value.
+Nothing is depreciated, nothing records what was paid, and no purchase date
+exists.
+
+### 90c. One stored number per action, and the total is derived
+
+`action_items.estimated_unit_cost_cents` is optional. The line total is the
+existing `quantity` times that, computed wherever it is shown and never stored —
+two independently editable numbers would drift the first time somebody changed
+one, and there would be no way to say which was right.
+
+The production total is derived the same way, from the action items, on every
+read. There is no `production.total_cost` field and no persisted summary. This is
+the same rule that already governs shortage, condition summaries, and dashboard
+counts.
+
+### 90d. Done counts, cancelled does not
+
+The production estimate counts actions that are `todo`, `in_progress`, or `done`,
+and excludes `cancelled`.
+
+A production that has already bought the cable still had to pay for it. Dropping
+completed work would make the budget shrink as the season progressed, which is
+the opposite of what a budget is for. Cancelled work was decided against and cost
+nothing. A cancelled action with no estimate is not counted as a missing estimate
+either — it is not part of the question.
+
+### 90e. Unknown costs are reported, never counted as zero
+
+An action with no estimate contributes to a missing count, not to the total, and
+the interface says so beside the number: the heading reads "Known estimated cost"
+rather than "Estimated production cost" whenever anything is missing, and a note
+names how many are absent.
+
+Silently treating unknown as zero would produce a total that looks complete and
+is not, and somebody would plan against it. This is the single most important
+behaviour in the feature, and it is tested from both directions: the dollar total
+is unchanged by adding an unestimated action, and the missing count moves.
+
+### 90f. Buy may borrow the shelf price, once
+
+Creating a Buy action for a matched requirement prefills the estimate from the
+inventory item's `unit_cost_cents`. What the shelf costs to restock is what
+buying more costs, so the suggestion is usually right and saves typing.
+
+It is a snapshot, exactly like the action quantity that defaults from the
+shortage and then belongs to the user. Editing the inventory item's cost later
+never rewrites an action's estimate: the action records what the crew planned,
+and a price that changed in March does not change what was budgeted in January.
+
+Rent, Build, and Repair get nothing. A week's rental, the lumber for a build, and
+a shop's repair charge are different questions the shelf price cannot answer, and
+a confident wrong number in a budget is worse than a blank somebody has to fill
+in. Switching an untouched suggestion from Buy to Rent withdraws it rather than
+silently re-labelling it; anything the user actually typed survives the switch.
+
+### 90g. Cost carries no new permission
+
+Inventory cost follows the inventory permission, and action estimates follow the
+production permission. No finance role, no separate visibility flag: someone who
+can see the inventory can see what it costs to replace, and someone who can plan
+a production can price the plan.
+
+Rules validate both fields as optional non-negative integers within the ceiling.
+An optional field nobody checked would be a place to write anything at all —
+`hasExactly` would happily accept a string, a float, or a negative number as
+"the cost" once the key was allowed.
+
+### 90h. Nothing to migrate
+
+Both fields are optional. Every existing item and action has neither and keeps
+working untouched, reading as "Cost unknown" until somebody edits it. No
+migration, no backfill, and specifically no bulk write of zeroes — which would
+replace an honest gap with a false number across the whole catalog.
+
+Maintenance records gain nothing here. A maintenance record is the physical
+repair workflow; an action item of type Repair is a production planning task.
+"Repair 2 microphones, estimated $150" is a line in a production budget, and the
+service provider's invoice is not something this product tracks.
+
+### 90i. Technical debt: maintenance cost is still float dollars
+
+`maintenance_records.cost` predates the money model. It stores dollars as a
+floating-point number — the form sends `Number(input)` from a `step="0.01"`
+field, the page renders `cost.toFixed(2)`, and Rules check only
+`is number && >= 0`. It was introduced with maintenance management and is
+untouched by Phase 11F.
+
+So "all stored money is whole cents" is true of what Phase 11F added and not yet
+true of the product as a whole. Recording that plainly rather than letting the
+claim stand unqualified.
+
+It is left alone deliberately. Converting it means a schema change, a Rules
+change, and a migration of existing documents, and Phase 11F was scoped to
+production planning rather than to the maintenance workflow — decision 90h keeps
+those two apart on purpose. A later cleanup would move it to
+`cost_cents`, validate it with the same `isCostCents`, and read the old field
+during a transition.
+
+Nothing depends on the inconsistency: the two numbers never meet. A maintenance
+record's cost is what a repair shop charged, and an action item's estimate is
+what a production budgeted; no total adds them together.

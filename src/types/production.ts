@@ -62,6 +62,13 @@ export interface ActionItem {
   item_name: string
   action_type: ActionType
   quantity: number
+  /**
+   * Planning estimate for one unit, in cents. Absent means nobody has estimated
+   * it, which is deliberately not the same as zero — the production summary
+   * reports it as missing rather than adding nothing and calling the total
+   * complete. The line total is `quantity` times this, derived and never stored.
+   */
+  estimated_unit_cost_cents?: number
   team_id: string
   assignee_uid?: string
   due_date?: Timestamp

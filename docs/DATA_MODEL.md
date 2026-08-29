@@ -948,6 +948,39 @@ request for a unit that does not exist is denied rather than returning an empty
 snapshot — so "no such equipment" and "not your equipment" are indistinguishable
 to a client, and the interface reports them as one. See decisions 89 to 89e.
 
+## 13h. Cost fields
+
+Two optional fields, both integer cents, both validated in Rules as
+`is int && >= 0 && <= 100000000` ($1,000,000.00 per unit).
+
+| Collection | Field | Meaning |
+|---|---|---|
+| `inventory_items` | `unit_cost_cents?` | What one quantity unit costs to replace |
+| `action_items` | `estimated_unit_cost_cents?` | Planning estimate for one unit |
+
+Absent means unknown, which is never displayed as `$0.00`. A recorded zero and an
+unrecorded cost are different facts and stay distinct: presence is tested rather
+than truthiness in the payload builders, in the summary, and in the interface.
+
+Nothing else is stored. There is no cost on `inventory_units` — serialized units
+inherit the parent item's estimate, because whether one microphone was bought for
+more than another is purchase history this product does not keep. There is no
+line total on an action item and no total on a production: `quantity × unit cost`
+and the production summary are computed on every read, so there is no second copy
+to drift. Maintenance records are untouched.
+
+Derived, never stored:
+
+- action line total = `quantity × estimated_unit_cost_cents`
+- estimated inventory value = active quantity × `unit_cost_cents`
+  (serialized items use `unit_counts.active_total`, so retired units are out)
+- production estimated cost = sum over action items whose status is `todo`,
+  `in_progress`, or `done`; `cancelled` is excluded
+- missing-estimate count = counted actions with no `estimated_unit_cost_cents`
+
+No index is needed: nothing queries, filters, or sorts by cost. See decisions 90
+through 90h.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

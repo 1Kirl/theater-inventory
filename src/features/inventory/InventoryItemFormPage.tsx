@@ -32,6 +32,7 @@ import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import {
   INVENTORY_CATEGORIES, type ConditionCounts, type InventoryItem, type TrackingMode,
 } from '@/types/inventory'
+import { centsToInputValue, parseMoneyToCents } from '@/domain/money'
 import { paths } from '@/routes/paths'
 
 interface FormState {
@@ -43,6 +44,7 @@ interface FormState {
   quantityAvailable: string
   conditionCounts: Record<string, string>
   location: string
+  unitCost: string
   lastInspected: string
   notes: string
 }
@@ -56,6 +58,7 @@ const BLANK: FormState = {
   quantityAvailable: '0',
   conditionCounts: Object.fromEntries(CONDITION_KEYS.map((key) => [key, '0'])),
   location: '',
+  unitCost: '',
   lastInspected: '',
   notes: '',
 }
@@ -85,6 +88,7 @@ function fromItem(item: InventoryItem): FormState {
       CONDITION_KEYS.map((key) => [key, String(item.condition_counts[key])]),
     ),
     location: item.location,
+    unitCost: centsToInputValue(item.unit_cost_cents),
     lastInspected: item.last_inspected_at
       // Local parts: the input value is parsed back as local midnight.
       ? toDateKey(item.last_inspected_at.toDate())
@@ -181,6 +185,14 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
       }
     }
 
+    // Refused rather than rounded or coerced: a cost that quietly became
+    // something else would be believed.
+    const cost = parseMoneyToCents(state.unitCost)
+    if (!cost.valid) {
+      setError(cost.message)
+      return
+    }
+
     const input = {
       name: state.name,
       category: state.category,
@@ -197,6 +209,7 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
         : toNumber(state.quantityAvailable),
       conditionCounts: serialized && lockedToUnits ? existing.condition_counts : counts,
       location: state.location,
+      unitCostCents: cost.cents,
       lastInspectedAt: state.lastInspected
         ? Timestamp.fromDate(new Date(`${state.lastInspected}T00:00:00`))
         : null,
@@ -326,6 +339,23 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
                 disabled={submitting}
                 required
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor={`${fieldId}-cost`}>Estimated unit cost</Label>
+              <Input
+                id={`${fieldId}-cost`}
+                inputMode="decimal"
+                placeholder="18.50"
+                value={state.unitCost}
+                onChange={(event) => set('unitCost', event.target.value)}
+                disabled={submitting}
+                aria-describedby={`${fieldId}-cost-help`}
+              />
+              <p id={`${fieldId}-cost-help`} className="text-muted-foreground text-xs">
+                What one of these costs to replace. Used for inventory and production planning
+                estimates. Leave blank if you do not know.
+              </p>
             </div>
 
             <div className="space-y-2">

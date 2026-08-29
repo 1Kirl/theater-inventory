@@ -1,5 +1,6 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
 import type { ConditionCounts, TrackingMode, UnitCounts } from '@/types/inventory'
+import { isValidCostCents } from '@/domain/money'
 
 /**
  * The exact inventory document shape written to Firestore.
@@ -29,6 +30,8 @@ export interface InventoryItemInput {
   quantityAvailable: number
   conditionCounts: ConditionCounts
   location: string
+  /** Cents, or null/undefined for unknown. Never a float, never dollars. */
+  unitCostCents?: number | null
   lastInspectedAt?: Timestamp | null
   notes?: string | undefined
 }
@@ -51,6 +54,11 @@ function editableFields(input: InventoryItemInput) {
     quantity_available: input.quantityAvailable,
     condition_counts: input.conditionCounts,
     location: input.location.trim(),
+    // Zero is a real answer, so presence is tested rather than truthiness: a
+    // free item and an unpriced one must not collapse into each other.
+    ...(isValidCostCents(input.unitCostCents)
+      ? { unit_cost_cents: input.unitCostCents }
+      : {}),
     ...(input.lastInspectedAt ? { last_inspected_at: input.lastInspectedAt } : {}),
     ...(notes ? { notes } : {}),
   }
