@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
-import { Badge as StatusBadge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
 import { CONDITION_KEYS, CONDITION_LABELS, isSerialized } from '@/domain/inventory'
@@ -15,7 +15,7 @@ import { promotionMaintenanceBlock } from '@/domain/inventory-unit'
 import { conditionSummaryLabel, teamNameOf, unclassifiedOf } from '@/features/inventory/inventory-view'
 import { InventoryUnitsCard } from '@/features/inventory/InventoryUnitsCard'
 import { PromoteToSerializedDialog } from '@/features/inventory/PromoteToSerializedDialog'
-import { statusLabel, statusTone } from '@/features/maintenance/maintenance-view'
+import { statusLabel, maintenanceStatusTone } from '@/features/maintenance/maintenance-view'
 import { getInventoryItem } from '@/services/inventory-service'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
@@ -397,20 +397,18 @@ export function InventoryItemDetailPage() {
           ) : (
             <ul className="divide-border divide-y">
               {records.map((record) => {
-                const tone = statusTone(record.status)
+                const tone = maintenanceStatusTone(record.status)
                 return (
                   <li key={record.maintenance_id} className="py-3">
                     <Link
                       to={paths.maintenanceRecord(record.maintenance_id)}
                       className="flex flex-wrap items-center gap-x-3 gap-y-1"
                     >
-                      <StatusBadge
-                        variant={tone === 'active' ? 'default' : tone === 'pending' ? 'outline' : 'secondary'}
-                      >
-                        {statusLabel(record.status)}
-                      </StatusBadge>
+                      <StatusBadge tone={tone} label={statusLabel(record.status)} />
+                      {/* Overdue is not a status — the record still says planned or sent. It is a
+   fact about the clock, so it sits beside the status rather than replacing it. */}
                       {isOverdue(record, now) ? (
-                        <StatusBadge variant="destructive">Overdue</StatusBadge>
+                        <StatusBadge tone="danger" label="Overdue" />
                       ) : null}
                       <span className="text-sm tabular-nums">{record.quantity_sent} unit
                         {record.quantity_sent === 1 ? '' : 's'}</span>

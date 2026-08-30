@@ -2,14 +2,15 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListPlus, Plus, Printer } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { CONDITION_LABELS } from '@/domain/inventory'
-import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { conditionTone, unitStatusTone } from '@/domain/status-tone'
 import { BulkGenerateUnitsDialog } from '@/features/inventory/BulkGenerateUnitsDialog'
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
 import { PrintLabelsDialog } from '@/features/inventory/PrintLabelsDialog'
@@ -142,9 +143,10 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                     >
                       {unit.asset_code}
                     </Link>
-                    <Badge variant={unitBadgeVariant(unit.status)}>
-                      {UNIT_STATUS_LABELS[unit.status]}
-                    </Badge>
+                    <StatusBadge
+                      tone={unitStatusTone(unit.status)}
+                      label={UNIT_STATUS_LABELS[unit.status]}
+                    />
                   </div>
                   {unitMaintenanceIndicator(unit).label ? (
                     <p className="text-muted-foreground text-xs">
@@ -152,9 +154,19 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                     </p>
                   ) : null}
                   <p className="text-muted-foreground mt-1 text-sm">
-                    {teamNameOf(unit, teams)} · {CONDITION_LABELS[unit.condition]}
+                    {teamNameOf(unit, teams)}
                   </p>
                   <p className="text-muted-foreground text-sm">{unit.storage_location}</p>
+                  {/* Condition is a second axis, not a restatement of the status
+                      above it — a unit can be available and unusable at once —
+                      so it is drawn as a dotted chip rather than a filled pill. */}
+                  <div className="mt-2">
+                    <StatusBadge
+                      shape="dot"
+                      tone={conditionTone(unit.condition)}
+                      label={CONDITION_LABELS[unit.condition]}
+                    />
+                  </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {unit.current_maintenance_record_id ? (
@@ -213,9 +225,10 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={unitBadgeVariant(unit.status)}>
-                          {UNIT_STATUS_LABELS[unit.status]}
-                        </Badge>
+                        <StatusBadge
+                          tone={unitStatusTone(unit.status)}
+                          label={UNIT_STATUS_LABELS[unit.status]}
+                        />
                         {/* Secondary to the real status: a plan is an intention
                             about next week, not where the equipment is now. */}
                         {unitMaintenanceIndicator(unit).label ? (
@@ -227,7 +240,13 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                       <TableCell className="text-muted-foreground">
                         {teamNameOf(unit, teams)}
                       </TableCell>
-                      <TableCell>{CONDITION_LABELS[unit.condition]}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          shape="dot"
+                          tone={conditionTone(unit.condition)}
+                          label={CONDITION_LABELS[unit.condition]}
+                        />
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {unit.storage_location}
                       </TableCell>

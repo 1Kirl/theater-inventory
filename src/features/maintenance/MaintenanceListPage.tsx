@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -24,7 +24,7 @@ import {
   filterMaintenanceRecords,
   itemNameById,
   statusLabel,
-  statusTone,
+  maintenanceStatusTone,
   teamDisplay,
   type MaintenanceFilters,
 } from '@/features/maintenance/maintenance-view'
@@ -100,14 +100,12 @@ export function MaintenanceListPage() {
   const filtersActive = JSON.stringify(filters) !== JSON.stringify(EMPTY_MAINTENANCE_FILTERS)
 
   function StatusCell({ record }: { record: MaintenanceRecord }) {
-    const tone = statusTone(record.status)
+    const tone = maintenanceStatusTone(record.status)
     const overdue = isOverdue(record, now)
     return (
       <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant={tone === 'active' ? 'default' : tone === 'pending' ? 'outline' : 'secondary'}>
-          {statusLabel(record.status)}
-        </Badge>
-        {overdue ? <Badge variant="destructive">Overdue</Badge> : null}
+        <StatusBadge tone={tone} label={statusLabel(record.status)} />
+        {overdue ? <StatusBadge tone="danger" label="Overdue" /> : null}
       </div>
     )
   }

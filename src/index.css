@@ -16,11 +16,20 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-chart-6: var(--chart-6);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    --color-tone-positive: var(--tone-positive);
+    --color-tone-ready: var(--tone-ready);
+    --color-tone-info: var(--tone-info);
+    --color-tone-planned: var(--tone-planned);
+    --color-tone-warning: var(--tone-warning);
+    --color-tone-caution: var(--tone-caution);
+    --color-tone-danger: var(--tone-danger);
+    --color-tone-neutral: var(--tone-neutral);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -52,73 +61,137 @@
     /* Native controls — date pickers, number spinners, scrollbars,
        autofill — read this and nothing else. */
     color-scheme: light;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+
+    /* Sage, mint, eucalyptus. Held at low chroma on a green hue so the identity
+       reads as a tint rather than a colour wash: the page is still near-white
+       and the eye still has neutral places to rest. */
+    --background: oklch(0.994 0.002 155);
+    --foreground: oklch(0.185 0.012 162);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.185 0.012 162);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.185 0.012 162);
+    /* Eucalyptus. Dark enough to carry white text at AA. */
+    --primary: oklch(0.552 0.058 161);
+    --primary-foreground: oklch(0.99 0.004 155);
+    /* Soft mint. */
+    --secondary: oklch(0.944 0.023 158);
+    --secondary-foreground: oklch(0.325 0.036 162);
+    --muted: oklch(0.965 0.008 155);
+    --muted-foreground: oklch(0.492 0.018 160);
+    /* A slightly stronger pale green for hover and active surfaces. */
+    --accent: oklch(0.918 0.034 157);
+    --accent-foreground: oklch(0.298 0.04 162);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --border: oklch(0.903 0.012 158);
+    --input: oklch(0.888 0.015 158);
+    --ring: oklch(0.665 0.062 160);
+
+    /*
+     * Chart categories.
+     *
+     * Distinguishable first, harmonious second — a reader has to tell two
+     * wedges apart before the palette is allowed to be pretty. The first
+     * attempt was too close to that second goal: sage, teal, and blue occupied
+     * about eighty degrees of hue between them and were reported on a real
+     * phone as indistinguishable.
+     *
+     * These six are spread around the wheel — green, blue, gold, lavender,
+     * orange, rose — and the two nearest neighbours, orange and rose, are also
+     * separated by lightness so they do not rely on hue alone.
+     */
+    --chart-1: oklch(0.605 0.095 155);
+    --chart-2: oklch(0.585 0.115 252);
+    --chart-3: oklch(0.735 0.125 85);
+    --chart-4: oklch(0.6 0.115 300);
+    --chart-5: oklch(0.66 0.145 50);
+    --chart-6: oklch(0.575 0.16 10);
+
+    /*
+     * Status tones.
+     *
+     * One colour per tone, chosen dark enough to be read as text on a light
+     * surface. The soft badge fill is the same colour at low opacity, so a tone
+     * is one token rather than a triple, and the two themes stay in step by
+     * construction rather than by discipline.
+     */
+    --tone-positive: oklch(0.5 0.09 155);
+    --tone-ready: oklch(0.5 0.085 195);
+    --tone-info: oklch(0.505 0.115 255);
+    --tone-planned: oklch(0.505 0.115 298);
+    --tone-warning: oklch(0.545 0.115 70);
+    --tone-caution: oklch(0.545 0.135 45);
+    --tone-danger: oklch(0.525 0.16 20);
+    --tone-neutral: oklch(0.48 0.018 265);
+
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar: oklch(0.982 0.005 155);
+    --sidebar-foreground: oklch(0.185 0.012 162);
+    --sidebar-primary: oklch(0.552 0.058 161);
+    --sidebar-primary-foreground: oklch(0.99 0.004 155);
+    --sidebar-accent: oklch(0.918 0.034 157);
+    --sidebar-accent-foreground: oklch(0.298 0.04 162);
+    --sidebar-border: oklch(0.903 0.012 158);
+    --sidebar-ring: oklch(0.665 0.062 160);
 }
 
 .dark {
     color-scheme: dark;
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+
+    /*
+     * Not an inversion of the light palette.
+     *
+     * Pastels turned up on a dark ground glow; these are deep charcoals carrying
+     * the same green hue at low chroma, with the accents desaturated rather than
+     * brightened. The identity is meant to be recognised, not to be luminous.
+     */
+    --background: oklch(0.163 0.011 165);
+    --foreground: oklch(0.963 0.006 155);
+    --card: oklch(0.213 0.014 166);
+    --card-foreground: oklch(0.963 0.006 155);
+    --popover: oklch(0.213 0.014 166);
+    --popover-foreground: oklch(0.963 0.006 155);
+    /* Lighter muted sage, carrying dark text. */
+    --primary: oklch(0.775 0.062 159);
+    --primary-foreground: oklch(0.19 0.02 166);
+    --secondary: oklch(0.288 0.022 166);
+    --secondary-foreground: oklch(0.952 0.008 155);
+    --muted: oklch(0.268 0.016 166);
+    --muted-foreground: oklch(0.718 0.019 158);
+    --accent: oklch(0.328 0.031 163);
+    --accent-foreground: oklch(0.952 0.01 155);
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --border: oklch(0.85 0.02 160 / 14%);
+    --input: oklch(0.85 0.02 160 / 19%);
+    --ring: oklch(0.6 0.05 160);
+
+    /* Same six families, lifted for a dark ground and held under 0.14 chroma so
+       the ring reads as coloured rather than as lit. */
+    --chart-1: oklch(0.735 0.09 155);
+    --chart-2: oklch(0.7 0.105 252);
+    --chart-3: oklch(0.815 0.115 85);
+    --chart-4: oklch(0.725 0.105 300);
+    --chart-5: oklch(0.765 0.13 50);
+    --chart-6: oklch(0.705 0.135 10);
+
+    /* Light enough to read on a dark card, desaturated enough not to glow. */
+    --tone-positive: oklch(0.795 0.09 156);
+    --tone-ready: oklch(0.79 0.085 195);
+    --tone-info: oklch(0.775 0.095 255);
+    --tone-planned: oklch(0.785 0.09 298);
+    --tone-warning: oklch(0.815 0.105 74);
+    --tone-caution: oklch(0.775 0.115 47);
+    --tone-danger: oklch(0.765 0.115 19);
+    --tone-neutral: oklch(0.735 0.018 265);
+
+    --sidebar: oklch(0.193 0.013 166);
+    --sidebar-foreground: oklch(0.963 0.006 155);
+    --sidebar-primary: oklch(0.775 0.062 159);
+    --sidebar-primary-foreground: oklch(0.19 0.02 166);
+    --sidebar-accent: oklch(0.328 0.031 163);
+    --sidebar-accent-foreground: oklch(0.952 0.01 155);
+    --sidebar-border: oklch(0.85 0.02 160 / 14%);
+    --sidebar-ring: oklch(0.6 0.05 160);
 }
 
 @layer base {

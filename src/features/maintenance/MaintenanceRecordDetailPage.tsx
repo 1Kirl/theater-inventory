@@ -2,13 +2,13 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord } from '@/domain/module-access'
 import { isOverdue } from '@/domain/maintenance'
-import { statusLabel, statusTone, teamDisplay } from '@/features/maintenance/maintenance-view'
+import { statusLabel, maintenanceStatusTone, teamDisplay } from '@/features/maintenance/maintenance-view'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { getInventoryItem } from '@/services/inventory-service'
 import { getInventoryUnit } from '@/services/inventory-unit-service'
 import { CONDITION_LABELS } from '@/domain/inventory'
@@ -89,7 +89,7 @@ export function MaintenanceRecordDetailPage() {
   // Edit scope follows the stored snapshot, not the item's current team.
   const canEdit = canEditTeamScopedRecord(role, membership, 'maintenance', record.team_id)
   const team = teamDisplay(record, item ? [item] : [], teams)
-  const tone = statusTone(record.status)
+  const tone = maintenanceStatusTone(record.status)
   const overdue = isOverdue(record, new Date())
 
   return (
@@ -108,10 +108,8 @@ export function MaintenanceRecordDetailPage() {
               {item ? item.name : 'Maintenance record'}
             </h1>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={tone === 'active' ? 'default' : tone === 'pending' ? 'outline' : 'secondary'}>
-                {statusLabel(record.status)}
-              </Badge>
-              {overdue ? <Badge variant="destructive">Overdue</Badge> : null}
+              <StatusBadge tone={tone} label={statusLabel(record.status)} />
+              {overdue ? <StatusBadge tone="danger" label="Overdue" /> : null}
             </div>
           </div>
           {canEdit ? (

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import { conditionTone } from '@/domain/status-tone'
 import { EMPTY_CONDITION_COUNTS } from '@/domain/inventory'
 import {
   EMPTY_FILTERS,
   conditionSummaryLabel,
-  conditionTone,
+  itemConditionTone,
   filterInventoryItems,
   teamNameOf,
   unclassifiedOf,
@@ -42,15 +43,24 @@ describe('conditionSummaryLabel', () => {
   })
 })
 
-describe('conditionTone', () => {
-  it('flags unusable as destructive and needs repair as warning', () => {
-    expect(conditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, unusable: 1 } }))).toBe('destructive')
-    expect(conditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, needs_repair: 1 } }))).toBe('warning')
+describe('itemConditionTone', () => {
+  it('carries the worst condition present through to the badge', () => {
+    expect(itemConditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, unusable: 1 } })))
+      .toBe('danger')
+    expect(itemConditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, needs_repair: 1 } })))
+      .toBe('caution')
   })
 
-  it('keeps healthy stock neutral and unclassified muted', () => {
-    expect(conditionTone(item())).toBe('neutral')
-    expect(conditionTone(item({ condition_counts: EMPTY_CONDITION_COUNTS }))).toBe('muted')
+  it('agrees with the shared condition scale for a classified item', () => {
+    expect(itemConditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, excellent: 3 } })))
+      .toBe(conditionTone('excellent'))
+    expect(itemConditionTone(item({ condition_counts: { ...EMPTY_CONDITION_COUNTS, fair: 3 } })))
+      .toBe(conditionTone('fair'))
+  })
+
+  it('treats an unclassified item as neutral, not as healthy', () => {
+    // Nobody has looked, which is a different claim from nothing being wrong.
+    expect(itemConditionTone(item({ condition_counts: EMPTY_CONDITION_COUNTS }))).toBe('neutral')
   })
 })
 

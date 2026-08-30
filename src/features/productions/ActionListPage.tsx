@@ -12,6 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
 import { ACTION_STATUS_LABELS, ACTION_TYPE_LABELS, requirementAvailability } from '@/domain/production'
+import { actionStatusTone } from '@/domain/status-tone'
+import { StatusBadge } from '@/components/ui/status-badge'
 import {
   EMPTY_ACTION_FILTERS, filterActionItems, teamNameById, type ActionFilters,
 } from '@/features/productions/production-view'
@@ -120,7 +122,12 @@ export function ActionListPage() {
     const mayEdit = canEditTeamScopedRecord(role, membership, 'productions', action.team_id)
 
     if (!mayEdit) {
-      return <Badge variant="outline">{ACTION_STATUS_LABELS[action.status]}</Badge>
+      return (
+        <StatusBadge
+          tone={actionStatusTone(action.status)}
+          label={ACTION_STATUS_LABELS[action.status]}
+        />
+      )
     }
 
     return (

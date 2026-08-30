@@ -38,7 +38,7 @@ import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
 import {
   EMPTY_FILTERS,
   conditionSummaryLabel,
-  conditionTone,
+  itemConditionTone,
   filterInventoryItems,
   teamNameOf,
   type InventoryFilters,
@@ -50,16 +50,16 @@ import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import {
   INVENTORY_CATEGORIES, type InventoryItem, type InventoryUnit,
 } from '@/types/inventory'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { paths } from '@/routes/paths'
 
 function ConditionBadge({ item }: { item: InventoryItem }) {
-  const tone = conditionTone(item)
   return (
-    <Badge
-      variant={tone === 'destructive' ? 'destructive' : tone === 'neutral' ? 'secondary' : 'outline'}
-    >
-      {conditionSummaryLabel(item)}
-    </Badge>
+    <StatusBadge
+      shape="dot"
+      tone={itemConditionTone(item)}
+      label={conditionSummaryLabel(item)}
+    />
   )
 }
 
@@ -362,7 +362,7 @@ export function InventoryListPage() {
             {visible.map((item) => (
               <li key={item.item_id}>
                 <Link to={paths.inventoryItem(item.item_id)} className="block">
-                  <Card>
+                  <Card className="hover:border-primary/40 transition-colors">
                     <CardContent className="space-y-2 pt-6">
                       <div className="flex items-start justify-between gap-2">
                         <span className="min-w-0 flex-1 font-medium">{item.name}</span>

@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_MAINTENANCE_FILTERS,
   filterMaintenanceRecords,
-  statusTone,
   teamDisplay,
 } from '@/features/maintenance/maintenance-view'
 import type { MaintenanceRecord, MaintenanceStatus } from '@/types/maintenance'
@@ -34,20 +33,6 @@ function record(overrides: Partial<MaintenanceRecord> = {}): MaintenanceRecord {
     ...overrides,
   } as MaintenanceRecord
 }
-
-describe('statusTone', () => {
-  it('marks equipment that is out as active', () => {
-    for (const status of ['sent', 'in_service', 'ready'] as const) {
-      expect(statusTone(status)).toBe('active')
-    }
-  })
-
-  it('marks planned as pending and finished states as done', () => {
-    expect(statusTone('planned')).toBe('pending')
-    expect(statusTone('returned')).toBe('done')
-    expect(statusTone('cancelled')).toBe('done')
-  })
-})
 
 describe('teamDisplay', () => {
   it('shows the team plainly when it still matches the item', () => {

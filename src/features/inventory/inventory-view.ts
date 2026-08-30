@@ -1,4 +1,5 @@
 import { CONDITION_LABELS, conditionSummary, unclassifiedCount } from '@/domain/inventory'
+import { conditionTone, type StatusTone } from '@/domain/status-tone'
 import type { InventoryItem } from '@/types/inventory'
 import type { TheaterTeam } from '@/types/organization'
 
@@ -9,15 +10,17 @@ export function conditionSummaryLabel(item: Pick<InventoryItem, 'condition_count
   return summary ? CONDITION_LABELS[summary] : 'Unclassified'
 }
 
-export type ConditionTone = 'destructive' | 'warning' | 'muted' | 'neutral'
-
-export function conditionTone(item: Pick<InventoryItem, 'condition_counts'>): ConditionTone {
+/**
+ * The tone for an item's overall condition, as opposed to one unit's.
+ *
+ * An item summarizes many pieces, so it has a state a single unit does not: no
+ * classification at all. That is neutral rather than good — nobody has looked,
+ * which is not the same as nothing being wrong — and it is the only case this
+ * adds on top of the shared condition scale.
+ */
+export function itemConditionTone(item: Pick<InventoryItem, 'condition_counts'>): StatusTone {
   const summary = conditionSummary(item.condition_counts)
-
-  if (summary === 'unusable') return 'destructive'
-  if (summary === 'needs_repair') return 'warning'
-  if (summary === null) return 'muted'
-  return 'neutral'
+  return summary === null ? 'neutral' : conditionTone(summary)
 }
 
 /** Works for an item or a unit: both carry their own `team_id`. */

@@ -77,6 +77,113 @@ deliberate and must not be tokenized:
 - **The camera preview** in the scanner is never tinted, filtered, or
   blended.
 
+## 3b. Visual Identity — Pastel Green
+
+The identity is a restrained pastel green family, carried through semantic
+tokens rather than applied to components directly.
+
+- **Sage** — primary identity and active accents
+- **Soft mint** — light surfaces, selected states, highlights
+- **Muted eucalyptus** — secondary accent and supporting information
+
+Rules:
+
+- **Colour is used selectively.** The page background is near-white with only a
+  trace of the hue; cards are white. The eye needs neutral places to rest, and a
+  uniformly pale-green interface reads as a tint applied by accident.
+- **Light and dark are one design system, not two.** Every colour token defined
+  under `:root` has a counterpart under `.dark`, and a test in
+  `tests/unit/theme-boundaries.test.ts` fails if one is added without the other.
+- **Dark is not an inversion.** Pastels brightened on a dark ground glow. The
+  dark palette is deep charcoal carrying the same green hue at low chroma, with
+  accents desaturated rather than lightened.
+- Values are OKLCH, matching the existing token system.
+
+## 3c. Status and Condition Colour
+
+Every state in the application resolves to a **tone** — a meaning, not a shade —
+defined once in `src/domain/status-tone.ts`. Each tone is a single CSS token per
+theme; the soft badge fill and border are that colour at low opacity.
+
+| Tone | Used for |
+| --- | --- |
+| `positive` | Available · Returned · Done · Completed · Excellent |
+| `ready` | Ready for Pickup · Good |
+| `info` | In Use · Sent · To do · Active production |
+| `planned` | Planned · Planning |
+| `warning` | In Maintenance · In Service · In Progress · Fair |
+| `caution` | Needs Repair · Unusable but on hand |
+| `danger` | Lost · Unusable · Overdue |
+| `neutral` | Retired · Cancelled · Unclassified |
+
+Rules:
+
+- **Never colour alone.** Every badge shows its label. Tone is a second channel.
+- **Lifecycle and condition are different questions** and are drawn as different
+  objects: a lifecycle state is a filled pill, a condition is a dotted chip. A
+  unit can be available *and* unusable, and the interface has to be able to say
+  so without looking self-contradictory.
+- **One vocabulary.** Features must not define their own tone types. Four
+  separate ones existed before this and all of them collapsed into the same two
+  or three greys.
+
+## 3d. Charts
+
+Charts are used where they answer an operational question, and nowhere else.
+
+Principles:
+
+- **A chart never computes anything.** Every figure comes from an existing
+  domain helper — `activeQuantityOf`, `summarizeProductionCosts`, an item's own
+  unit counts. Projections live in `src/domain/chart-projections.ts` and are
+  tested. A chart that disagreed with the card above it would be worse than no
+  chart.
+- **Colour travels as a CSS custom property**, never as a resolved value, so a
+  wedge follows the theme the way a badge does and dark mode needs no second
+  palette in JavaScript.
+- **The numbers are the content.** Every chart is accompanied by its figures as
+  real text — a legend or a value beside each bar — and the drawing itself is
+  labelled for assistive technology. Nothing is communicated by colour alone.
+- **Empty is not zero.** A chart with no data shows an empty state explaining
+  why, not an empty ring or a row of zero-length bars.
+- **No decorative charts.** A graph that restates a single number already on the
+  page is removed, not kept.
+
+The MVP has three:
+
+| Chart | Question | Metric |
+| --- | --- | --- |
+| Dashboard — Equipment status | What state is our individually tracked equipment in? | Serialized items' `unit_counts`, six buckets |
+| Dashboard — Inventory by category | What is the inventory made of? | `activeQuantityOf` summed by category |
+| Production Detail — Estimated cost | What is this production's budget made of? | `summarizeProductionCosts().byType` |
+
+**Equipment status has six slices, not five.** Available, *unusable on hand*, in
+use, in maintenance, lost, retired. The middle one is not optional: a unit
+sitting on the shelf in unusable condition is active and present but is
+deliberately not counted as available, and it is the term that makes
+`active_total` add up. Omitting it would either overstate Available or leave a
+wedge unaccounted for.
+
+**Inventory by category is counted in physical things**, using the same measure
+for both tracking modes: a maintained quantity for a bulk item, `active_total`
+for a serialized one. Retired equipment is excluded from both. The item count
+travels as secondary text rather than as the bar length, because "forty cables"
+and "forty kinds of cable" are different claims.
+
+**Unknown cost stays unknown, and a known zero stays known.** An action with no
+estimate is counted and reported separately, never folded into a total and never
+drawn as a wedge. An explicit $0.00 estimate is different information: it stays
+in the known total, and the panel must never describe it as missing.
+
+Those are two questions, not one, and the panel answers both:
+
+- **Is there a total to draw?** Bars need length. Against a zero total they
+  would claim the work was costed and found to be free in four separate
+  categories, so they are not drawn.
+- **Has anybody costed anything?** Asked of the count of estimated actions, not
+  of the total. Work estimated at exactly $0.00 is an answer somebody gave, and
+  the panel reports it as one.
+
 ## 3. Visual Style
 
 Use a neutral professional base with one restrained accent color through semantic tokens.
@@ -384,7 +491,8 @@ Test at least:
 Do not spend MVP time on:
 
 - custom animation systems,
-- advanced chart libraries,
+- advanced chart libraries — the three charts in section 3d are built from
+  inline SVG and CSS against theme tokens, with no charting dependency,
 - elaborate illustrations,
 - complex theme switching beyond the single light/dark choice described in section 3a,
 - per-organization or account-synced themes,

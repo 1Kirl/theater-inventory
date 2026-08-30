@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Pencil } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord } from '@/domain/module-access'
 import { CONDITION_LABELS } from '@/domain/inventory'
-import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { conditionTone, maintenanceStatusTone, unitStatusTone } from '@/domain/status-tone'
 import { InventoryUnitDialog } from '@/features/inventory/InventoryUnitDialog'
 import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
 import {
@@ -195,15 +196,20 @@ export function InventoryUnitDetailPage() {
             <div>
               <dt className="text-muted-foreground text-sm">Status</dt>
               <dd className="pt-1">
-                <Badge variant={unitBadgeVariant(unit.status)}>
-                  {UNIT_STATUS_LABELS[unit.status]}
-                </Badge>
+                <StatusBadge
+                  tone={unitStatusTone(unit.status)}
+                  label={UNIT_STATUS_LABELS[unit.status]}
+                />
               </dd>
             </div>
             <div>
               <dt className="text-muted-foreground text-sm">Condition</dt>
               <dd className="pt-1">
-                <Badge variant="secondary">{CONDITION_LABELS[unit.condition]}</Badge>
+                <StatusBadge
+                  shape="dot"
+                  tone={conditionTone(unit.condition)}
+                  label={CONDITION_LABELS[unit.condition]}
+                />
               </dd>
             </div>
             <div>
@@ -295,8 +301,11 @@ export function InventoryUnitDetailPage() {
             <dl className="grid gap-4 sm:grid-cols-3">
               <div>
                 <dt className="text-muted-foreground text-sm">Status</dt>
-                <dd className="pt-1 text-sm">
-                  {MAINTENANCE_STATUS_LABELS[currentMaintenance.status]}
+                <dd className="pt-1">
+                  <StatusBadge
+                    tone={maintenanceStatusTone(currentMaintenance.status)}
+                    label={MAINTENANCE_STATUS_LABELS[currentMaintenance.status]}
+                  />
                 </dd>
               </div>
               <div>

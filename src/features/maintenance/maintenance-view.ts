@@ -9,13 +9,8 @@ export function statusLabel(status: MaintenanceStatus): string {
   return MAINTENANCE_STATUS_LABELS[status]
 }
 
-export type StatusTone = 'active' | 'done' | 'pending'
-
-export function statusTone(status: MaintenanceStatus): StatusTone {
-  if (isActiveStatus(status)) return 'active'
-  if (status === 'planned') return 'pending'
-  return 'done'
-}
+/** The shared tone vocabulary; see `@/domain/status-tone`. */
+export { maintenanceStatusTone } from '@/domain/status-tone'
 
 export function teamNameById(teamId: string, teams: readonly TheaterTeam[]): string {
   return teams.find((team) => team.team_id === teamId)?.name ?? 'Unknown team'

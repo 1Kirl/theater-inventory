@@ -3,6 +3,7 @@ import {
   UNIT_STATUS_LABELS, itemPresentation, unitBreakdownLine, unitStatusTone,
 } from '@/features/inventory/inventory-unit-view'
 import { EMPTY_UNIT_COUNTS } from '@/domain/inventory'
+import { STATUS_TONES } from '@/domain/status-tone'
 import { UNIT_STATUSES, type InventoryItem, type UnitCounts } from '@/types/inventory'
 
 function item(overrides: Partial<InventoryItem> = {}): InventoryItem {
@@ -131,10 +132,11 @@ describe('unit status presentation', () => {
     }
   })
 
-  it('marks lost as the most alarming and retired as spent', () => {
-    expect(unitStatusTone('lost')).toBe('destructive')
-    expect(unitStatusTone('in_maintenance')).toBe('warning')
-    expect(unitStatusTone('retired')).toBe('muted')
-    expect(unitStatusTone('available')).toBe('neutral')
+  // The tone vocabulary itself is asserted in src/domain/status-tone.test.ts.
+  // What matters here is that this module still resolves one.
+  it('resolves a tone for every status', () => {
+    for (const status of UNIT_STATUSES) {
+      expect(STATUS_TONES).toContain(unitStatusTone(status))
+    }
   })
 })

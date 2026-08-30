@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { hasModuleAccess } from '@/domain/module-access'
 import { PRODUCTION_STATUS_LABELS } from '@/domain/production'
+import { productionStatusTone } from '@/domain/status-tone'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { listProductions } from '@/services/production-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import { PRODUCTION_STATUSES, type Production } from '@/types/production'
@@ -108,14 +109,18 @@ export function ProductionListPage() {
         <ul className="grid gap-3 sm:grid-cols-2">
           {visible.map((production) => (
             <li key={production.production_id}>
-              <Link to={paths.production(production.production_id)} className="block h-full">
-                <Card className="h-full">
+              <Link to={paths.production(production.production_id)} className="group block h-full">
+                {/* Elevation only where a card is genuinely a link. A static
+                    card that lifts under the pointer promises a click that
+                    never happens. */}
+                <Card className="hover:border-primary/40 h-full transition-colors">
                   <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <CardTitle className="min-w-0 truncate text-base">{production.title}</CardTitle>
-                      <Badge variant={production.status === 'active' ? 'default' : production.status === 'completed' ? 'secondary' : 'outline'}>
-                        {PRODUCTION_STATUS_LABELS[production.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={productionStatusTone(production.status)}
+                        label={PRODUCTION_STATUS_LABELS[production.status]}
+                      />
                     </div>
                     <CardDescription>{dateRange(production)}</CardDescription>
                   </CardHeader>

@@ -3107,3 +3107,164 @@ Three corrections were needed:
   described in 95b.
 
 The remaining hard-coded colours are the intentional exceptions in 95c.
+
+### 96. Four tone vocabularies became one
+
+Before this phase the application had four separate ideas of what a status
+colour was. `inventory-unit-view` had `UnitStatusTone` with four names,
+`maintenance-view` had `StatusTone` with three different ones, `inventory-view`
+had `ConditionTone` with four more, and action and production statuses had none
+at all and rendered whatever shadcn badge variant was nearest.
+
+All four collapsed into the same two or three greys. A lost microphone and a
+retired one looked alike. "In use" and "Unusable" were the same pill. The
+monotony was not a matter of taste — it was four independent mappings each
+losing information on its way to a palette that had nowhere for the information
+to go.
+
+`src/domain/status-tone.ts` now holds one vocabulary of eight tones, and every
+status in the application maps into it. A tone is a meaning, not a shade; the
+shade is a CSS token defined once per theme, which is what stops a colour being
+added for light and forgotten for dark.
+
+The tests assert coverage and *distinctness* rather than specific shades —
+"available is green" is a decision that could reasonably change, but "lost and
+retired are not the same colour" is the property that was broken.
+
+### 96a. Lifecycle and condition are different questions, so they are different objects
+
+Both axes use the same eight tones, and that is deliberate: fair is amber
+wherever it appears. But a unit can be available *and* unusable at the same
+time, and two green pills side by side would read as one statement made twice.
+
+A lifecycle state is therefore a filled pill and a condition is a dotted chip.
+The colour vocabulary is shared; the shape is what says which question is being
+answered.
+
+### 97. No charting library
+
+Recharts was permitted for this phase and was not used, because the condition it
+was permitted under — being the simplest fit — turned out not to hold.
+
+Two of the three charts are labelled horizontal magnitudes, which is a
+description list with a proportional-width div behind each row. A library adds
+nothing there. The third is a ring, which is `stroke-dasharray` on one SVG
+circle: each segment is a dash as long as its share of the circumference, offset
+by everything before it. Around thirty lines, and none of it approximate.
+
+The decisive point was colour. Recharts takes colours as JavaScript string
+props, so a themed chart needs resolved values — which means a second palette in
+JavaScript, duplicated for dark mode, kept in step by hand with the CSS tokens
+that Extension B had just established as the single source. Inline SVG takes
+`var(--chart-3)` and follows the theme for free.
+
+Accessibility pointed the same way. These charts have to carry their figures as
+real text and be legible to somebody who cannot separate the colours; owning the
+markup is what makes that straightforward rather than a fight with a library's
+rendering.
+
+The result is three charts, no new dependency, and no bundle cost. If a later
+phase needs axes, time series, or interactive brushing, that judgement should be
+revisited — this decision is about three static charts, not about charting.
+
+### 97a. A chart is not allowed to do arithmetic
+
+Every figure on every chart comes from a function that already existed:
+`activeQuantityOf`, `summarizeProductionCosts`, and the unit counts a serialized
+item maintains. `chart-projections.ts` adds colour, order, and labels, and
+nothing else.
+
+This is the same rule as the dashboard summaries and for the same reason. A
+chart that disagreed with the card above it would be worse than no chart, and
+the only way to guarantee it cannot is to give it no arithmetic of its own to
+disagree with.
+
+### 97b. The equipment ring has six slices, not five
+
+The obvious category list — available, in use, in maintenance, lost, retired —
+does not add up, and the way it fails is quiet.
+
+`UnitCounts` documents the invariant it exists to satisfy:
+
+    active_total = available + unusable_on_hand + in_use + in_maintenance + lost
+
+A unit sitting on the shelf in unusable condition is active and present, but it
+is not something a production can count on, so it is deliberately not counted as
+available. Drawing the five obvious slices would either overstate Available or
+leave part of the ring unaccounted for, and a reader would have no way to tell
+which had happened. So the ring carries `unusable_on_hand` as its own slice,
+labelled "Unusable, on hand" — the words "on hand" being what distinguishes it
+from a unit that has been lost or written off.
+
+Only serialized items contribute. A bulk item is a quantity nobody counted piece
+by piece; it has no lifecycle to chart, and the guard against including one is
+tested against a stale-counts case rather than only against an empty one.
+
+### 97c. Comparing bulk quantities with serialized units is honest here
+
+The inventory-by-category chart puts a bar for Cables beside a bar for Lighting
+Instruments, and those two items are tracked in completely different ways. That
+is worth justifying rather than assuming.
+
+The metric is `activeQuantityOf`, the same function the replacement-value
+estimate uses. For a bulk item it is the quantity somebody maintains. For a
+serialized item it is `active_total`, which is that item's units minus the
+retired ones. Both answer "how many of this do we currently have", both exclude
+retired equipment, and both are counted in physical objects — so the bars are
+measured in the same unit even though one is a pile of cable and the other is
+twenty-four numbered fixtures.
+
+What would not have been honest is charting quantity while labelling it as
+items, or mixing item counts for one mode with quantities for the other. The
+item count is therefore shown as secondary text on each row rather than as the
+bar length: "forty cables" and "forty kinds of cable" are different claims, and
+a reader should not have to work out which one a bar means.
+
+### 97d. Unknown cost survives being charted
+
+Phase 11F established that an unestimated action is an unknown cost and not a
+zero one. A chart is where that distinction is easiest to lose, because a bar of
+length zero and a bar for something nobody has priced look identical.
+
+So the cost breakdown draws only known estimates, reports the unknown count
+beside them in words, and — when there is no known total at all — refuses to
+draw. Four empty bars would say "we costed this work and it came to nothing",
+which is a claim about four separate kinds of work that nobody made.
+
+An action estimated at exactly $0.00 is real information and stays in the known
+total, contributing no length.
+
+### 97e. Having nothing to draw is not the same as knowing nothing
+
+The paragraph that used to stand here got this wrong, and said so confidently:
+that the panel should ask whether the *total* was non-zero rather than whether
+anything had been estimated, because the two cases produce the same empty
+drawing.
+
+They produce the same drawing. They are not the same statement. A production
+whose only action is a build costed at exactly $0.00 rendered a card that
+contradicted itself — the headline read "Estimated production cost / $0.00",
+and directly beneath it sat "No known estimated action costs yet. Add an
+estimate to an action item and the breakdown will appear here." The reader was
+told no estimate existed, under the estimate, and invited to enter it again.
+
+That is the same class of mistake 11F exists to prevent, arriving from the other
+side: not unknown presented as zero, but zero presented as unknown.
+
+The fix is to stop deriving one from the other. `costChart` now reports two
+things instead of one:
+
+- `hasDrawableCost` — is there a total to divide into bars? Asked of the total.
+- `hasKnownEstimate` — has anybody costed anything? Asked of the count.
+
+The bars still refuse to draw against a zero total, for the original and still
+correct reason: four empty tracks would claim the work was costed and came to
+nothing in four separate categories, which nobody said. But when an estimate
+exists and comes to zero, the panel says so plainly instead of claiming
+ignorance.
+
+Neither field computes anything. `estimatedCount` and `knownTotalCents` both
+come from `summarizeProductionCosts`, which already excludes cancelled work
+before reading a cost — so a cancelled action priced at $0.00 cannot make a
+production look as though it has been costed. That case is tested too, because
+it is the one where the two questions could quietly diverge.

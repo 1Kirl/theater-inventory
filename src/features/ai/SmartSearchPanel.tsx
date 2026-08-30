@@ -10,7 +10,9 @@ import { aiFailureMessage } from '@/features/ai/ai-errors'
 import { reportAiFailure } from '@/features/ai/ai-diagnostics'
 import type { SmartSearchResult } from '@/features/ai/smart-search'
 import { MAX_QUERY_LENGTH, askInventoryQuestion } from '@/features/ai/smart-search-service'
-import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { unitStatusTone } from '@/domain/status-tone'
 import { paths } from '@/routes/paths'
 import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 import type { TheaterTeam } from '@/types/organization'
@@ -179,9 +181,10 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
                       >
                         {unit.asset_code}
                       </Link>
-                      <Badge variant={unitBadgeVariant(unit.status)}>
-                        {UNIT_STATUS_LABELS[unit.status]}
-                      </Badge>
+                      <StatusBadge
+                        tone={unitStatusTone(unit.status)}
+                        label={UNIT_STATUS_LABELS[unit.status]}
+                      />
                       {active.reasons.get(unit.unit_id) ? (
                         <span className="text-muted-foreground min-w-0 flex-1 text-xs">
                           {active.reasons.get(unit.unit_id)}

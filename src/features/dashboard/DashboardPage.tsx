@@ -1,6 +1,9 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle, CalendarDays, Package, Plus, Theater, Wrench } from 'lucide-react'
+import {
+  AlertTriangle, CalendarDays, ListChecks, Package, PackageOpen, Plus, Theater, Wrench,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -9,6 +12,16 @@ import { useOrganization } from '@/features/organizations/useOrganization'
 import { hasModuleAccess } from '@/domain/module-access'
 import { MAINTENANCE_STATUS_LABELS, isOverdue } from '@/domain/maintenance'
 import { PRODUCTION_STATUS_LABELS } from '@/domain/production'
+import {
+  maintenanceStatusTone, productionStatusTone, type StatusTone,
+} from '@/domain/status-tone'
+import {
+  categoryChart, lifecycleChart, type LifecycleChart,
+} from '@/domain/chart-projections'
+import { DonutChart } from '@/components/charts/DonutChart'
+import { ChartLegend } from '@/components/charts/ChartLegend'
+import { BarList } from '@/components/charts/BarList'
+import { StatusBadge } from '@/components/ui/status-badge'
 import { formatEventTime, isAllDay } from '@/domain/calendar'
 import { itemNameById } from '@/features/maintenance/maintenance-view'
 import { audienceLabel } from '@/features/calendar/calendar-view'
@@ -29,13 +42,45 @@ import { paths } from '@/routes/paths'
 
 const DATE_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' })
 
-function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+/**
+ * One headline number.
+ *
+ * The icon sits on a tinted square tied to the module it belongs to, which is
+ * the only colour on the card. It is decoration in the strict sense — the label
+ * beside it already says what the number is — so it is hidden from assistive
+ * technology and nothing depends on telling the tints apart.
+ */
+function Metric({
+  label, value, hint, icon: Icon, tone = 'neutral',
+}: {
+  label: string
+  value: string
+  hint?: string
+  icon?: LucideIcon
+  tone?: StatusTone
+}) {
   return (
     <Card>
-      <CardContent className="space-y-1 pt-6">
-        <p className="text-muted-foreground text-xs">{label}</p>
-        <p className="text-2xl font-semibold tabular-nums">{value}</p>
-        {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
+      <CardContent className="pt-6">
+        <div className="flex items-start gap-3">
+          {Icon ? (
+            <span
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg"
+              style={{
+                color: `var(--tone-${tone})`,
+                backgroundColor: `color-mix(in oklab, var(--tone-${tone}) 12%, transparent)`,
+              }}
+              aria-hidden="true"
+            >
+              <Icon className="size-4" />
+            </span>
+          ) : null}
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-muted-foreground text-xs">{label}</p>
+            <p className="text-2xl font-semibold tracking-tight tabular-nums">{value}</p>
+            {hint ? <p className="text-muted-foreground text-xs">{hint}</p> : null}
+          </div>
+        </div>
       </CardContent>
     </Card>
   )
@@ -63,6 +108,23 @@ function Loading({ label }: { label: string }) {
       </CardContent>
     </Card>
   )
+}
+
+/**
+ * What the ring says, in words.
+ *
+ * The drawing itself is `aria-label`led with this, so the chart is never the
+ * only way to learn the numbers. Zero-count states are left out of the sentence
+ * but stay visible in the legend beside it.
+ */
+function lifecycleSummaryText(chart: LifecycleChart): string {
+  const parts = chart.slices
+    .filter((slice) => slice.value > 0)
+    .map((slice) => `${slice.label}: ${String(slice.value)}`)
+
+  return parts.length === 0
+    ? 'Equipment status: no individually tracked units.'
+    : `Equipment status, ${String(chart.total)} units in total. ${parts.join('. ')}.`
 }
 
 /** True only when the module was requested and came back. */
@@ -105,6 +167,11 @@ export function DashboardPage() {
     })
     : null
   const calendarSummary = events ? summarizeCalendar(events, now) : null
+
+  // Both charts read the inventory the page already loaded, through the same
+  // helpers the cards above use. Neither computes a figure of its own.
+  const lifecycle = items ? lifecycleChart(items) : null
+  const categories = items ? categoryChart(items) : null
 
   if (!hasAnyAccess(data.access)) {
     return (
@@ -160,6 +227,8 @@ export function DashboardPage() {
         ) : null}
         {inventorySummary ? (
           <Metric
+            icon={Package}
+            tone="info"
             label="Total inventory records"
             value={String(inventorySummary.itemCount)}
             hint={`${inventorySummary.availableUnits} of ${inventorySummary.totalUnits} units available`}
@@ -173,6 +242,8 @@ export function DashboardPage() {
         {maintenanceSummary ? (
           <>
             <Metric
+              icon={Wrench}
+              tone={maintenanceSummary.overdueCount > 0 ? 'caution' : 'warning'}
               label="Active Repairs"
               value={String(maintenanceSummary.openCount)}
               hint={
@@ -185,6 +256,8 @@ export function DashboardPage() {
               }
             />
             <Metric
+              icon={PackageOpen}
+              tone="warning"
               label="Currently in service"
               value={String(maintenanceSummary.inServiceQuantity)}
               hint="Units sent, in service, or ready"
@@ -199,6 +272,8 @@ export function DashboardPage() {
         {productionsSummary ? (
           <>
             <Metric
+              icon={Theater}
+              tone="planned"
               label="Active productions"
               value={String(productionsSummary.activeCount)}
               hint={
@@ -208,6 +283,8 @@ export function DashboardPage() {
               }
             />
             <Metric
+              icon={ListChecks}
+              tone="info"
               label="Unresolved actions"
               value={String(productionsSummary.openActionCount)}
               hint="To do or in progress"
@@ -221,6 +298,8 @@ export function DashboardPage() {
         ) : null}
         {calendarSummary ? (
           <Metric
+            icon={CalendarDays}
+            tone="ready"
             label="Upcoming events"
             value={String(calendarSummary.upcomingCount)}
             hint={
@@ -231,6 +310,75 @@ export function DashboardPage() {
           />
         ) : null}
       </div>
+
+      {/*
+        * Two charts, deliberately. They answer questions the numbers above
+        * cannot — what state the equipment is in, and what the inventory is
+        * made of — rather than redrawing a figure that is already on the page.
+        */}
+      {lifecycle && categories ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Equipment status</CardTitle>
+              <CardDescription>
+                Individually tracked equipment only. Bulk quantities are not units and are
+                not counted here.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {lifecycle.serializedItemCount === 0 ? (
+                <div className="border-border flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+                  <Package className="text-muted-foreground size-5" aria-hidden="true" />
+                  <p className="text-sm font-medium">No individually tracked equipment yet</p>
+                  <p className="text-muted-foreground text-xs">
+                    Items tracked as a bulk quantity have no per-unit status to chart.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                  <DonutChart
+                    data={lifecycle.slices}
+                    centerValue={String(lifecycle.activeTotal)}
+                    centerLabel="active"
+                    summary={lifecycleSummaryText(lifecycle)}
+                  />
+                  <ChartLegend data={lifecycle.slices} />
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Inventory by category</CardTitle>
+              <CardDescription>
+                Counted in things currently held — a maintained quantity for bulk items, active
+                units for serialized ones. Retired equipment is excluded.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {categories.rows.length === 0 ? (
+                <div className="border-border flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+                  <Package className="text-muted-foreground size-5" aria-hidden="true" />
+                  <p className="text-sm font-medium">Nothing in the inventory yet</p>
+                  <p className="text-muted-foreground text-xs">
+                    Add an item and its category will appear here.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <BarList data={categories.rows} format={String} />
+                  <p className="text-muted-foreground mt-4 text-xs tabular-nums">
+                    {categories.total} in total across {categories.itemCount} record
+                    {categories.itemCount === 1 ? '' : 's'}.
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         {productionsSummary ? (
@@ -267,9 +415,10 @@ export function DashboardPage() {
                           <span className="min-w-0 flex-1 truncate font-medium">
                             {row.production.title}
                           </span>
-                          <Badge variant="default">
-                            {PRODUCTION_STATUS_LABELS[row.production.status]}
-                          </Badge>
+                          <StatusBadge
+                            tone={productionStatusTone(row.production.status)}
+                            label={PRODUCTION_STATUS_LABELS[row.production.status]}
+                          />
                         </div>
                         <p className="text-muted-foreground mt-1 text-xs tabular-nums">
                           {row.requirementCount} requirement{row.requirementCount === 1 ? '' : 's'}
@@ -321,9 +470,10 @@ export function DashboardPage() {
                           <span className="min-w-0 flex-1 truncate font-medium">
                             {items ? itemNameById(record.item_id, items) : record.issue_description}
                           </span>
-                          <Badge variant="secondary">
-                            {MAINTENANCE_STATUS_LABELS[record.status]}
-                          </Badge>
+                          <StatusBadge
+                            tone={maintenanceStatusTone(record.status)}
+                            label={MAINTENANCE_STATUS_LABELS[record.status]}
+                          />
                           {isOverdue(record, now) ? (
                             <Badge variant="destructive">
                               <AlertTriangle className="size-3" aria-hidden="true" />

@@ -11,21 +11,14 @@ export const UNIT_STATUS_LABELS: Record<UnitStatus, string> = {
   retired: 'Retired',
 }
 
-export type UnitStatusTone = 'neutral' | 'muted' | 'warning' | 'destructive'
-
-export function unitStatusTone(status: UnitStatus): UnitStatusTone {
-  if (status === 'lost') return 'destructive'
-  if (status === 'in_maintenance') return 'warning'
-  if (status === 'retired') return 'muted'
-  return 'neutral'
-}
-
-export function unitBadgeVariant(status: UnitStatus): 'default' | 'secondary' | 'outline' {
-  const tone = unitStatusTone(status)
-  if (tone === 'destructive' || tone === 'warning') return 'default'
-  if (tone === 'muted') return 'outline'
-  return 'secondary'
-}
+/**
+ * Where a unit's status colour comes from.
+ *
+ * Re-exported rather than defined here: the tone vocabulary is shared with
+ * maintenance, productions, actions, and conditions, and a second copy for
+ * inventory is exactly how "lost" and "retired" ended up the same grey.
+ */
+export { unitStatusTone } from '@/domain/status-tone'
 
 /**
  * Which parent fields describe the equipment, and which do not.

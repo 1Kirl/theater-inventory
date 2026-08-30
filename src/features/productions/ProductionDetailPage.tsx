@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
 import {
-  ACTION_STATUS_LABELS, ACTION_TYPE_LABELS, ALREADY_AVAILABLE_LABEL, PRODUCTION_STATUS_LABELS,
+  ACTION_STATUS_LABELS, ALREADY_AVAILABLE_LABEL, PRODUCTION_STATUS_LABELS,
   canCreateActionItem,
 } from '@/domain/production'
 import {
@@ -32,9 +32,13 @@ import { getProduction } from '@/services/production-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
 import type { ActionItem, Production, ProductionRequirement } from '@/types/production'
+import { actionStatusTone, productionStatusTone } from '@/domain/status-tone'
+import { StatusBadge } from '@/components/ui/status-badge'
+import { costChart } from '@/domain/chart-projections'
+import { BarList } from '@/components/charts/BarList'
 import { paths } from '@/routes/paths'
 import {
-  costBreakdown, isCostEstimateComplete, missingCostNote, summarizeProductionCosts,
+  isCostEstimateComplete, missingCostNote, summarizeProductionCosts,
 } from '@/domain/production-costs'
 import { formatCents } from '@/domain/money'
 
@@ -103,6 +107,8 @@ export function ProductionDetailPage() {
   // Derived on every read from the action items themselves. Nothing about the
   // total is stored on the production, so there is no second copy to drift.
   const costs = summarizeProductionCosts(actions)
+  // Colour and order for the same numbers; no second total is computed.
+  const costChartData = costChart(actions)
 
   if (production === undefined) return <p className="text-muted-foreground text-sm">Loading production…</p>
   if (error) return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
@@ -137,7 +143,10 @@ export function ProductionDetailPage() {
       return (
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary">{actionSummary(row.action)}</Badge>
-          <span className="text-muted-foreground text-xs">{ACTION_STATUS_LABELS[row.action.status]}</span>
+          <StatusBadge
+            tone={actionStatusTone(row.action.status)}
+            label={ACTION_STATUS_LABELS[row.action.status]}
+          />
         </div>
       )
     }
@@ -159,9 +168,10 @@ export function ProductionDetailPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-2">
             <h1 className="text-2xl font-semibold tracking-tight">{production.title}</h1>
-            <Badge variant={production.status === 'active' ? 'default' : production.status === 'completed' ? 'secondary' : 'outline'}>
-              {PRODUCTION_STATUS_LABELS[production.status]}
-            </Badge>
+            <StatusBadge
+              tone={productionStatusTone(production.status)}
+              label={PRODUCTION_STATUS_LABELS[production.status]}
+            />
           </div>
           {canEdit ? (
             <Button asChild variant="outline" size="sm">
@@ -222,14 +232,49 @@ export function ProductionDetailPage() {
             </Alert>
           ) : null}
 
-          <dl className="grid gap-3 sm:grid-cols-4">
-            {costBreakdown(costs).map((row) => (
-              <div key={row.type} className="rounded-md border p-3">
-                <dt className="text-muted-foreground text-sm">{ACTION_TYPE_LABELS[row.type]}</dt>
-                <dd className="text-lg font-semibold tabular-nums">{formatCents(row.cents)}</dd>
-              </div>
-            ))}
-          </dl>
+          {/*
+            * The breakdown, as bars rather than four equal boxes.
+            *
+            * Four numbers of the same size tell you what was spent on each kind
+            * of work; they do not tell you which one the budget mostly is. The
+            * bar lengths do, and the figures are still written out beside them.
+            *
+            * Three states, because there are three things that can be true.
+            *
+            * Bars need a total to divide, so they are drawn only when there is
+            * one. But having nothing to draw is not the same as knowing
+            * nothing: work costed at exactly $0.00 is an estimate somebody
+            * entered, and telling them no estimate exists — under a headline
+            * already reading $0.00 — would be the interface contradicting
+            * itself and inviting them to add what they had just added.
+            */}
+          {costChartData.hasDrawableCost ? (
+            <BarList data={costChartData.rows} format={formatCents} keepZero />
+          ) : costChartData.hasKnownEstimate ? (
+            <div className="border-border rounded-lg border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">
+                Known estimated action cost: {formatCents(costChartData.knownTotalCents)}
+              </p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {costChartData.estimatedCount === 1
+                  ? '1 action item is estimated, and it comes to nothing to spend.'
+                  : `${String(costChartData.estimatedCount)} action items are estimated, `
+                    + 'and they come to nothing to spend.'}
+                {' '}There is no breakdown to show.
+              </p>
+            </div>
+          ) : (
+            <div className="border-border rounded-lg border border-dashed px-4 py-6 text-center">
+              <p className="text-sm font-medium">No known estimated action costs yet.</p>
+              <p className="text-muted-foreground mt-1 text-xs">
+                {costChartData.unknownCount > 0
+                  ? `${String(costChartData.unknownCount)} action item${costChartData.unknownCount === 1 ? '' : 's'} `
+                    + `${costChartData.unknownCount === 1 ? 'has' : 'have'} no cost estimate, so there is `
+                    + 'nothing to break down.'
+                  : 'Add an estimate to an action item and the breakdown will appear here.'}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
