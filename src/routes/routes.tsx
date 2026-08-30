@@ -4,13 +4,16 @@ import { AppShell } from '@/components/layout/AppShell'
 import { AuthLayout } from '@/features/auth/AuthLayout'
 import { LogInPage } from '@/features/auth/LogInPage'
 import { SignUpPage } from '@/features/auth/SignUpPage'
-import { AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard } from '@/routes/guards'
+import {
+  AdminGuard, AuthGuard, GuestGuard, MembershipGuard, OrganizationGuard, PermissionGuard,
+} from '@/routes/guards'
 import { NotFound } from '@/routes/NotFound'
 import { paths } from '@/routes/paths'
 import {
   AccountPage,
   ActionListPage,
   CalendarPage,
+  ContactsPage,
   CreateOrganizationPage,
   DashboardPage,
   InventoryItemDetailPage,
@@ -87,6 +90,24 @@ export const routes: RouteObject[] = [
         element: <AppShell />,
         children: [
           { path: '/equipment/:unitId', element: <InventoryUnitDetailPage /> },
+        ],
+      },
+
+      // The organization directory, which asks only for an active membership.
+      //
+      // Knowing who is on your crew is not a module permission, and somebody
+      // waiting for an assignment is still a member. It keeps the shell, so the
+      // header and its profile control come with it; the sidebar shows them
+      // nothing they cannot open.
+      {
+        element: <MembershipGuard />,
+        children: [
+          {
+            element: <AppShell />,
+            children: [
+              { path: paths.contacts, element: <ContactsPage /> },
+            ],
+          },
         ],
       },
 

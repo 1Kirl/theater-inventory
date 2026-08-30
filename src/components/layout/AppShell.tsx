@@ -1,6 +1,6 @@
 import { Suspense, useState } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, Menu } from 'lucide-react'
+import { Building2, Menu, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,6 +12,8 @@ import { SignOutButton } from '@/features/auth/SignOutButton'
 import { useAuth } from '@/features/auth/useAuth'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { ROLE_LABELS } from '@/domain/organization-view'
+import { effectiveDisplayName, teamNamesOf } from '@/domain/member-profile'
+import { OrganizationProfileDialog } from '@/features/contacts/OrganizationProfileDialog'
 import { paths } from '@/routes/paths'
 
 const APP_NAME = 'Theater Inventory Tracker'
@@ -23,8 +25,14 @@ const APP_NAME = 'Theater Inventory Tracker'
 export function AppShell() {
   const navigate = useNavigate()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false)
   const { profile } = useAuth()
-  const { organization, role, clearOrganization } = useOrganization()
+  const { organization, membership, role, teams, clearOrganization } = useOrganization()
+
+  // Who this person is *here*. The account name shows through when they have
+  // not chosen anything different for this organization.
+  const identity = effectiveDisplayName(membership, profile?.display_name)
+  const teamNames = membership ? teamNamesOf(membership, teams) : []
 
   function switchOrganization() {
     clearOrganization()
@@ -38,7 +46,14 @@ export function AppShell() {
         <span className="truncate text-sm font-semibold">{organization?.name ?? APP_NAME}</span>
       </div>
       {role ? (
-        <Badge variant={role === 'admin' ? 'default' : 'secondary'}>{ROLE_LABELS[role]}</Badge>
+        <div className="space-y-1">
+          <Badge variant={role === 'admin' ? 'default' : 'secondary'}>{ROLE_LABELS[role]}</Badge>
+          {/* An Admin can be on crews too, so this is shown beside the role
+              rather than instead of it. */}
+          {teamNames.length > 0 ? (
+            <p className="text-muted-foreground truncate text-xs">{teamNames.join(' · ')}</p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )
@@ -98,8 +113,19 @@ export function AppShell() {
           <div className="ml-auto flex items-center gap-2">
             <Button asChild variant="ghost" size="sm">
               <Link to={paths.account}>
-                <span className="max-w-32 truncate">{profile?.display_name ?? 'Account'}</span>
+                <span className="max-w-32 truncate">{identity}</span>
               </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8"
+              aria-label="Organization profile"
+              title="Organization profile"
+              onClick={() => { setEditingProfile(true) }}
+            >
+              <UserRound className="size-4" aria-hidden="true" />
             </Button>
             <SignOutButton variant="ghost" />
           </div>
@@ -113,6 +139,10 @@ export function AppShell() {
           </Suspense>
         </main>
       </div>
+
+      {editingProfile ? (
+        <OrganizationProfileDialog open onOpenChange={setEditingProfile} />
+      ) : null}
     </div>
   )
 }

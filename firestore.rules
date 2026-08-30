@@ -83,6 +83,29 @@ service cloud.firestore {
         && get(membershipPath(organizationId, uid())).data.is_active == true;
     }
 
+    /**
+     * The four things a member may say about themselves here.
+     *
+     * Each is optional and each is bounded, because all four are rendered on a
+     * card somebody else reads. Angle brackets are refused outright: nothing in
+     * this product renders them as markup, and a name or a biography has no use
+     * for one.
+     */
+    function profileTextValid(field, maxLength) {
+      return !(field in request.resource.data)
+        || (request.resource.data[field] is string
+            && request.resource.data[field].size() > 0
+            && request.resource.data[field].size() <= maxLength
+            && !request.resource.data[field].matches('.*[<>].*'));
+    }
+
+    function profileFieldsValid() {
+      return profileTextValid('profile_display_name', 60)
+        && profileTextValid('profile_phone', 40)
+        && profileTextValid('profile_contact_email', 254)
+        && profileTextValid('profile_bio', 300);
+    }
+
     function hasActiveMembership(organizationId, memberUid) {
       return exists(membershipPath(organizationId, memberUid))
         && get(membershipPath(organizationId, memberUid)).data.is_active == true;
@@ -244,19 +267,35 @@ service cloud.firestore {
           || hasValidJoinProof(request.resource.data.organization_id)
         );
 
-      // Only the Admin assigns. A member cannot edit their own membership, and
-      // the current Admin's membership cannot be deactivated — administration
-      // has to be transferred first, so the organization is never left without
-      // an Admin.
-      allow update: if isAdminOf(resource.data.organization_id)
-        && changedOnly(['team_ids', 'permissions', 'is_active', 'updated_at'])
-        && request.resource.data.team_ids is list
-        && request.resource.data.is_active is bool
-        && permissionsValid(request.resource.data.permissions)
-        && request.resource.data.updated_at == request.time
-        && (
-          request.resource.data.is_active == true
-          || resource.data.uid != get(orgPath(resource.data.organization_id)).data.admin_uid
+      // Two writers, and neither can do the other's job.
+      //
+      // The Admin assigns teams, permissions, and activity, and cannot touch
+      // anybody's personal details. A member owns how they appear and how they
+      // are reached here, and cannot give themselves a team, a permission, or
+      // anyone else's membership. Each branch names its own fields, so neither
+      // needs to trust the interface that produced the write.
+      allow update: if
+        (
+          isAdminOf(resource.data.organization_id)
+          && changedOnly(['team_ids', 'permissions', 'is_active', 'updated_at'])
+          && request.resource.data.team_ids is list
+          && request.resource.data.is_active is bool
+          && permissionsValid(request.resource.data.permissions)
+          && request.resource.data.updated_at == request.time
+          && (
+            request.resource.data.is_active == true
+            || resource.data.uid != get(orgPath(resource.data.organization_id)).data.admin_uid
+          )
+        )
+        || (
+          // Your own membership, in an organization you are still active in.
+          resource.data.uid == uid()
+          && request.resource.data.uid == resource.data.uid
+          && resource.data.is_active == true
+          && changedOnly(['profile_display_name', 'profile_phone', 'profile_contact_email',
+                          'profile_bio', 'updated_at'])
+          && profileFieldsValid()
+          && request.resource.data.updated_at == request.time
         );
 
       allow delete: if false;

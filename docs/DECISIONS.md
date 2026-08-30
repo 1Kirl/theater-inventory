@@ -2904,3 +2904,101 @@ part of the system demonstrably working.
 A 4xx means the service read the request and refused it. It now says so, and
 says that retrying is unlikely to help. Only a request that never got an answer
 is reported as a connection problem.
+
+### 94. A person's profile belongs to the membership, not the account
+
+The account has one display name. How somebody appears *inside an organization*
+— what they are called, their phone number, a contact address, a line about what
+they do — lives on their membership of that organization.
+
+Somebody who belongs to two schools has two of these and neither knows about the
+other. A volunteer at one and a student at another are not obliged to present
+themselves the same way to both, and a shared profile would force them to.
+
+The four fields are optional and were added to the existing membership document.
+Nothing was migrated: a membership written before contacts existed has none of
+them and is valid exactly as it stands. The account name is never copied in as a
+default — an absent override falls back to it, so changing the account name still
+shows through and an empty override stays a real state rather than a stale copy.
+
+### 94a. Two owners of one document, neither able to do the other's job
+
+The Admin decides what somebody may do: teams, permissions, whether the
+membership is active. The member decides how they appear and how they are
+reached. Security Rules give each its own branch, and each names its own fields.
+
+A member editing themselves may touch only the four profile fields. They cannot
+give themselves a team, a permission, another organization, another identity, or
+reactivate themselves — and the disabled inputs in the dialog are not why. The
+Admin, conversely, cannot edit anybody's personal contact details; assigning work
+is not the same as speaking for somebody.
+
+Neither write disturbs the other, because both use `updateDoc` rather than
+replacing the document. An Admin assigning a team does not mention the profile
+fields, so they survive; a member saving a phone number does not mention
+`team_ids`, so it survives. That is asserted in the Rules tests rather than left
+to the shape of a payload — it is the same class of mistake that erased a repair
+history in Phase 11D, and it deserves the same suspicion.
+
+### 94b. Contacts is a directory, and Organization Settings is still the admin surface
+
+Contacts answers one question: who is here, what crew are they on, and how do I
+reach them. It assigns nothing, revokes nothing, and edits nobody but the person
+reading it.
+
+Searching and filtering narrow the list the page already loaded, under the read
+rules that already existed. Neither reaches further than the page was allowed to,
+and no rule was added to support filtering — a filter that could see more than
+its page would be a permission boundary pretending to be a control.
+
+Team filters belong to the organization that defined them. A selection is
+resolved against the current teams as it is used, so switching organizations
+cannot leave the directory filtered by a team that no longer exists and empty for
+a reason nobody can see.
+
+### 94c. The address in Contacts is not the one used to sign in
+
+This product authenticates with a synthetic address derived from the User ID.
+That is an internal identifier and appears nowhere a person can read: not in
+Contacts, not in the header, not in a profile, not in a log.
+
+The contact address in a profile is a separate field somebody typed. It is not
+prefilled from the authentication identity, and nothing in the new code reads
+`currentUser.email` at all.
+
+Contact details are organization-internal. They are not sent to the model in
+either AI feature — neither the Smart Search context nor the production planning
+projection carries a membership, let alone a phone number — and the AI has no
+use for them.
+
+### 94d. What an unassigned member can already see
+
+`isActiveMemberOf` has always asked only whether a membership is active. Somebody
+who joined with a code and has not yet been given a team or a permission
+therefore already satisfied the directory read rule, and already could read every
+other membership field, before contacts existed.
+
+Adding profile fields to that document extends what such a person can read to
+include phone numbers and addresses. The interface does not show them Contacts —
+`OrganizationGuard` renders the unassigned screen first — but Rules are the
+boundary, and at that level the data is readable by anyone holding an active
+membership.
+
+It was raised rather than quietly accepted, and the answer is that it is
+intended: somebody who joined with a code is a member of the organization, and
+the directory is for members. Active membership is the access boundary, and a
+team assignment is not required to see who else is here.
+
+So the interface was corrected to match, rather than the rule narrowed to match
+the interface. `MembershipGuard` asks for an active membership and nothing more,
+and exactly one route sits behind it. Every module still asks for the permission
+it always did — an unassigned member reading the directory cannot read an
+inventory item, a repair, a production, or a calendar event, and cannot give
+themselves a team or a permission on the way past. That is asserted in the Rules
+tests, because the guard is a convenience and the rules are the boundary.
+
+The sidebar shows such a member the one destination they can open. A link that
+returns them to the screen they just came from is worse than no link.
+
+None of this makes the directory public. Inactive memberships, other
+organizations, and signed-out visitors are refused exactly as before.

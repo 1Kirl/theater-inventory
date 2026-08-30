@@ -38,6 +38,24 @@ export interface OrganizationMembership {
   is_active: boolean
   joined_at: Timestamp
   updated_at: Timestamp
+
+  /**
+   * How this person appears and can be reached *in this organization*.
+   *
+   * All optional, all absent from every membership written before contacts
+   * existed, and all owned by the member rather than the Admin. Somebody who
+   * belongs to two organizations has two of these, and neither knows about the
+   * other — which is the point: a volunteer at one school and a student at
+   * another are not obliged to present themselves the same way to both.
+   *
+   * The account's own `display_name` is never copied in here. An absent
+   * override falls back to it, so changing the global name still works.
+   */
+  profile_display_name?: string
+  profile_phone?: string
+  /** Entered by the member. Never the synthetic address used to authenticate. */
+  profile_contact_email?: string
+  profile_bio?: string
 }
 
 /**

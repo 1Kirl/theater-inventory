@@ -4,7 +4,7 @@ import type { RouteObject } from 'react-router-dom'
 import { routes } from '@/routes/routes'
 import { paths } from '@/routes/paths'
 import {
-  AdminGuard, AuthGuard, GuestGuard, OrganizationGuard, PermissionGuard,
+  AdminGuard, AuthGuard, GuestGuard, MembershipGuard, OrganizationGuard, PermissionGuard,
 } from '@/routes/guards'
 
 /**
@@ -103,6 +103,9 @@ describe('the exception did not spread', () => {
     // argues otherwise in a decision record.
     const allowedOutside = new Set<string>([
       EQUIPMENT,
+      // The directory asks only for an active membership, so somebody waiting
+      // for an assignment can still see who is here. It grants nothing else.
+      paths.contacts,
       // Signing in and choosing an organization necessarily precede having one.
       paths.logIn,
       paths.signUp,
@@ -118,6 +121,30 @@ describe('the exception did not spread', () => {
       .filter((path) => !allowedOutside.has(path))
 
     expect(outside).toEqual([])
+  })
+
+  it('lets an unassigned member reach the directory, and nothing else', () => {
+    // Being a member is the whole qualification for a directory. Every module
+    // still asks for a permission an unassigned member does not have.
+    expect(isUnder(paths.contacts, AuthGuard)).toBe(true)
+    expect(isUnder(paths.contacts, MembershipGuard)).toBe(true)
+    expect(isUnder(paths.contacts, OrganizationGuard)).toBe(false)
+    expect(isUnder(paths.contacts, PermissionGuard)).toBe(false)
+    expect(isUnder(paths.contacts, AdminGuard)).toBe(false)
+  })
+
+  it('gives the directory the shell, so its header controls come with it', () => {
+    expect(guardsFor(paths.contacts).length).toBeGreaterThan(2)
+  })
+
+  it('puts nothing else behind the membership guard', () => {
+    // The exception is one route. Anything else appearing here would be a
+    // module reachable without the permission it is supposed to require.
+    const behind = all
+      .filter((entry) => entry.guards.includes(MembershipGuard))
+      .map((entry) => entry.path)
+
+    expect(behind).toEqual([paths.contacts])
   })
 
   it('keeps the scanner inside the active organization, unlike the deep link', () => {

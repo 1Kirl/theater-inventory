@@ -117,6 +117,36 @@ export function OrganizationGuard() {
 }
 
 /**
+ * Requires an active membership, and nothing more.
+ *
+ * The narrow exception to `OrganizationGuard`, for the one place where being a
+ * member is the whole qualification. Somebody who joined with a code and is
+ * waiting for an assignment is a member of the organization: they may see who
+ * else is here and say how to reach them. Nothing else opens — every module
+ * still asks for a permission they do not have, and this guard grants none.
+ *
+ * Security Rules have always drawn the line in the same place: `isActiveMemberOf`
+ * asks whether the membership is active and never whether it carries a team.
+ */
+export function MembershipGuard() {
+  const { loading, organization, membership } = useOrganization()
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  if (!organization) {
+    return <ToOrganizationSelection />
+  }
+
+  if (!membership?.is_active) {
+    return <ToOrganizationSelection />
+  }
+
+  return <Outlet />
+}
+
+/**
  * Requires a module permission. Nests inside OrganizationGuard, so an
  * Unassigned member never reaches it.
  *

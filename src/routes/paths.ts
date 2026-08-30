@@ -17,6 +17,8 @@ export const paths = {
 
   // Authenticated, inside the application shell
   dashboard: '/',
+  /** The member-facing organization directory. Administration lives in settings. */
+  contacts: '/contacts',
   inventory: '/inventory',
   /** The continuous scanner. Inside the active organization, unlike a scanned label. */
   scanner: '/inventory/scan',

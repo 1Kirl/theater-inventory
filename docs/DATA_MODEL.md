@@ -1050,6 +1050,34 @@ for an inventory record. The model returns references and sentences; the
 interface renders quantities and money from the application's own objects, so an
 unresolvable reference produces no card. See decisions 93 through 93d.
 
+## 13l. Organization-local member profile
+
+Four optional fields on `organization_memberships`, all owned by the member:
+
+```
+profile_display_name?: string   (<= 60)
+profile_phone?: string          (<= 40)
+profile_contact_email?: string  (<= 254)
+profile_bio?: string            (<= 300)
+```
+
+No new collection, and no migration: a membership without them is valid, and an
+absent display name falls back to the account's `display_name` rather than being
+copied from it. A cleared field is deleted rather than stored as `''`, so
+"never said" and "cleared" are one shape.
+
+Rules give the document two writers with separate field lists. The Admin may
+change `team_ids`, `permissions`, `is_active`; the member may change only the
+four above, only on their own membership, and only while it is active. Both use
+`updateDoc`, so neither write disturbs the other. Text is bounded and angle
+brackets are refused.
+
+Reads are unchanged: `allow get/list` already permitted any active member of the
+organization, which is what Contacts uses. Cross-organization and signed-out
+reads were already denied.
+
+None of this reaches the AI. See decisions 94 through 94d.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

@@ -15,6 +15,11 @@ export function SidebarNav({ onNavigate, isAdmin = false }: SidebarNavProps) {
   // Entries are hidden rather than shown disabled. Hiding is a convenience;
   // the guards and Security Rules are what actually stop access.
   const visibleItems = navItems.filter((item) => {
+    // Somebody waiting for an assignment sees the one thing they can open.
+    // Dashboard and the modules would all bounce them to the same screen they
+    // just came from.
+    if (role === 'unassigned') return item.availableToUnassigned === true
+
     if (item.adminOnly && !isAdmin) return false
     if (item.module) {
       return hasModuleAccess(role, membership?.permissions ?? null, item.module, 'view')

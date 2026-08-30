@@ -1,6 +1,7 @@
 import {
   CalendarDays,
   ClipboardList,
+  Contact,
   LayoutDashboard,
   Package,
   ScanLine,
@@ -19,6 +20,13 @@ export interface NavItem {
   adminOnly: boolean
   /** Hidden unless the user can view this module. Absent means always shown. */
   module?: PermissionModule
+  /**
+   * Reachable by somebody who has joined but has not been assigned yet.
+   *
+   * Only the directory. Everything else needs a permission they do not have, and
+   * a link that leads to "you are not assigned" is worse than no link.
+   */
+  availableToUnassigned?: boolean
 }
 
 export const navItems: readonly NavItem[] = [
@@ -29,5 +37,9 @@ export const navItems: readonly NavItem[] = [
   { label: 'Productions', path: paths.productions, icon: Theater, adminOnly: false, module: 'productions' },
   { label: 'Action List', path: paths.actionList, icon: ClipboardList, adminOnly: false, module: 'productions' },
   { label: 'Calendar', path: paths.calendar, icon: CalendarDays, adminOnly: false, module: 'calendar' },
+  {
+    label: 'Contacts', path: paths.contacts, icon: Contact, adminOnly: false,
+    availableToUnassigned: true,
+  },
   { label: 'Organization Settings', path: paths.organizationSettings, icon: Settings, adminOnly: true },
 ]

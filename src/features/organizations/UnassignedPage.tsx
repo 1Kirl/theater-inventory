@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { SignOutButton } from '@/features/auth/SignOutButton'
@@ -34,7 +34,14 @@ export function UnassignedPage() {
             You have joined successfully. Nothing else is needed from you — once an Admin assigns
             you, this organization opens normally.
           </p>
+          <p className="text-muted-foreground text-sm">
+            You can still see who else is here, and add your own contact details so they can
+            reach you.
+          </p>
           <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link to={paths.contacts}>View contacts</Link>
+            </Button>
             <Button variant="outline" onClick={backToSelection}>
               Back to organizations
             </Button>

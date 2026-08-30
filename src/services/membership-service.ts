@@ -1,7 +1,10 @@
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import {
+  collection, deleteField, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where,
+} from 'firebase/firestore'
 import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS, membershipId } from '@/domain/organization-ids'
 import { OrganizationError } from '@/domain/organization-errors'
+import { PROFILE_FIELD_KEYS, profileFields, type MemberProfileInput } from '@/domain/member-profile'
 import type { ModulePermissions, OrganizationMembership } from '@/types/organization'
 
 function requireUid(): string {
@@ -83,6 +86,38 @@ export async function assignMembership(params: {
       permissions: params.permissions,
       updated_at: serverTimestamp(),
     },
+  )
+}
+
+/**
+ * Update your own profile in the organization you are currently in.
+ *
+ * Only the four fields a member owns, and only on their own membership. Teams,
+ * permissions, activity, and identity are not in the payload and are refused by
+ * Security Rules if they ever appear — the disabled inputs in the dialog are a
+ * convenience, not the boundary.
+ *
+ * A cleared field is deleted rather than written as an empty string, so the
+ * document keeps one shape for "nothing here" instead of two. `updateDoc`
+ * merges, so nothing outside these keys is touched: an Admin changing somebody's
+ * team at the same moment does not lose their phone number, and this does not
+ * lose their team.
+ */
+export async function updateMyOrganizationProfile(params: {
+  organizationId: string
+  input: MemberProfileInput
+}): Promise<void> {
+  const uid = requireUid()
+  const present = profileFields(params.input)
+
+  const payload: Record<string, unknown> = { updated_at: serverTimestamp() }
+  for (const key of PROFILE_FIELD_KEYS) {
+    payload[key] = present[key] ?? deleteField()
+  }
+
+  await updateDoc(
+    doc(getFirebaseDb(), COLLECTIONS.memberships, membershipId(params.organizationId, uid)),
+    payload,
   )
 }
 

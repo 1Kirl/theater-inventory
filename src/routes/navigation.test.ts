@@ -33,6 +33,9 @@ describe('sidebar navigation', () => {
       ['Productions', 'productions'],
       ['Action List', 'productions'],
       ['Calendar', 'calendar'],
+      // Knowing who is on your crew is not a module permission. The directory
+      // is organization-internal and carries none.
+      ['Contacts', null],
       ['Organization Settings', null],
     ])
   })
