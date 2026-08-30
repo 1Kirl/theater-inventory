@@ -24,7 +24,13 @@ import { ACTION_TYPE_LABELS } from '@/domain/production'
 import { createRequirement } from '@/services/production-requirement-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
-import type { Production } from '@/types/production'
+import type { ActionItem, Production, ProductionRequirement } from '@/types/production'
+import { buildProductionPlan } from '@/domain/production-planning'
+import type { ResolvedFinding } from '@/features/ai/requirement-generator-service'
+import { Link } from 'react-router-dom'
+import { formatCents, formatCostOrUnknown } from '@/domain/money'
+import { trackingModeOf } from '@/domain/inventory'
+import { paths } from '@/routes/paths'
 
 /**
  * The review step AI_SPEC section 4.6 requires.
@@ -39,6 +45,9 @@ import type { Production } from '@/types/production'
 interface Props {
   production: Production
   items: readonly InventoryItem[]
+  /** What this production already plans, so the draft can be measured against it. */
+  requirements: readonly ProductionRequirement[]
+  actions: readonly ActionItem[]
   canReadInventory: boolean
   existingItemNames: readonly string[]
   open: boolean
@@ -49,12 +58,15 @@ interface Props {
 const NO_MATCH = 'none'
 
 export function RequirementGeneratorDialog({
-  production, items, canReadInventory, existingItemNames, open, onOpenChange, onSaved,
+  production, items, requirements, actions, canReadInventory, existingItemNames,
+  open, onOpenChange, onSaved,
 }: Props) {
   const { organization, membership, role, teams } = useOrganization()
 
   const [prompt, setPrompt] = useState('')
   const [drafts, setDrafts] = useState<SuggestionDraft[] | null>(null)
+  const [related, setRelated] = useState<InventoryItem[]>([])
+  const [findings, setFindings] = useState<ResolvedFinding[]>([])
   const [assessment, setAssessment] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -85,9 +97,20 @@ export function RequirementGeneratorDialog({
     setError(null)
     setSaveResult(null)
     setNotice(null)
+    // Evidence from the previous answer must not sit under the next one, or
+    // under a failure. It is cleared before anything is asked.
+    setRelated([])
+    setFindings([])
     setGenerating(true)
 
     try {
+      // Every quantity and every amount of money is worked out here, from the
+      // real records, before the model is asked anything. It explains these
+      // numbers; it never produces them.
+      const plan = canReadInventory
+        ? buildProductionPlan({ requirements, items, actions })
+        : null
+
       const outcome = await generateRequirementDraft({
         production,
         teams,
@@ -97,9 +120,12 @@ export function RequirementGeneratorDialog({
         // without it nothing is read and the draft is general guidance.
         items: canReadInventory ? items : [],
         canReadInventory,
+        plan,
       })
 
       setAssessment(outcome.summary || null)
+      setRelated(outcome.relatedItems)
+      setFindings(outcome.findings)
       setDrafts(
         buildSuggestionDrafts(outcome.suggestions, {
           teams,
@@ -381,6 +407,92 @@ export function RequirementGeneratorDialog({
                   the AI knows nothing about what this organization already owns.
                 </p>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* The records the analysis rests on, rendered from the application's
+              own objects. The model chose which to point at; every number here
+              is read from Firestore, so a card can never say something the
+              model made up. */}
+          {related.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">What this is based on</p>
+              <ul className="space-y-2">
+                {related.map((entry) => (
+                  <li key={entry.item_id} className="space-y-1 rounded-md border p-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                      <span className="font-medium">{entry.name}</span>
+                      <span className="text-muted-foreground text-xs">{entry.category}</span>
+                    </div>
+                    <p className="text-muted-foreground text-sm tabular-nums">
+                      {entry.quantity_available} available of {entry.quantity_total}
+                      {trackingModeOf(entry) === 'serialized' ? ' individually tracked' : ''}
+                      {' · '}
+                      {formatCostOrUnknown(entry.unit_cost_cents)} each
+                    </p>
+                    <p className="text-muted-foreground text-xs">{entry.location}</p>
+                    <Button asChild size="sm" variant="outline" className="mt-1">
+                      <Link to={paths.inventoryItem(entry.item_id)}>View inventory</Link>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {/* Remarks about work already planned. The sentence is the model's;
+              the quantities and money beside it are the application's. */}
+          {findings.length > 0 ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">About the plan you already have</p>
+              <ul className="space-y-2">
+                {findings.map((finding, index) => (
+                  <li key={index} className="space-y-2 rounded-md border p-3">
+                    <p className="text-sm">{finding.message}</p>
+
+                    {finding.requirement ? (
+                      <div className="text-muted-foreground space-y-0.5 text-xs tabular-nums">
+                        <p>
+                          {finding.requirement.itemName} · needs{' '}
+                          {finding.requirement.requiredQty}
+                          {finding.requirement.availableQty === null
+                            ? ' · not matched to inventory'
+                            : ` · ${String(finding.requirement.availableQty)} available`
+                              + ` · short ${String(finding.requirement.shortage ?? 0)}`}
+                        </p>
+                        {finding.requirement.action ? (
+                          <p>
+                            Planned: {finding.requirement.action.actionType}{' '}
+                            {finding.requirement.action.quantity}
+                            {finding.requirement.action.estimatedTotalCents === null
+                              ? ' · cost not estimated'
+                              : ` · ${formatCents(finding.requirement.action.estimatedTotalCents)}`}
+                          </p>
+                        ) : null}
+                        {finding.requirement.excessQuantity !== null ? (
+                          <p>
+                            {finding.requirement.excessQuantity} more than the current shortage
+                            {finding.requirement.potentialSavingsCents === null
+                              ? ', which cannot be priced'
+                              : ` · ${formatCents(finding.requirement.potentialSavingsCents)}`
+                                + ' could be saved'}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {finding.item ? (
+                      <Button asChild size="sm" variant="outline">
+                        <Link to={paths.inventoryItem(finding.item.item_id)}>View inventory</Link>
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-muted-foreground text-xs">
+                Nothing here has been changed. Requirements and actions are edited on the
+                production page.
+              </p>
             </div>
           ) : null}
 

@@ -2782,3 +2782,125 @@ from the same authorized queries the inventory page uses, under the same Rules.
 No Rules exception exists for AI, and none was added. Organization notes,
 descriptions, and questions are delimited as data in the prompt and named as data
 to interpret rather than instructions to follow.
+
+### 93. Two AI surfaces, and what tells them apart
+
+Smart Search answers questions about data that exists: where MIC-017 is, what is
+available, what a stored cost says. Decisions 92 through 92d cover it and it is
+unchanged.
+
+Draft Requirements plans a production. That is a different job, and it was doing
+a thinner version of it — turning a description into a list of equipment,
+without ever looking at what the production already required, what was already
+planned to be bought, or what the shortage actually was. It could suggest twenty
+cables to a programme that owned twelve.
+
+It now reasons against the plan that exists. What changed is not the model's
+cleverness but what it is handed.
+
+### 93a. The application does the arithmetic
+
+`buildProductionPlan` computes, per requirement: what is required, what is
+available, what is short, what the shortage costs at the stored estimate, what
+action already exists, what that action costs, how much of it the current
+inventory has made unnecessary, and what giving that back would save.
+
+All of it in integer cents through the Phase 11F helpers, all of it before the
+model is asked anything. The prompt says these numbers were calculated by the
+application and must be repeated rather than recalculated.
+
+A planning assistant that did its own arithmetic would be confidently wrong about
+money in a way nobody could audit, and the entire value of a budget is that
+somebody can check it. The model's job is to explain and prioritise; the
+calculator of record is code with tests.
+
+### 93b. Prefer what they already own
+
+Twenty required against twelve available is eight to find, not twenty to buy.
+The plan block states the shortage and the prompt says plainly that the shortage
+is what needs acquiring.
+
+An action's quantity is a snapshot from when somebody planned it — decision 45
+keeps it that way deliberately — so inventory arriving later does not shrink a
+purchase nobody revisited. That staleness is precisely what makes it worth
+reporting: the projection carries both the old quantity and the current
+shortage, names the excess, and prices it when the stored estimate allows.
+
+Nothing is applied. A finding is a sentence with a link to the record it is
+about; requirements and actions are still edited where they always were.
+
+### 93c. A card is a record, never a sentence
+
+The model returns references — `I7`, `R2` — and never card fields. Every
+quantity, price, and location shown beside its analysis is read from the
+application's own loaded object.
+
+A reference that was not supplied resolves to nothing and produces no card, so a
+model naming `FAKE99` or echoing a Firestore id puts nothing on screen. Findings
+are validated with `strictObject`, which means a row that tries to attach its own
+`available` or `unit_cost_cents` is refused outright rather than stripped — the
+reviewer never sees a number the model authored.
+
+This reuses the reference architecture Smart Search already had rather than
+inventing a second one.
+
+### 93d. What it still cannot do
+
+It cannot price anything. Stored costs may be reported and explained; a missing
+one is unknown, never guessed and never zero. It cannot update a requirement, an
+action, or any inventory, and new draft requirements still require the same
+explicit approval they always did.
+
+Somebody who may plan a production but not read inventory gets no inventory
+context, no plan block, and no cards — so it cannot appear to have looked at a
+shelf it was never shown.
+
+### 93e. `maxItems` is not sent in the AI wire schema
+
+Every Draft Requirements request failed with HTTP 400, "Request contains an
+invalid argument", while Smart Search succeeded in the same browser session on
+the same model, backend, and App Check. Live bisection on localhost, one
+variable at a time:
+
+| response schema | result |
+|---|---|
+| expanded planning schema | 400 |
+| pre-expansion schema | 400 |
+| without `minimum` / `maximum` | 400 |
+| with `suggested_qty` as a string | 400 |
+| **without `maxItems`** | **success** |
+| no structured output at all | success |
+
+Removing `maxItems` was the single change that made the request valid, so the
+schema carries none — not on `suggestions`, `inventory_refs`, or
+`planning_findings`.
+
+This is an observation about the runtime this project currently uses:
+`@firebase/ai` 2.15.0, `GoogleAIBackend`, `gemini-3.5-flash`. It is not a claim
+that `maxItems` is unsupported by Gemini generally, and it may not survive an SDK
+or model change — which is why `wire-schema.test.ts` asserts the constraint
+rather than leaving it to memory.
+
+Nothing local could have caught it. The schema serialized to valid JSON, the
+SDK's own TypeScript types accept `maxItems`, and every check passed; the
+rejection happened server-side. The SDK hints at the shape of this problem
+elsewhere — it documents that `format` is narrower on this backend than the
+types allow — so the accepted subset is known to be smaller than what compiles.
+
+The limits themselves lost nothing, because the model was never trusted to obey
+them. `parseRequirementResponse` slices to `MAX_SUGGESTIONS`,
+`MAX_INVENTORY_REFS`, and `MAX_FINDINGS`, which is where a bound belongs when
+the alternative is asking a model to enforce one. The same reasoning drops
+`minimum`/`maximum` from `suggested_qty`: Zod still requires an integer in
+1..999 before anything becomes a draft.
+
+### 93f. A refused request is not a broken connection
+
+Diagnosing the above took longer than it should have, because HTTP 400 was
+classified as a network failure and shown as "Could not reach the AI service.
+Check your connection and try again." That sends somebody to inspect the one
+part of the system demonstrably working.
+
+A 4xx means the service read the request and refused it. It now says so, and
+says that retrying is unlikely to help. Only a request that never got an answer
+is reported as a connection problem.

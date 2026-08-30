@@ -332,6 +332,8 @@ export function ProductionDetailPage() {
           <RequirementGeneratorDialog
             production={production}
             items={items}
+            requirements={requirements}
+            actions={actions}
             canReadInventory={canReadInventory}
             existingItemNames={requirements.map((requirement) => requirement.item_name)}
             open

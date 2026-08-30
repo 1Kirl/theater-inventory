@@ -15,6 +15,7 @@ export type AiFailureKind =
   | 'rate-limited'
   | 'daily-quota'
   | 'model-unavailable'
+  | 'bad-request'
   | 'network'
   | 'malformed'
   | 'truncated'
@@ -43,6 +44,8 @@ const MESSAGES: Record<AiFailureKind, string> = {
   'rate-limited': 'The AI assistant is busy right now. Wait a moment and try again.',
   'daily-quota': "Today's AI usage limit has been reached. Try again after the daily limit resets.",
   'model-unavailable': 'The AI model is unavailable at the moment. Try again later.',
+  'bad-request': 'The AI assistant could not accept that request. This is a fault in the app '
+    + 'rather than something at your end, so trying again is unlikely to help.',
   network: 'Could not reach the AI service. Check your connection and try again.',
   malformed: 'The AI response could not be read. Try again, or rephrase what you asked for.',
   truncated: 'The AI answer was cut off before anything usable arrived. Try a narrower question.',
@@ -118,6 +121,14 @@ export function describeAiFailure(caught: unknown): AiFailure {
     }
     if (status !== null && status >= 500) {
       return { kind: 'model-unavailable', message: MESSAGES['model-unavailable'] }
+    }
+
+    // The service read the request and refused it: a schema it will not accept,
+    // a generation config out of range, something too large. Telling somebody to
+    // check their connection sends them to look at the one thing that is
+    // working, which is how a configuration fault gets mistaken for an outage.
+    if (status !== null && status >= 400 && status < 500) {
+      return { kind: 'bad-request', message: MESSAGES['bad-request'] }
     }
 
     if (caught.code.endsWith('fetch-error')) {

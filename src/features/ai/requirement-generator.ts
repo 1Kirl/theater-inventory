@@ -74,6 +74,25 @@ export const requirementSuggestionsSchema = z
 export type RequirementSuggestion = z.infer<typeof requirementSuggestionSchema>
 
 /**
+ * A remark about the plan that already exists.
+ *
+ * Deliberately thin. It carries a sentence and references, and no numbers at
+ * all — every quantity and amount of money the interface shows beside one is
+ * read from the application's own records, so a model that wanted to overstate
+ * a saving has nowhere to write it.
+ */
+export const planningFindingSchema = z.strictObject({
+  message: freeText(400),
+  requirement_ref: z.string().trim().min(1).max(8).optional(),
+  inventory_ref: z.string().trim().min(1).max(8).optional(),
+})
+
+export type PlanningFinding = z.infer<typeof planningFindingSchema>
+
+export const MAX_FINDINGS = 10
+export const MAX_INVENTORY_REFS = 12
+
+/**
  * Why a suggestion cannot be saved yet.
  *
  * `not-allowed` is the case that matters: the model suggested a real team the

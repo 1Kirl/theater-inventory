@@ -1030,6 +1030,26 @@ Identifiers never leave the browser. Each record is given a request-local
 reference, `I7` for an item and `U3` for a unit, and anything the model returns
 that was not supplied resolves to nothing. See decisions 92 through 92d.
 
+## 13k. What Draft Requirements is sent
+
+No stored data and no new field. A production planning projection, assembled per
+request from records the user may already read, and discarded with the response.
+
+One line per existing requirement: required quantity, matched inventory
+reference, current availability, current shortage, the item's stored unit cost,
+what the shortage costs at that estimate, any existing action with its type,
+quantity, status and derived total, and — when the action plans more than the
+shortage — the excess and what it would save.
+
+Every one of those numbers is calculated by the application in integer cents
+before the request is built. The prompt says so and tells the model not to
+recompute them.
+
+References only, as elsewhere: `R2` for a requirement, `A2` for its action, `I7`
+for an inventory record. The model returns references and sentences; the
+interface renders quantities and money from the application's own objects, so an
+unresolvable reference produces no card. See decisions 93 through 93d.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.
