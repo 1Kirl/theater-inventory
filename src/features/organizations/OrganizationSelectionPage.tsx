@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { SignOutButton } from '@/features/auth/SignOutButton'
 import { useAuth } from '@/features/auth/useAuth'
 import { useOrganization } from '@/features/organizations/useOrganization'
+import { ThemeToggle } from '@/features/theme/ThemeToggle'
 import { effectiveRole } from '@/domain/effective-role'
 import { ROLE_LABELS, summarizeTeamNames, teamNamesFor } from '@/domain/organization-view'
 import { listMyActiveMemberships } from '@/services/membership-service'
@@ -82,6 +83,10 @@ export function OrganizationSelectionPage() {
       <header className="border-border bg-background/95 sticky top-0 z-10 flex h-14 items-center gap-3 border-b px-4 backdrop-blur">
         <span className="truncate text-sm font-semibold">Theater Inventory Tracker</span>
         <div className="ml-auto flex items-center gap-2">
+          {/* Somebody who belongs to no organization yet never reaches the
+              application shell, and would otherwise have no way to change
+              theme at all. */}
+          <ThemeToggle />
           <Button asChild variant="ghost" size="sm">
             <Link to={paths.account}>
               <span className="max-w-32 truncate">{profile?.display_name ?? 'Account'}</span>

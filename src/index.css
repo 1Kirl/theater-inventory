@@ -49,6 +49,9 @@
 }
 
 :root {
+    /* Native controls — date pickers, number spinners, scrollbars,
+       autofill — read this and nothing else. */
+    color-scheme: light;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -84,6 +87,7 @@
 }
 
 .dark {
+    color-scheme: dark;
     --background: oklch(0.145 0 0);
     --foreground: oklch(0.985 0 0);
     --card: oklch(0.205 0 0);
@@ -127,4 +131,19 @@
   html {
     @apply font-sans;
     }
+}
+@media print {
+  /*
+   * Ink is not a screen.
+   *
+   * Dark mode is a viewing preference and must not follow a page onto paper.
+   * Equipment labels carry their own explicit white and black — a QR needs its
+   * quiet zone to scan — and this only makes sure the sheet they sit on does
+   * not arrive dark behind them. Text colours are deliberately left alone, so
+   * nothing that prints today changes.
+   */
+  html,
+  body {
+    background: #fff !important;
+  }
 }

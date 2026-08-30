@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { AuthProvider } from '@/features/auth/AuthProvider'
 import { OrganizationProvider } from '@/features/organizations/OrganizationProvider'
+import { ThemeProvider } from '@/features/theme/ThemeProvider'
 import { router } from '@/routes/router'
 import '@/index.css'
 
@@ -13,10 +14,14 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
-    <AuthProvider>
-      <OrganizationProvider>
-        <RouterProvider router={router} />
-      </OrganizationProvider>
-    </AuthProvider>
+    {/* Outside auth and organization on purpose: the theme belongs to the
+        browser, so signing out or switching organization must not disturb it. */}
+    <ThemeProvider>
+      <AuthProvider>
+        <OrganizationProvider>
+          <RouterProvider router={router} />
+        </OrganizationProvider>
+      </AuthProvider>
+    </ThemeProvider>
   </StrictMode>,
 )

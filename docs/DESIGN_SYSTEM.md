@@ -43,6 +43,40 @@ Prefer shadcn/ui components for:
 
 Do not add a second UI component library.
 
+## 3a. Theme (Light and Dark)
+
+The application ships two themes, light and dark, and nothing else.
+
+Rules:
+
+- **Light is the product default.** A browser that has never chosen sees light.
+- **The operating system preference is not consulted.** `prefers-color-scheme` is
+  deliberately unused. Department machines are shared and are often left on
+  whatever the previous person set, so the OS is not evidence of what this user
+  wants. Dark is a choice made in the application.
+- **The choice is remembered in the browser**, under `theater-inventory.theme`,
+  holding exactly `light` or `dark`. A missing key, an unrecognised value, or
+  storage that is unavailable all resolve to light.
+- **The choice is not stored in Firestore.** It is not per organization, per
+  team, or per account, and it is not synchronised between devices. Signing out,
+  signing back in, and switching organization all leave it untouched.
+- **Dark is applied as a `dark` class on the root element**, matching the
+  `@custom-variant dark (&:is(.dark *))` the stylesheet declares. The root also
+  carries `color-scheme`, which is the only thing native controls — date and
+  time pickers, number spinners, scrollbars, autofill — read.
+- **A small inline script in `index.html` sets both before the first paint**, so
+  a returning dark-mode user never sees a light frame. It mirrors
+  `src/domain/theme.ts` and a test asserts the two still agree.
+
+Components follow the theme by using semantic tokens. Two exceptions are
+deliberate and must not be tokenized:
+
+- **Printable equipment labels** are black on white with an explicit white QR
+  quiet zone, whatever the application looks like. Ink is not a screen, and a
+  dark label does not scan.
+- **The camera preview** in the scanner is never tinted, filtered, or
+  blended.
+
 ## 3. Visual Style
 
 Use a neutral professional base with one restrained accent color through semantic tokens.
@@ -352,8 +386,8 @@ Do not spend MVP time on:
 - custom animation systems,
 - advanced chart libraries,
 - elaborate illustrations,
-- complex theme switching,
-- dark mode unless it is nearly free from the chosen component system,
+- complex theme switching beyond the single light/dark choice described in section 3a,
+- per-organization or account-synced themes,
 - item photo galleries, QR labels, or any interface for features excluded from the MVP.
 
 Focus on clarity and completion.

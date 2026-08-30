@@ -3002,3 +3002,108 @@ returns them to the screen they just came from is worse than no link.
 
 None of this makes the directory public. Inactive memberships, other
 organizations, and signed-out visitors are refused exactly as before.
+
+### 95. Light is the default, and the operating system does not get a vote
+
+The application has two themes. A browser that has never chosen sees light.
+
+The tempting default is the system preference — one line of `matchMedia`, and
+the app matches whatever the machine already does. It was rejected. A high
+school theater department runs on shared hardware: a booth laptop, a scene shop
+desktop, a tablet that lives on the props table. Whether that machine is in dark
+mode is a fact about whoever used it last, not about the person standing in
+front of it now. Inferring intent from it means the app changes appearance for
+reasons the user cannot see and did not cause.
+
+So light is the product default, and dark is something a person switches on.
+Once switched, it is remembered.
+
+### 95a. The theme belongs to the browser, not to the account
+
+It is stored in `localStorage` under `theater-inventory.theme`, holding exactly
+`light` or `dark`. It is not written to Firestore, and there is no theme field
+on users, memberships, or organizations.
+
+That is a real trade-off and it is worth naming: the preference does not follow
+a person to a second device, and two people sharing one browser profile share
+one theme. Both were accepted, because the alternative is worse for this
+product. A synced theme would be a document that every page has to read before
+it can be drawn correctly, on an application whose entire authorization story is
+that Firestore is read from the browser under Security Rules. Waiting on a
+network round trip to find out what colour the page is would reintroduce exactly
+the flash the local read avoids, and it would put a purely cosmetic field inside
+the same rules surface that guards inventory and memberships.
+
+The theme is a property of the screen you are looking at. Keeping it where the
+screen is keeps it instant and keeps it out of the security boundary.
+
+`ThemeProvider` therefore sits outside `AuthProvider` and `OrganizationProvider`
+in `main.tsx`. Signing out, signing back in, and switching organization all
+leave it alone, and the storage key is deliberately distinct from
+`theater-inventory.active-organization-id`, which those flows do clear.
+
+### 95b. The theme is set before React exists
+
+A stylesheet is render-blocking; a module script is not. If the `dark` class
+were added by React, the browser would already have painted one light frame by
+the time it arrived, and a returning dark-mode user would see a white flash on
+every load.
+
+`index.html` therefore carries a small inline script in `<head>` that reads the
+key, adds the class, and sets `color-scheme` — no imports, no async work, and a
+`try` that falls back to light rather than throwing on a browser with site data
+blocked.
+
+Duplicating logic is normally a defect, and this is the exception: the decision
+has to exist somewhere no module can reach. It is not trusted on that basis.
+`tests/unit/theme-boot-script.test.ts` extracts the snippet from `index.html`,
+runs it against a fake storage and a fake root element, and asserts both that it
+still reads the same key and applies the same class the TypeScript constants
+declare, and that it decides correctly for a stored dark, a stored light, a
+missing value, an invalid value, and storage that throws.
+
+`color-scheme` is set alongside the class rather than instead of it. It is the
+only thing native browser chrome reads — date and time pickers, number spinners,
+scrollbars, autofill backgrounds — and no Tailwind class can reach any of them.
+Without it, a dark form ends up with bright rectangles in it and autofilled text
+that cannot be read.
+
+### 95c. Dark mode stops at the printer and at the camera
+
+Two surfaces deliberately ignore the theme.
+
+**Printed labels.** An equipment label is black on white with an explicit white
+QR quiet zone, and stays that way in dark mode. Ink is not a screen: a dark
+label wastes toner and, more importantly, a QR without its quiet zone does not
+scan. The label sheet hard-codes `#ffffff` and `#000000` and asks the printer to
+keep them with `print-color-adjust: exact`; a print media rule keeps the page
+behind it white. The preview *chrome* around the labels may be dark, because
+that part is a screen.
+
+**The camera preview.** The scanner's video element carries no filter, opacity,
+or blend mode in either theme. Tinting a camera feed to match an interface would
+degrade the thing the feature exists to read.
+
+Both boundaries are one careless edit away from being lost — a blanket
+replacement of hard-coded colours with semantic tokens would quietly turn every
+printed label dark — so `tests/unit/theme-boundaries.test.ts` asserts them
+rather than leaving them to memory.
+
+### 95d. What dark mode did not cost
+
+The audit found four hard-coded neutral colours in the whole application and two
+colour-family utilities. The shadcn layer already shipped a complete `.dark`
+token block and `dark:` variants on its primitives, and the application had been
+written against semantic tokens throughout, so almost every surface responded to
+dark mode the moment something put the class on the document.
+
+Three corrections were needed:
+
+- The modal, sheet, and alert-dialog scrims are `bg-black/10`. Ten percent black
+  over a near-black page separates nothing, so they gain `dark:bg-black/50`.
+- The scanner's two status icons used the `600` shades of emerald and amber,
+  which sit too close to a dark background, and gain `400` shades in dark.
+- `color-scheme` was declared on both token blocks, for the native controls
+  described in 95b.
+
+The remaining hard-coded colours are the intentional exceptions in 95c.

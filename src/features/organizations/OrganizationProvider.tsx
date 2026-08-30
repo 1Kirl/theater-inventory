@@ -8,7 +8,11 @@ import { toUserFacingMessage } from '@/services/auth-errors'
 import { OrganizationContext, type ActiveOrganizationState } from '@/features/organizations/organization-context'
 import type { Organization, OrganizationMembership, TheaterTeam } from '@/types/organization'
 
-const STORAGE_KEY = 'theater-inventory.active-organization-id'
+/**
+ * Exported so that a test can assert what signing out and switching
+ * organization actually touch: this key, and no other.
+ */
+export const STORAGE_KEY = 'theater-inventory.active-organization-id'
 
 /**
  * Only the organization ID is remembered across reloads. Everything that

@@ -5,6 +5,28 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Theater Inventory Tracker</title>
+    <!--
+      Theme before first paint.
+
+      The stylesheet is render-blocking but the application module is not, so a
+      returning dark-mode user would see one light frame if the class were added
+      by React. This is the smallest thing that runs early enough to prevent it:
+      no imports, no async work, and it fails to light rather than throwing.
+
+      It mirrors src/domain/theme.ts, and a test asserts the two agree.
+    -->
+    <script id="theme-boot">
+      (function () {
+        try {
+          var dark = localStorage.getItem('theater-inventory.theme') === 'dark'
+          if (dark) document.documentElement.classList.add('dark')
+          document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+        } catch (error) {
+          /* Storage unavailable. Light is the default, which is what the
+             stylesheet already describes. */
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

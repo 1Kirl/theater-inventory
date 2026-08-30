@@ -67,10 +67,10 @@ function OutcomeIcon({ entry }: { entry: ScanEntry }) {
     return <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden="true" />
   }
   if (entry.outcome === 'success') {
-    return <Check className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+    return <Check className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
   }
   if (entry.outcome === 'warning') {
-    return <AlertTriangle className="text-amber-600 size-4 shrink-0" aria-hidden="true" />
+    return <AlertTriangle className="text-amber-600 dark:text-amber-400 size-4 shrink-0" aria-hidden="true" />
   }
   return <X className="text-destructive size-4 shrink-0" aria-hidden="true" />
 }

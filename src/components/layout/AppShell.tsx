@@ -14,6 +14,7 @@ import { useOrganization } from '@/features/organizations/useOrganization'
 import { ROLE_LABELS } from '@/domain/organization-view'
 import { effectiveDisplayName, teamNamesOf } from '@/domain/member-profile'
 import { OrganizationProfileDialog } from '@/features/contacts/OrganizationProfileDialog'
+import { ThemeToggle } from '@/features/theme/ThemeToggle'
 import { paths } from '@/routes/paths'
 
 const APP_NAME = 'Theater Inventory Tracker'
@@ -111,6 +112,7 @@ export function AppShell() {
           </span>
 
           <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             <Button asChild variant="ghost" size="sm">
               <Link to={paths.account}>
                 <span className="max-w-32 truncate">{identity}</span>
