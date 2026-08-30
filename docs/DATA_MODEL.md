@@ -1010,6 +1010,26 @@ equipment. Everything else the camera sees is refused.
 Authorization is unchanged: inventory view to look, the existing owning-team
 rules to move anything. See decisions 91 through 91f.
 
+## 13j. What the AI is sent
+
+No stored data, no new field, no collection. The request is assembled per call
+from records the user may already read and is discarded with the response.
+
+Two blocks. Items, one line each, marked as a bulk quantity or as a summary of
+individually tracked equipment, and carrying the stored `unit_cost_cents` or an
+explicit statement that none is recorded. Units, one line each: asset code, item
+name, owning team, status, condition, `available yes/no`, location, holder when
+out, whether it is away for repair, whether one is planned, and how many past
+repairs it has had.
+
+Caps are 250 items and 200 units. Above either, the application prefilters by the
+question — asset codes included, at a two-character minimum so "017" finds
+MIC-017 — and the prompt says how many were left out.
+
+Identifiers never leave the browser. Each record is given a request-local
+reference, `I7` for an item and `U3` for a unit, and anything the model returns
+that was not supplied resolves to nothing. See decisions 92 through 92d.
+
 ## 14. AI Smart Search Data Contract
 
 AI Smart Search output is transient and does not need a Firestore collection.

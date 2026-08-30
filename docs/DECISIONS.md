@@ -2690,3 +2690,95 @@ equipment in or out needs whatever the owning team's rules already require. The
 using team is not a permission — being the crew borrowing a microphone has never
 granted the right to edit it — and no client-side check is trusted: every write
 goes to Rules, and a refusal becomes a row in the session saying so.
+
+### 92. Smart Search sees individual equipment, not just the catalog
+
+The AI context was written when inventory was only quantities. It sent one line
+per item — "total 10, available 6" — which is the whole truth for a bulk item and
+almost none of it for a serialized one. "Where is MIC-017?" had no answer,
+because asset codes were not in the request at all, and neither were lost,
+retired, or in-maintenance equipment.
+
+The request now carries two blocks. Items keep their line, marked as a quantity
+or as a summary of individual equipment. Units get their own block, one line
+each: asset code, item, owning team, status, condition, location, who has it,
+whether it is away for repair, whether a repair is planned, how many past repairs
+it has had.
+
+The equipment block is named as authoritative in the prompt, and the item line
+says it only summarizes. Telling the model that a parent's numbers describe each
+of its units is the specific mistake this is written to prevent — four
+microphones are not one microphone with a quantity of four.
+
+References stay request-local: `I7` for an item, `U3` for a unit. No document id
+leaves the browser in either direction, and a reference the model returns that
+was never supplied resolves to nothing.
+
+### 92a. The prompt states the domain rules rather than leaving them to be inferred
+
+Availability is not something the model works out. Each equipment line carries
+`available yes` or `available no`, computed by the same `isOperationallyAvailable`
+the rest of the product uses, and the instruction says to use it — because the
+obvious inference is wrong: equipment in `needs_repair` condition is still on the
+shelf and still available, and only `unusable` condition or a non-available
+status removes it.
+
+The other three the prompt states outright:
+
+- planned maintenance is an intention, not a repair. Equipment with a plan is
+  still wherever its status says, and is never added to a count of equipment in
+  maintenance.
+- retired equipment has left the inventory and is never counted when somebody
+  asks what the organization has, unless they ask about retired equipment.
+- lost equipment is still active inventory that happens to be missing, which is
+  a different thing from retired.
+
+Each of these is a mistake a reasonable reader would make from the field names
+alone, which is why they are said rather than assumed.
+
+### 92b. Stored costs may be reported, never invented
+
+Item lines carry `estimated unit cost $18.50` when one is recorded and
+`estimated unit cost unknown` when none is. The prompt says to report it when
+asked, to say unknown when it is unknown, and never to guess, estimate, or treat
+unknown as zero.
+
+The Requirement Generator gets nothing at all. Its schema is a `strictObject`
+with no price field, so a model that offers `estimated_unit_cost_cents`,
+`price`, or `cost` has that suggestion rejected rather than stripped — the
+reviewer never sees a number nobody can stand behind. Salvage is per suggestion,
+so one priced row costs that row and not the list.
+
+### 92c. The Dashboard was already right
+
+Phases 11C and 11D left it correct, and this phase changed none of it. Recorded
+as tests rather than as changes:
+
+- active counts read `quantity_total`, which for a serialized item mirrors
+  `unit_counts.active_total` — retired equipment is already out of it
+- "Active Repairs" counts jobs and includes a planned one; "Currently in service"
+  counts equipment that has physically gone. The two are allowed to disagree and
+  the cards say which is which
+- a serialized repair record is excluded from the record-based half, so the same
+  microphone is not counted twice
+- the dashboard reads items only, never units, so parent and unit cannot both be
+  counted
+
+No lost-equipment card was added: `lostUnits` already appears in the attention
+area, and a second surface for the same number would be clutter. No financial
+KPI was added either — Phase 11F put cost where decisions are made, on Production
+Detail and the Action List, and a headline number on the dashboard would invite
+reading a planning estimate as a budget.
+
+### 92d. What the AI is still not allowed to do
+
+Unchanged, and worth restating now that it can see more: the AI reads. It writes
+nothing. The Requirement Generator drafts a list a person edits and approves, and
+`suggested_action` is advice shown in that dialog which does not survive the save
+— decision 48 keeps the plan on the Action Item alone.
+
+The context contains only what the user could already read: items and units come
+from the same authorized queries the inventory page uses, under the same Rules.
+No Rules exception exists for AI, and none was added. Organization notes,
+descriptions, and questions are delimited as data in the prompt and named as data
+to interpret rather than instructions to follow.

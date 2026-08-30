@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Sparkles, X } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +10,9 @@ import { aiFailureMessage } from '@/features/ai/ai-errors'
 import { reportAiFailure } from '@/features/ai/ai-diagnostics'
 import type { SmartSearchResult } from '@/features/ai/smart-search'
 import { MAX_QUERY_LENGTH, askInventoryQuestion } from '@/features/ai/smart-search-service'
-import type { InventoryItem } from '@/types/inventory'
+import { UNIT_STATUS_LABELS, unitBadgeVariant } from '@/features/inventory/inventory-unit-view'
+import { paths } from '@/routes/paths'
+import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 import type { TheaterTeam } from '@/types/organization'
 
 /**
@@ -30,6 +33,8 @@ const EXAMPLES = [
 
 interface Props {
   items: readonly InventoryItem[]
+  /** Individually tracked equipment, so questions about one piece can be answered. */
+  units: readonly InventoryUnit[]
   teams: readonly TheaterTeam[]
   /** Delivered to the page, which shows the real records the answer names. */
   onAnswer: (result: SmartSearchResult) => void
@@ -37,7 +42,7 @@ interface Props {
   active: SmartSearchResult | null
 }
 
-export function SmartSearchPanel({ items, teams, onAnswer, onClear, active }: Props) {
+export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, active }: Props) {
   const [query, setQuery] = useState('')
   const [asked, setAsked] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
@@ -51,7 +56,7 @@ export function SmartSearchPanel({ items, teams, onAnswer, onClear, active }: Pr
     setError(null)
 
     try {
-      const result = await askInventoryQuestion({ query: trimmed, items, teams })
+      const result = await askInventoryQuestion({ query: trimmed, items, units, teams })
       setAsked(trimmed)
       onAnswer(result)
     } catch (caught) {
@@ -147,11 +152,46 @@ export function SmartSearchPanel({ items, teams, onAnswer, onClear, active }: Pr
             <div className="bg-muted/50 space-y-2 rounded-md p-3">
               <p className="text-sm whitespace-pre-wrap">{active.answer}</p>
               <p className="text-muted-foreground text-xs">
-                {active.items.length === 0
+                {active.items.length === 0 && active.units.length === 0
                   ? 'No records were named. The list below is unfiltered.'
                   : `Showing the ${active.items.length} record${active.items.length === 1 ? '' : 's'} this answer refers to, read from Firestore.`}
               </p>
             </div>
+
+            {/* Individual equipment the answer named, each linking to its own
+                page. Shown here rather than in the item list below, which
+                filters catalog records and has nowhere to put one microphone. */}
+            {active.units.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs">
+                  {active.units.length} piece{active.units.length === 1 ? '' : 's'} of equipment
+                  this answer names:
+                </p>
+                <ul className="space-y-1.5">
+                  {active.units.map((unit) => (
+                    <li
+                      key={unit.unit_id}
+                      className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border p-2"
+                    >
+                      <Link
+                        to={paths.inventoryUnit(unit.unit_id)}
+                        className="font-mono text-sm underline underline-offset-4"
+                      >
+                        {unit.asset_code}
+                      </Link>
+                      <Badge variant={unitBadgeVariant(unit.status)}>
+                        {UNIT_STATUS_LABELS[unit.status]}
+                      </Badge>
+                      {active.reasons.get(unit.unit_id) ? (
+                        <span className="text-muted-foreground min-w-0 flex-1 text-xs">
+                          {active.reasons.get(unit.unit_id)}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap items-center gap-1.5">
               {active.resolved?.summary.map((entry) => (
@@ -162,6 +202,13 @@ export function SmartSearchPanel({ items, teams, onAnswer, onClear, active }: Pr
                 Clear AI answer
               </Button>
             </div>
+
+            {active.omittedUnitCount > 0 ? (
+              <p className="text-muted-foreground text-xs">
+                {active.omittedUnitCount} piece{active.omittedUnitCount === 1 ? '' : 's'} of
+                equipment did not fit in this request, so the answer may not cover everything.
+              </p>
+            ) : null}
 
             {active.omittedCount > 0 ? (
               <p className="text-muted-foreground text-xs">

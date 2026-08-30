@@ -45,8 +45,11 @@ import {
 } from '@/features/inventory/inventory-view'
 import { itemPresentation, unitBreakdownLine } from '@/features/inventory/inventory-unit-view'
 import { listInventoryItems } from '@/services/inventory-service'
+import { listUnitsForOrganization } from '@/services/inventory-unit-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
-import { INVENTORY_CATEGORIES, type InventoryItem } from '@/types/inventory'
+import {
+  INVENTORY_CATEGORIES, type InventoryItem, type InventoryUnit,
+} from '@/types/inventory'
 import { paths } from '@/routes/paths'
 
 function ConditionBadge({ item }: { item: InventoryItem }) {
@@ -72,6 +75,10 @@ export function InventoryListPage() {
   const organizationId = organization?.organization_id ?? null
 
   const [items, setItems] = useState<InventoryItem[] | null>(null)
+  // Loaded alongside the items so Smart Search can answer about one microphone
+  // rather than only about the catalog entry it belongs to. Failing to read
+  // them costs the answer some detail, never the page.
+  const [units, setUnits] = useState<InventoryUnit[]>([])
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<InventoryFilters>(EMPTY_FILTERS)
   // The AI answer and the records it named. While one is active the list shows
@@ -86,6 +93,11 @@ export function InventoryListPage() {
   // `load` awaitable for callers that refresh after a write.
   const load = useCallback((): Promise<void> => {
     if (!organizationId) return Promise.resolve()
+
+    void listUnitsForOrganization(organizationId).then(
+      (loaded) => { setUnits(loaded) },
+      () => { setUnits([]) },
+    )
 
     return listInventoryItems(organizationId).then(
       (loaded) => { setItems(loaded); setError(null) },
@@ -148,6 +160,7 @@ export function InventoryListPage() {
 
       <Suspense fallback={<div className="bg-muted/40 h-32 animate-pulse rounded-xl" aria-hidden="true" />}>
         <SmartSearchPanel
+          units={units}
           items={items ?? []}
           teams={teams}
           active={aiSearch}

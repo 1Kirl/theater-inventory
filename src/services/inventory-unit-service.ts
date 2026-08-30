@@ -125,6 +125,30 @@ export async function getInventoryUnit(unitId: string): Promise<InventoryUnit | 
   return snapshot.exists() ? (snapshot.data() as InventoryUnit) : null
 }
 
+/**
+ * Every unit in the organization.
+ *
+ * One equality filter, which a single-field index already serves — the same
+ * query `listAssetCodes` runs, so this needs no new index. Sorted here for the
+ * same reason the other unit queries are.
+ */
+export async function listUnitsForOrganization(
+  organizationId: string,
+): Promise<InventoryUnit[]> {
+  const snapshot = await getDocs(
+    query(
+      collection(getFirebaseDb(), COLLECTIONS.inventoryUnits),
+      where('organization_id', '==', organizationId),
+    ),
+  )
+
+  return snapshot.docs
+    .map((entry) => entry.data() as InventoryUnit)
+    .sort((left, right) => left.asset_code.localeCompare(right.asset_code, undefined, {
+      numeric: true,
+    }))
+}
+
 /** Asset codes already used in this organization, for the duplicate warning. */
 export async function listAssetCodes(organizationId: string): Promise<string[]> {
   const snapshot = await getDocs(

@@ -3,7 +3,9 @@ import { CONDITION_KEYS, CONDITION_LABELS, conditionSummary } from '@/domain/inv
 import { EMPTY_FILTERS, filterInventoryItems, type InventoryFilters } from '@/features/inventory/inventory-view'
 import { looksLikeDocumentId, normalizeName } from '@/features/ai/ai-guards'
 import { resolveRefs, type InventoryContext } from '@/features/ai/inventory-context'
-import { INVENTORY_CATEGORIES, type ConditionKey, type InventoryItem } from '@/types/inventory'
+import {
+  INVENTORY_CATEGORIES, type ConditionKey, type InventoryItem, type InventoryUnit,
+} from '@/types/inventory'
 import type { TheaterTeam } from '@/types/organization'
 
 /**
@@ -232,7 +234,9 @@ export interface SmartSearchResult {
   answer: string
   /** Real Firestore records, in the order the model listed them. */
   items: InventoryItem[]
-  /** Item ID to the model's short reason, where it gave one. */
+  /** Individual equipment the answer refers to, in the order listed. */
+  units: InventoryUnit[]
+  /** Item or unit ID to the model's short reason, where it gave one. */
   reasons: Map<string, string>
   /** The old filter contract, when the model also produced it. */
   resolved: ResolvedSmartSearch | null
@@ -240,6 +244,8 @@ export interface SmartSearchResult {
   unknownRefs: string[]
   /** How many accessible records did not fit in the request. */
   omittedCount: number
+  /** How many individually tracked pieces did not fit. */
+  omittedUnitCount: number
 }
 
 /**
@@ -256,24 +262,32 @@ export function buildSmartSearchResult(params: {
   teams: readonly TheaterTeam[]
 }): SmartSearchResult {
   const refs = params.answer.matches.map((match) => match.inventory_ref)
-  const { items, unknown } = resolveRefs(refs, params.context)
+  const { items, units, unknown } = resolveRefs(refs, params.context)
 
   const reasons = new Map<string, string>()
   for (const match of params.answer.matches) {
-    const item = params.context.byRef.get(match.inventory_ref.trim().toUpperCase())
-    if (item && match.reason && !reasons.has(item.item_id)) {
-      reasons.set(item.item_id, match.reason)
-    }
+    const ref = match.inventory_ref.trim().toUpperCase()
+    if (!match.reason) continue
+
+    // Keyed by the record's own id, so an item reason and a unit reason cannot
+    // collide even though both arrive through the same field.
+    const item = params.context.byRef.get(ref)
+    if (item && !reasons.has(item.item_id)) reasons.set(item.item_id, match.reason)
+
+    const unit = params.context.unitsByRef.get(ref)
+    if (unit && !reasons.has(unit.unit_id)) reasons.set(unit.unit_id, match.reason)
   }
 
   return {
     answer: params.answer.answer,
     items,
+    units,
     reasons,
     resolved: params.answer.interpreted_filters
       ? resolveSmartSearch(params.answer.interpreted_filters, params.teams)
       : null,
     unknownRefs: unknown,
     omittedCount: params.context.omittedCount,
+    omittedUnitCount: params.context.omittedUnitCount,
   }
 }
