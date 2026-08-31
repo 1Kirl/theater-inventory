@@ -89,8 +89,17 @@ else
   -> Unassigned
 ```
 
-The second branch is the **assignment condition**. The same expression is evaluated in the client
-for the UI and in Security Rules for authorization, so the two cannot drift apart.
+The second branch is the **assignment condition**. Both halves of it — an active membership, and
+at least one team — are preconditions for module access on both sides. The client evaluates the
+whole expression as `satisfiesAssignmentCondition()`; Security Rules evaluate `is_active` and
+`team_ids.size() > 0` as `isAssignedMemberOf()` and then ask the module's own level, which is the
+same question the third line poses, narrowed to the module actually being read.
+
+**Permission alone is never sufficient.** A membership that is active and carries
+`inventory: 'view'` with `team_ids: []` reads as Unassigned and is refused inventory by Rules. This
+matters because taking somebody's last team away is how an Admin withdraws access, and the
+permission map is deliberately left behind when that happens — it is the record of what they had.
+Until Extension D the client honoured that and Rules did not; see decision 98.
 
 Consequences worth stating plainly:
 
@@ -171,6 +180,9 @@ them uneditable by anyone but the Admin, because they carry no owning team at al
 
 MVP rules:
 
+- Reading any module requires an active membership, **at least one assigned team**, and that
+  module at `view` or `edit`. The team requirement is an assignment test, not a filter: it asks
+  whether this person is a Member at all, and is passed once they hold any team.
 - `view` permission allows reading all of that module's data inside the active organization,
   team-scoped or not.
 - `edit` permission on a team-scoped collection allows editing records whose team is one of the
@@ -387,12 +399,15 @@ Collection-specific requirements:
 | `organization_admin_settings` | Admin | denied | path A batch only | Admin | denied |
 | `organization_membership_join_proofs` | self or Admin | denied | valid join batch | denied | denied |
 | `teams` | active member | active member, own organization | Admin | Admin, name and description | denied |
-| `inventory_items` | Admin, or member with `inventory` view/edit | same, own organization | Admin any team, member `edit` own teams | same, and may not move an item outside their teams | denied |
-| `maintenance_records` | Admin, or member with `maintenance` view/edit | same, own organization and per item | Admin any team, member `edit` own teams; `team_id` must match the linked item | same, judged against the stored snapshot | denied |
-| `productions` | Admin, or member with `productions` view/edit | same, own organization | Admin, or member with `productions` edit — organization-level, no team check | same | denied |
+| `inventory_items` | Admin, or assigned member with `inventory` view/edit | same, own organization | Admin any team, member `edit` own teams | same, and may not move an item outside their teams | denied |
+| `maintenance_records` | Admin, or assigned member with `maintenance` view/edit | same, own organization and per item | Admin any team, member `edit` own teams; `team_id` must match the linked item | same, judged against the stored snapshot | denied |
+| `productions` | Admin, or assigned member with `productions` view/edit | same, own organization | Admin, or assigned member with `productions` edit — organization-level: no *record* team check, but the writer must still hold a team | same | denied |
 | `production_requirements` | same as productions | same, own organization and per production | Admin any team, member `edit` own teams; linked production and any linked item must be same-organization | same | denied |
 | `action_items` | same as productions | same, own organization | document ID must equal `requirement_id`; requirement must be matched and short | same, without re-checking shortage | denied |
-| `calendar_events` | Admin, or member with `calendar` view/edit | same, own organization | Admin, or member with `calendar` edit — organization-level, `team_ids` is metadata and never a boundary | same | **allowed** for the same writers |
+| `calendar_events` | Admin, or assigned member with `calendar` view/edit | same, own organization | Admin, or assigned member with `calendar` edit — organization-level: the event's `team_ids` is metadata and never a boundary, but the writer must still hold a team | same | **allowed** for the same writers |
+
+Throughout this table, **assigned member** means an active membership holding at least one team.
+`asset_events` follows `inventory_items`. Admin never needs a team.
 
 ### Two creation paths
 

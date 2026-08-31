@@ -125,8 +125,11 @@ export function OrganizationGuard() {
  * else is here and say how to reach them. Nothing else opens — every module
  * still asks for a permission they do not have, and this guard grants none.
  *
- * Security Rules have always drawn the line in the same place: `isActiveMemberOf`
- * asks whether the membership is active and never whether it carries a team.
+ * Security Rules draw the line in the same place. `organizations`, `teams`, and
+ * `organization_memberships` reads ask `isActiveMemberOf` — active, and nothing
+ * about teams. Every module read asks `isAssignedMemberOf` instead, which does
+ * require a team, so a permission still sitting on a teamless membership opens
+ * nothing here or in Firestore. See decision 98.
  */
 export function MembershipGuard() {
   const { loading, organization, membership } = useOrganization()

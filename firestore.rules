@@ -473,6 +473,24 @@ service cloud.firestore {
       return get(membershipPath(organizationId, uid())).data;
     }
 
+    /**
+     * An active membership that actually carries an assignment.
+     *
+     * Removing somebody's last team is how an Admin takes their access away,
+     * and the permission map is deliberately left behind when that happens: it
+     * is the record of what they had and what an Admin restores. So `active`
+     * plus a stored permission is not evidence of anything — only a team is.
+     *
+     * Mirrors satisfiesAssignmentCondition() in src/domain/effective-role.ts,
+     * minus the "at least one module" half, which each caller below asks for
+     * itself against the module it governs.
+     */
+    function isAssignedMemberOf(organizationId) {
+      return isActiveMemberOf(organizationId)
+        && membershipData(organizationId).team_ids is list
+        && membershipData(organizationId).team_ids.size() > 0;
+    }
+
     function inventoryLevel(organizationId) {
       return membershipData(organizationId).permissions.inventory;
     }
@@ -480,7 +498,7 @@ service cloud.firestore {
     function canViewInventory(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && inventoryLevel(organizationId) in ['view', 'edit'])
       );
     }
@@ -672,7 +690,7 @@ service cloud.firestore {
     function canUpdateSerializedMirrors(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && inventoryLevel(organizationId) == 'edit')
       );
     }
@@ -1003,7 +1021,7 @@ service cloud.firestore {
     function canViewMaintenance(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && maintenanceLevel(organizationId) in ['view', 'edit'])
       );
     }
@@ -1305,7 +1323,7 @@ service cloud.firestore {
     function canViewProductions(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && productionsLevel(organizationId) in ['view', 'edit'])
       );
     }
@@ -1315,7 +1333,7 @@ service cloud.firestore {
     function canEditProductions(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && productionsLevel(organizationId) == 'edit')
       );
     }
@@ -1532,7 +1550,7 @@ service cloud.firestore {
     function canViewCalendar(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && calendarLevel(organizationId) in ['view', 'edit'])
       );
     }
@@ -1540,7 +1558,7 @@ service cloud.firestore {
     function canEditCalendar(organizationId) {
       return isSignedIn() && (
         isAdminOf(organizationId)
-        || (isActiveMemberOf(organizationId)
+        || (isAssignedMemberOf(organizationId)
             && calendarLevel(organizationId) == 'edit')
       );
     }

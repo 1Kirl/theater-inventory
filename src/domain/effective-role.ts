@@ -27,8 +27,14 @@ export function hasAnyModuleAccess(permissions: ModulePermissions): boolean {
  * because they are the only input this computation has once administration is
  * transferred away.
  *
- * Security Rules evaluate the same conditions, so the interface and the
- * authorization boundary cannot drift apart.
+ * Security Rules reach the same verdict by a different route, because a rule
+ * evaluates one document rather than a whole interface: `isAssignedMemberOf()`
+ * asks for the active membership and at least one team, and each `canView*`
+ * helper then asks for its own module. That is this function's third condition,
+ * narrowed to the module actually being read. Extension D closed the gap where
+ * Rules asked only the first and last of those and never the team, which made
+ * a residual permission on a teamless membership readable to Firestore and
+ * Unassigned to the interface.
  */
 export function effectiveRole(
   organization: Pick<Organization, 'admin_uid'>,

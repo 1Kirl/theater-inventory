@@ -3268,3 +3268,90 @@ come from `summarizeProductionCosts`, which already excludes cancelled work
 before reading a cost — so a cancelled action priced at $0.00 cannot make a
 production look as though it has been costed. That case is tested too, because
 it is the one where the two questions could quietly diverge.
+
+### 98. A stored permission is not an assignment
+
+Extension D's integration audit found the interface and Security Rules
+disagreeing about the same person.
+
+A membership can be active, hold `inventory: 'view'`, and hold no team. That is
+not a corrupt state and no interface offers it as a choice — it is what is left
+when an Admin takes somebody's last team away. The permission map is
+deliberately not cleared at that moment: it is the record of what the person
+had, and it is what an Admin restores when they come back. Decision 13 in
+`CLAUDE.md` says the same thing about administration transfer.
+
+`effectiveRole()` calls that person Unassigned, because
+`satisfiesAssignmentCondition()` requires a team. Rules called them a reader.
+Every `canView*` helper asked `isActiveMemberOf()` and the module level, and
+none of them asked about `team_ids`. The comment in `effective-role.ts` claimed
+the two sides evaluated the same conditions; they did not, and the comment is
+now accurate about how they differ.
+
+Proven against the emulator rather than inferred from reading. Before the fix,
+sixteen cases in `tests/rules/assigned-member-boundary.test.ts` failed:
+
+- all eight collections the four modules govern, readable with a residual
+  permission and no team — including `inventory_units`, which is what a scanned
+  QR label opens, and `asset_events`, which is that unit's history
+- `productions` create and update, and `calendar_events` create and delete
+- the serialized mirror update on `inventory_items`
+
+The last five are writes, and the earlier audit had reported writes as already
+correct. That was true of the team-scoped ones only. `canWriteInventoryForTeam`
+and its siblings ask `teamId in team_ids`, which an empty list can never
+satisfy, so they were closed. But `canEditProductions`, `canEditCalendar`, and
+`canUpdateSerializedMirrors` are organization-level: they ask for the module and
+nothing else, and there was no team for the empty list to fail against. They
+were open.
+
+The fix is one helper:
+
+```
+function isAssignedMemberOf(organizationId) {
+  return isActiveMemberOf(organizationId)
+    && membershipData(organizationId).team_ids is list
+    && membershipData(organizationId).team_ids.size() > 0;
+}
+```
+
+used by the four `canView*` helpers and the three organization-level edit
+helpers. It costs no additional document read — `membershipData()` resolves the
+same membership document `isActiveMemberOf()` already fetched, and Firestore
+charges a repeated `get()` of one path once.
+
+What deliberately did not change:
+
+- **Reads stay organization-wide.** The team requirement asks whether this
+  person is a Member at all. It is satisfied by holding any team, and it does
+  not filter which records they then see. Decision 26's reasoning is untouched:
+  a stage manager still has to see every crew's stock to plan against it.
+- **Admin.** `isAdminOf()` is the first branch of every helper and never
+  consults the membership, so an Admin with no team and no permissions still
+  has everything. Five tests pin that, including an Admin whose membership
+  document does not exist.
+- **Team-scoped edit ownership.** `canWriteInventoryForTeam`,
+  `canWriteMaintenanceForTeam`, and `canEditProductionsForTeam` are unchanged.
+  Adding the new helper to them would be redundant — `teamId in team_ids`
+  already implies a non-empty list — and a redundant check reads as though it
+  were carrying weight.
+- **Organization isolation.** Every helper still takes the record's own
+  `organization_id`.
+- **What an unassigned member keeps.** `organizations`, `teams`, and
+  `organization_memberships` reads still ask only `isActiveMemberOf()`. Somebody
+  waiting for an assignment is a member of the organization and may see the
+  directory; that is decision 90's exception and it is intact.
+
+`MemberAssignmentDialog` was deliberately left able to save a permission with no
+team. Forbidding it would make removing a team a two-step operation with a
+validation error in the middle, to prevent a state that is now harmless. The
+authoritative rule is that permission alone opens nothing, which is what makes
+the residual state safe to leave lying around.
+
+The client needed no change. `hasModuleAccess()` has always required
+`role === 'member'`, and the role comes from `effectiveRole()`. What was missing
+was a test that started where both sides actually start — at a membership
+document — rather than taking the role as given.
+`src/domain/assigned-member-boundary.test.ts` runs the same cases the Rules
+suite runs, so the two can be read against each other without either one parsing
+the other's source.
