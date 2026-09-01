@@ -80,7 +80,7 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
 
   return (
     <Card>
-      <CardContent className="space-y-3 pt-6">
+      <CardContent className="space-y-3">
         <div className="flex items-center gap-2">
           <Sparkles className="text-muted-foreground size-4" aria-hidden="true" />
           <p className="text-sm font-medium">Ask about your inventory</p>

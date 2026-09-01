@@ -93,7 +93,7 @@ export function ProductionListPage() {
         <p className="text-muted-foreground text-sm">Loading productions…</p>
       ) : productions.length === 0 ? (
         <Card>
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <p className="text-sm font-medium">No productions yet.</p>
             <p className="text-muted-foreground text-sm">
               {canCreate
@@ -104,7 +104,7 @@ export function ProductionListPage() {
           </CardContent>
         </Card>
       ) : visible.length === 0 ? (
-        <Card><CardContent className="pt-6"><p className="text-muted-foreground text-sm">No productions match this filter.</p></CardContent></Card>
+        <Card><CardContent><p className="text-muted-foreground text-sm">No productions match this filter.</p></CardContent></Card>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2">
           {visible.map((production) => (

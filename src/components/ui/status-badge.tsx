@@ -12,8 +12,15 @@ import type { StatusTone } from '@/domain/status-tone'
  *
  * Two shapes, because the application has two different kinds of state to show.
  * `pill` is where something is in its life. `dot` is what condition it is in —
- * same colour vocabulary, visibly different object, so "Available" and
- * "Excellent" are never mistaken for the same claim about the same axis.
+ * same colour vocabulary, and a marker that makes the two visibly different
+ * objects, so "Available" and "Excellent" are never mistaken for the same claim
+ * about the same axis.
+ *
+ * `dot` used to make that distinction by staying colourless, with the tone on
+ * the marker alone. It read as an annotation, which was the intent, but it also
+ * meant that recognising a condition in a table column depended on a dot six
+ * pixels across. Both shapes now carry the tone; the marker still says which
+ * axis is being talked about.
  */
 const statusBadgeVariants = cva(
   'inline-flex h-5 w-fit shrink-0 items-center gap-1.5 rounded-4xl border px-2 py-0.5 '
@@ -32,9 +39,13 @@ const statusBadgeVariants = cva(
       },
       shape: {
         pill: '',
-        // Reads as an annotation rather than a state: the colour is carried by a
-        // dot, and the chip itself stays out of the way.
-        dot: 'border-border bg-transparent text-foreground',
+        // The dot is what separates the two axes now, not the absence of colour.
+        // The chip used to be neutral — `border-border bg-transparent` — so a
+        // condition was legible only by a 6px marker, which is a lot to ask of
+        // one dot in a table column. It carries the tone like a pill does, and
+        // keeps the marker, so "Good" and "Available" still read as claims about
+        // different things.
+        dot: '',
       },
     },
     defaultVariants: { tone: 'neutral', shape: 'pill' },

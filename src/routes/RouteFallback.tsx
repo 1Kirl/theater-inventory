@@ -14,7 +14,7 @@ export function RouteFallback() {
       <span className="sr-only">Loading…</span>
       <div className="bg-muted h-8 w-48 animate-pulse rounded-md" aria-hidden="true" />
       <Card aria-hidden="true">
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3">
           <div className="bg-muted h-4 w-full animate-pulse rounded" />
           <div className="bg-muted h-4 w-5/6 animate-pulse rounded" />
           <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />

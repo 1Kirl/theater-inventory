@@ -45,10 +45,10 @@ const DATE_FORMAT = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'n
 /**
  * One headline number.
  *
- * The icon sits on a tinted square tied to the module it belongs to, which is
- * the only colour on the card. It is decoration in the strict sense — the label
- * beside it already says what the number is — so it is hidden from assistive
- * technology and nothing depends on telling the tints apart.
+ * The icon sits on a tinted square tied to the module it belongs to. It is
+ * decoration in the strict sense — the label beside it already says what the
+ * number is — so it is hidden from assistive technology and nothing depends on
+ * telling the tints apart.
  */
 function Metric({
   label, value, hint, icon: Icon, tone = 'neutral',
@@ -60,8 +60,18 @@ function Metric({
   tone?: StatusTone
 }) {
   return (
-    <Card>
-      <CardContent className="pt-6">
+    // The grid stretches every card to the tallest in its row, and the content
+    // used to sit at the top of that height with the surplus below it — read as
+    // bottom-heavy, though the real fault was the group not being centred at
+    // all. `flex-1` claims the stretched height and `justify-center` puts the
+    // whole cluster in the middle of it, so a card with a two-line hint and a
+    // card with none still look like the same card.
+    //
+    // The symmetric `py-2` replaces a `pt-6` that had no `pb` to match it: the
+    // card's own padding is even, and adding to one side only was the other
+    // half of the imbalance.
+    <Card className="h-full">
+      <CardContent className="flex flex-1 flex-col justify-center py-2">
         <div className="flex items-start gap-3">
           {Icon ? (
             <span
@@ -90,7 +100,7 @@ function Metric({
 function ModuleError({ label, message }: { label: string; message: string }) {
   return (
     <Card>
-      <CardContent className="space-y-2 pt-6">
+      <CardContent className="space-y-2">
         <p className="text-sm font-medium">{label}</p>
         <Alert variant="destructive">
           <AlertDescription className="text-xs">{message}</AlertDescription>
@@ -103,7 +113,7 @@ function ModuleError({ label, message }: { label: string; message: string }) {
 function Loading({ label }: { label: string }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent>
         <p className="text-muted-foreground text-sm">Loading {label}…</p>
       </CardContent>
     </Card>
@@ -178,7 +188,7 @@ export function DashboardPage() {
       <div className="space-y-6">
         <h1 className="text-2xl font-semibold tracking-tight">{organization?.name}</h1>
         <Card>
-          <CardContent className="space-y-2 pt-6">
+          <CardContent className="space-y-2">
             <p className="text-sm font-medium">Nothing to show yet.</p>
             <p className="text-muted-foreground text-sm">
               Your Admin has not given you access to any module in this organization. Ask them to
@@ -190,6 +200,10 @@ export function DashboardPage() {
     )
   }
 
+  // One treatment for all three. Adding an item, a production, and an event are
+  // the same kind of act, and giving each its own colour turned a row of
+  // related buttons into three unrelated ones. The colour lives in
+  // `.quick-action` in the stylesheet; this list is about what they do.
   const quickActions = [
     canAddInventory ? { label: 'Add item', to: paths.inventoryNew } : null,
     canAddProduction ? { label: 'Add production', to: paths.productionNew } : null,
@@ -208,7 +222,7 @@ export function DashboardPage() {
         {quickActions.length > 0 ? (
           <div className="flex flex-wrap gap-2">
             {quickActions.map((action) => (
-              <Button key={action.to} asChild size="sm" variant="outline">
+              <Button key={action.to} asChild size="sm" variant="outline" className="quick-action">
                 <Link to={action.to}>
                   <Plus className="size-4" aria-hidden="true" />
                   {action.label}
@@ -326,9 +340,36 @@ export function DashboardPage() {
                 not counted here.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            {/*
+              * A vertical composition: the ring first, at a size that makes it
+              * the thing you look at, and the figures underneath it.
+              *
+              * It used to sit beside its legend, which cost the ring most of the
+              * card's width and left the legend fighting for the rest — on a
+              * phone that fight is what pushed "Unusable, on hand" off the edge.
+              * Stacking gives the ring the full width to be centred in and gives
+              * the legend the full width to lay out in, and it is the same
+              * arrangement at every size, so there is no width at which the two
+              * layouts disagree.
+              *
+              * The ring and its legend are one group, and the group is what
+              * gets centred — not the ring, and not the legend, each finding
+              * its own position in the body.
+              *
+              * The distinction is visible when the row stretches this card to
+              * match the category list beside it. Centring two siblings spreads
+              * the surplus around each of them; centring one container puts the
+              * whole composition's middle at the body's middle, which is what
+              * the eye actually measures.
+              *
+              * On a narrow screen the grid is one column, the card's height is
+              * whatever the content needs, and there is no surplus for
+              * `justify-center` to place. Mobile stays content-driven without a
+              * second layout to maintain.
+              */}
+            <CardContent className="flex flex-1 flex-col justify-center">
               {lifecycle.serializedItemCount === 0 ? (
-                <div className="border-border flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+                <div className="border-border flex w-full flex-col items-center gap-2 rounded-lg border border-dashed bg-surface-sunken px-4 py-8 text-center">
                   <Package className="text-muted-foreground size-5" aria-hidden="true" />
                   <p className="text-sm font-medium">No individually tracked equipment yet</p>
                   <p className="text-muted-foreground text-xs">
@@ -336,14 +377,22 @@ export function DashboardPage() {
                   </p>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
+                // One container, so the ring and the figures that explain it
+                // move together. The gap is small on purpose: they are one
+                // statement, and a wide gap would read as two.
+                <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-4">
                   <DonutChart
                     data={lifecycle.slices}
                     centerValue={String(lifecycle.activeTotal)}
                     centerLabel="active"
                     summary={lifecycleSummaryText(lifecycle)}
+                    size={184}
                   />
-                  <ChartLegend data={lifecycle.slices} />
+                  {/* One column at every width. The block is centred; the rows
+                      are not centred individually — marker, label and count each
+                      keep their column, so the six numbers line up under one
+                      another and can be read straight down. */}
+                  <ChartLegend data={lifecycle.slices} className="w-full" />
                 </div>
               )}
             </CardContent>
@@ -359,7 +408,7 @@ export function DashboardPage() {
             </CardHeader>
             <CardContent>
               {categories.rows.length === 0 ? (
-                <div className="border-border flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+                <div className="border-border flex flex-col items-center gap-2 rounded-lg border border-dashed bg-surface-sunken px-4 py-8 text-center">
                   <Package className="text-muted-foreground size-5" aria-hidden="true" />
                   <p className="text-sm font-medium">Nothing in the inventory yet</p>
                   <p className="text-muted-foreground text-xs">

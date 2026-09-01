@@ -112,7 +112,7 @@ export function CalendarPage() {
       </div>
 
       <Card>
-        <CardContent className="grid gap-3 pt-6 sm:grid-cols-2">
+        <CardContent className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-xs">Team</Label>
             <Select value={filters.teamId} onValueChange={(v) => setFilters((c) => ({ ...c, teamId: v }))}>
@@ -224,7 +224,7 @@ export function CalendarPage() {
 
           {/* Day panel on desktop; the primary view on a phone. */}
           <Card>
-            <CardContent className="space-y-3 pt-6">
+            <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold">{DAY_FORMAT.format(new Date(`${selectedDateKey}T00:00:00`))}</h3>
                 <div className="flex gap-1 sm:hidden">

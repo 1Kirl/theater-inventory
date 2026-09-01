@@ -15,9 +15,10 @@ interface Props {
  * so a zero is visibly zero rather than silently missing, and somebody who
  * cannot distinguish the colours loses nothing.
  *
- * Laid out as a three-column grid — marker, label, value — rather than a flex
+ * Each row is a three-column grid — marker, label, value — rather than a flex
  * row, so the label column is the only one that flexes and the value stays
- * aligned on the right at every width. The label wraps rather than truncating:
+ * aligned on the right at every width. The list itself is a grid too, one
+ * column by default; a caller that has room may ask for more. The label wraps rather than truncating:
  * an abbreviated lifecycle term would be a change to the product's vocabulary
  * made by a layout constraint, and "Unusable, on hand" means something narrower
  * than "Unusable". The hint sits on its own line beneath the label for the same
@@ -26,7 +27,7 @@ interface Props {
  */
 export function ChartLegend({ data, format = String, className }: Props) {
   return (
-    <ul className={cn('grid w-full min-w-0 flex-1 gap-y-2', className)}>
+    <ul className={cn('grid w-full min-w-0 gap-y-2', className)}>
       {data.map((datum) => (
         <li
           key={datum.key}

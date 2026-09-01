@@ -144,7 +144,7 @@ export function ContactsPage() {
             {visible.map((row) => (
               <li key={row.uid}>
                 <Card className="h-full">
-                  <CardContent className="space-y-2 pt-6">
+                  <CardContent className="space-y-2">
                     <p className="font-medium break-words">{row.name}</p>
 
                     {row.teamNames.length > 0 ? (

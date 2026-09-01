@@ -175,7 +175,7 @@ export function ActionListPage() {
       </div>
 
       <Card>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3">
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" aria-hidden="true" />
             <Input value={filters.text} onChange={(e) => setFilter('text', e.target.value)} placeholder="Search item, production, team" className="pl-9" aria-label="Search actions" />
@@ -245,7 +245,7 @@ export function ActionListPage() {
         <p className="text-muted-foreground text-sm">Loading actions…</p>
       ) : actions.length === 0 ? (
         <Card>
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <p className="text-sm font-medium">Nothing to action yet.</p>
             <p className="text-muted-foreground text-sm">
               Actions appear here once a production requirement is matched to inventory and comes up
@@ -255,7 +255,7 @@ export function ActionListPage() {
           </CardContent>
         </Card>
       ) : visible.length === 0 ? (
-        <Card><CardContent className="pt-6"><p className="text-muted-foreground text-sm">No actions match these filters.</p></CardContent></Card>
+        <Card><CardContent><p className="text-muted-foreground text-sm">No actions match these filters.</p></CardContent></Card>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">
@@ -301,7 +301,7 @@ export function ActionListPage() {
             {visible.map((action) => (
               <li key={action.action_item_id}>
                 <Card>
-                  <CardContent className="space-y-2 pt-6">
+                  <CardContent className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
                       <span className="min-w-0 flex-1 font-medium">{action.item_name}</span>
                       <Badge variant="secondary">{ACTION_TYPE_LABELS[action.action_type]}</Badge>

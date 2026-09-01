@@ -16,6 +16,7 @@
     --color-sidebar-primary: var(--sidebar-primary);
     --color-sidebar-foreground: var(--sidebar-foreground);
     --color-sidebar: var(--sidebar);
+    --color-surface-sunken: var(--surface-sunken);
     --color-chart-6: var(--chart-6);
     --color-chart-5: var(--chart-5);
     --color-chart-4: var(--chart-4);
@@ -65,8 +66,20 @@
     /* Sage, mint, eucalyptus. Held at low chroma on a green hue so the identity
        reads as a tint rather than a colour wash: the page is still near-white
        and the eye still has neutral places to rest. */
-    --background: oklch(0.994 0.002 155);
+    /*
+     * The page is a ground, not a card.
+     *
+     * This used to be 0.994 against a card of 1.0 — six thousandths of
+     * lightness apart, which is to say identical. Every surface in the product
+     * floated on nothing and the whole interface read as one flat sheet. The
+     * ground is now a pale sage-gray far enough below white that a card is
+     * visibly a card, while still reading as neutral rather than as a green
+     * page: chroma 0.007 is a tint you notice only by comparison.
+     */
+    --background: oklch(0.96 0.007 155);
     --foreground: oklch(0.185 0.012 162);
+    /* Kept pure white. What makes a card read as raised is the ground moving,
+       not the card getting brighter — there is nowhere brighter to go. */
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.185 0.012 162);
     --popover: oklch(1 0 0);
@@ -77,14 +90,18 @@
     /* Soft mint. */
     --secondary: oklch(0.944 0.023 158);
     --secondary-foreground: oklch(0.325 0.036 162);
-    --muted: oklch(0.965 0.008 155);
+    /* A recessed fill *inside* a white card, so it has to stay above the page
+       ground or a muted block inside a card would read as a hole in it. */
+    --muted: oklch(0.972 0.007 156);
     --muted-foreground: oklch(0.492 0.018 160);
     /* A slightly stronger pale green for hover and active surfaces. */
     --accent: oklch(0.918 0.034 157);
     --accent-foreground: oklch(0.298 0.04 162);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.903 0.012 158);
-    --input: oklch(0.888 0.015 158);
+    /* A little stronger than before. With more surfaces in play, the line
+       between them does more work. */
+    --border: oklch(0.888 0.013 158);
+    --input: oklch(0.875 0.016 158);
     --ring: oklch(0.665 0.062 160);
 
     /*
@@ -96,16 +113,24 @@
      * about eighty degrees of hue between them and were reported on a real
      * phone as indistinguishable.
      *
-     * These six are spread around the wheel — green, blue, gold, lavender,
-     * orange, rose — and the two nearest neighbours, orange and rose, are also
-     * separated by lightness so they do not rely on hue alone.
+     * These six are spread around the wheel — mint, powder blue, butter,
+     * lavender, apricot, coral — and the two nearest neighbours, apricot and
+     * coral, are also separated by lightness so they do not rely on hue alone.
+     *
+     * Lightened in the light-mode revision: the first set read as dark and
+     * earthy against a white card, which is a different fault from being hard
+     * to tell apart. Held at or below 0.87 so a wedge still has an edge against
+     * white, and at or above 0.09 chroma so a legend dot is still a colour.
+     * Apricot and butter carry the distinction the product most depends on —
+     * "Unusable, on hand" against "In Maintenance" — so they are fifty degrees
+     * of hue and six hundredths of lightness apart rather than adjacent.
      */
-    --chart-1: oklch(0.605 0.095 155);
-    --chart-2: oklch(0.585 0.115 252);
-    --chart-3: oklch(0.735 0.125 85);
-    --chart-4: oklch(0.6 0.115 300);
-    --chart-5: oklch(0.66 0.145 50);
-    --chart-6: oklch(0.575 0.16 10);
+    --chart-1: oklch(0.805 0.1 158);
+    --chart-2: oklch(0.775 0.1 248);
+    --chart-3: oklch(0.865 0.115 95);
+    --chart-4: oklch(0.775 0.095 298);
+    --chart-5: oklch(0.8 0.11 45);
+    --chart-6: oklch(0.765 0.115 12);
 
     /*
      * Status tones.
@@ -124,14 +149,53 @@
     --tone-danger: oklch(0.525 0.16 20);
     --tone-neutral: oklch(0.48 0.018 265);
 
+    /*
+     * Quick actions.
+     *
+     * The only saturated colour on the dashboard, and it is on the three things
+     * that *do* something. A pale fill with dark text of the same hue rather
+     * than a solid button: three solid buttons in a row would outweigh every
+     * number on the page, and these are conveniences, not the point of the
+     * screen.
+     *
+     * One green for all three. They were briefly blue, lavender, and green —
+     * one hue per module — which turned a row of three related buttons into
+     * three unrelated ones and spent the product's only brand colour on
+     * distinguishing things nobody needed distinguished. Adding an item, a
+     * production, and an event are the same kind of act, so they look the same,
+     * and the identity that was doing real work stayed where it was: on the
+     * icons beside the numbers.
+     *
+     * Six tinted cards were tried before that and also removed — a whole card
+     * of colour behind a headline number made the page muddy without making
+     * anything easier to find.
+     */
+    --action-bg: oklch(0.925 0.04 160);
+    --action-fg: oklch(0.385 0.075 162);
+    --action-hover: oklch(0.885 0.055 160);
+
+    /* A panel within a panel — empty states, insets. Below white, above the
+       page, so it reads as recessed inside a card rather than as a gap in it. */
+    --surface-sunken: oklch(0.978 0.006 156);
+
+    /*
+     * Card elevation.
+     *
+     * Very small on purpose. The separation is carried by the ground being
+     * darker than the card; this only softens the edge so the boundary does not
+     * look drawn. Anything heavier and a page of cards starts to hover.
+     */
+    --card-shadow: 0 1px 2px oklch(0.3 0.02 160 / 4%), 0 1px 3px oklch(0.3 0.02 160 / 3%);
+
     --radius: 0.625rem;
-    --sidebar: oklch(0.982 0.005 155);
+    /* Above the page ground like the cards, so the rail reads as a surface. */
+    --sidebar: oklch(1 0 0);
     --sidebar-foreground: oklch(0.185 0.012 162);
     --sidebar-primary: oklch(0.552 0.058 161);
     --sidebar-primary-foreground: oklch(0.99 0.004 155);
     --sidebar-accent: oklch(0.918 0.034 157);
     --sidebar-accent-foreground: oklch(0.298 0.04 162);
-    --sidebar-border: oklch(0.903 0.012 158);
+    --sidebar-border: oklch(0.888 0.013 158);
     --sidebar-ring: oklch(0.665 0.062 160);
 }
 
@@ -184,6 +248,28 @@
     --tone-danger: oklch(0.765 0.115 19);
     --tone-neutral: oklch(0.735 0.018 265);
 
+    /*
+     * Dark mode is approved and unchanged.
+     *
+     * Every surface token above resolves to the card colour here, and the
+     * elevation to nothing. The components that use them therefore render
+     * exactly what they rendered before the light pass — the tints are a
+     * light-theme device, and a dark ground already separates its own surfaces
+     * without help.
+     */
+    /* The quick actions resolve to the outline button dark mode already had:
+       same faint input fill, same border, same foreground. The light theme's
+       green never reaches this block — on a dark ground it would read as lit
+       rather than as brand. */
+    --action-bg: color-mix(in oklab, var(--input) 30%, transparent);
+    --action-fg: var(--foreground);
+    --action-hover: color-mix(in oklab, var(--input) 50%, transparent);
+
+    /* Transparent, not muted: these fills are new in the light pass and the
+       dark empty states already read correctly with no fill at all. */
+    --surface-sunken: transparent;
+    --card-shadow: none;
+
     --sidebar: oklch(0.193 0.013 166);
     --sidebar-foreground: oklch(0.963 0.006 155);
     --sidebar-primary: oklch(0.775 0.062 159);
@@ -192,6 +278,36 @@
     --sidebar-accent-foreground: oklch(0.952 0.01 155);
     --sidebar-border: oklch(0.85 0.02 160 / 14%);
     --sidebar-ring: oklch(0.6 0.05 160);
+}
+
+@layer utilities {
+  /*
+   * The dashboard quick actions.
+   *
+   * Written as real rules rather than utility classes on the element because a
+   * `bg-*` utility from the button variant and a `bg-*` utility from the call
+   * site are the same specificity, and which one wins depends on the order
+   * Tailwind happens to emit them in. This is deterministic, and it keeps the
+   * hover and focus states beside the colour they belong to.
+   *
+   * Every value is a token. In dark mode those tokens resolve to the outline
+   * button's existing appearance, so this whole block is a light-theme device
+   * that leaves dark exactly as it was.
+   */
+  .quick-action {
+    background-color: var(--action-bg);
+    color: var(--action-fg);
+    border-color: color-mix(in oklab, var(--action-fg) 22%, transparent);
+  }
+
+  .quick-action:hover {
+    background-color: var(--action-hover);
+    color: var(--action-fg);
+  }
+
+  /* The button's own focus-visible ring is a single colour for the whole
+     application; tinting it per action would make focus harder to recognise,
+     which is the one thing it exists to be. */
 }
 
 @layer base {

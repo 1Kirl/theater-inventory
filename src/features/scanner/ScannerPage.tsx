@@ -282,7 +282,7 @@ export function ScannerPage() {
       </Card>
 
       <Card>
-        <CardContent className="space-y-4 pt-6">
+        <CardContent className="space-y-4">
           <div className="bg-muted relative overflow-hidden rounded-md">
             <video
               ref={videoRef}

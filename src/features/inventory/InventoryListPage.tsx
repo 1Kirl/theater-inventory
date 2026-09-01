@@ -2,7 +2,6 @@ import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus, ScanLine, Search } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -175,7 +174,7 @@ export function InventoryListPage() {
       </Suspense>
 
       <Card>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3">
           <div className="relative">
             <Search
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
@@ -270,7 +269,7 @@ export function InventoryListPage() {
         <p className="text-muted-foreground text-sm">Loading inventory…</p>
       ) : items.length === 0 ? (
         <Card>
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <p className="text-sm font-medium">No inventory items have been added yet.</p>
             <p className="text-muted-foreground text-sm">
               {canCreate
@@ -284,7 +283,7 @@ export function InventoryListPage() {
         </Card>
       ) : visible.length === 0 ? (
         <Card>
-          <CardContent className="pt-6">
+          <CardContent>
             <p className="text-muted-foreground text-sm">
               No items match these filters. Try clearing them.
             </p>
@@ -292,8 +291,12 @@ export function InventoryListPage() {
         </Card>
       ) : (
         <>
-          {/* Desktop: a table, because comparing quantities across rows is the point. */}
-          <div className="hidden overflow-x-auto md:block">
+          {/* Desktop: a table, because comparing quantities across rows is the
+              point — on the same white surface every other major panel uses, so
+              the list is a block on the page rather than rows loose on it.
+              `Table` brings its own horizontal scroll container. */}
+          <Card className="hidden md:block">
+            <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -324,6 +327,16 @@ export function InventoryListPage() {
                       >
                         {item.name}
                       </Link>
+                      {/* How the item is tracked is part of what it *is*, so it
+                          sits under the name. It used to occupy the Location
+                          cell, where it answered a question nobody asked of
+                          that column. Muted and unbadged: it is metadata, not a
+                          state anybody needs to act on. */}
+                      {itemPresentation(item).badge ? (
+                        <span className="text-muted-foreground block text-xs font-normal">
+                          {itemPresentation(item).badge}
+                        </span>
+                      ) : null}
                       {aiSearch?.reasons.get(item.item_id) ? (
                         <span className="text-muted-foreground block text-xs font-normal">
                           {aiSearch.reasons.get(item.item_id)}
@@ -341,12 +354,12 @@ export function InventoryListPage() {
                     <TableCell className="text-right tabular-nums">{item.quantity_available}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.quantity_total}</TableCell>
                     <TableCell><ConditionBadge item={item} /></TableCell>
+                    {/* Location, and only location. A serialized parent has no
+                        single one — each unit is kept where it is kept — so it
+                        reads as not-applicable, the same em dash Team and Last
+                        inspected already use for the same reason. */}
                     <TableCell className="text-muted-foreground">
-                      {itemPresentation(item).showsParentLocation ? (
-                        item.location
-                      ) : (
-                        <Badge variant="outline">{itemPresentation(item).badge}</Badge>
-                      )}
+                      {itemPresentation(item).showsParentLocation ? item.location : '—'}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {itemPresentation(item).showsParentInspection ? formatDate(item) : '—'}
@@ -355,7 +368,8 @@ export function InventoryListPage() {
                 ))}
               </TableBody>
             </Table>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Mobile: cards, showing what a technician checks first. */}
           <ul className="space-y-3 md:hidden">
@@ -363,9 +377,20 @@ export function InventoryListPage() {
               <li key={item.item_id}>
                 <Link to={paths.inventoryItem(item.item_id)} className="block">
                   <Card className="hover:border-primary/40 transition-colors">
-                    <CardContent className="space-y-2 pt-6">
+                    <CardContent className="space-y-2">
+                      {/* The same hierarchy the table uses, so the two views do
+                          not disagree about what a column means: identity and
+                          how it is tracked together at the top, location on its
+                          own further down. */}
                       <div className="flex items-start justify-between gap-2">
-                        <span className="min-w-0 flex-1 font-medium">{item.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium">{item.name}</span>
+                          {itemPresentation(item).badge ? (
+                            <span className="text-muted-foreground block text-xs">
+                              {itemPresentation(item).badge}
+                            </span>
+                          ) : null}
+                        </div>
                         <ConditionBadge item={item} />
                       </div>
                       <p className="text-muted-foreground text-xs">
@@ -376,12 +401,9 @@ export function InventoryListPage() {
                         {item.quantity_available} of {item.quantity_total} available
                       </p>
                       {itemPresentation(item).showsLifecycleSummary ? (
-                        <>
-                          <Badge variant="outline">{itemPresentation(item).badge}</Badge>
-                          <p className="text-muted-foreground text-xs tabular-nums">
-                            {unitBreakdownLine(item)}
-                          </p>
-                        </>
+                        <p className="text-muted-foreground text-xs tabular-nums">
+                          {unitBreakdownLine(item)}
+                        </p>
                       ) : (
                         <p className="text-muted-foreground text-xs">{item.location}</p>
                       )}

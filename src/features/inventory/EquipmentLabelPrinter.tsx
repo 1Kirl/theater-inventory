@@ -47,8 +47,14 @@ export function EquipmentLabelPrinter({ labels, open, onOpenChange }: Props) {
 
   if (!open) return null
 
+  // The preview is white on screen in light mode because that is what the sheet
+  // prints as: the print rule forces `#fff`, and once the application ground
+  // stopped being near-white a `bg-background` preview would have shown a grey
+  // page for output that comes out white. Dark mode keeps the ground it already
+  // had — a white overlay there would be a flashbang, and the labels are white
+  // cards on it, which reads correctly either way.
   return createPortal(
-    <div className="equipment-print-root bg-background pointer-events-auto fixed inset-0 z-50 overflow-y-auto">
+    <div className="equipment-print-root bg-white dark:bg-background pointer-events-auto fixed inset-0 z-50 overflow-y-auto">
       <div className="mx-auto max-w-4xl space-y-6 p-4 sm:p-8">
         <div className="equipment-print-controls flex flex-wrap items-center justify-between gap-3">
           <div>

@@ -184,7 +184,7 @@ export function ProductionDetailPage() {
       </div>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent>
           <dl className="grid gap-4 sm:grid-cols-3">
             <div>
               <dt className="text-muted-foreground text-sm">Requirements</dt>
@@ -251,7 +251,7 @@ export function ProductionDetailPage() {
           {costChartData.hasDrawableCost ? (
             <BarList data={costChartData.rows} format={formatCents} keepZero />
           ) : costChartData.hasKnownEstimate ? (
-            <div className="border-border rounded-lg border border-dashed px-4 py-6 text-center">
+            <div className="border-border rounded-lg border border-dashed bg-surface-sunken px-4 py-6 text-center">
               <p className="text-sm font-medium">
                 Known estimated action cost: {formatCents(costChartData.knownTotalCents)}
               </p>
@@ -264,7 +264,7 @@ export function ProductionDetailPage() {
               </p>
             </div>
           ) : (
-            <div className="border-border rounded-lg border border-dashed px-4 py-6 text-center">
+            <div className="border-border rounded-lg border border-dashed bg-surface-sunken px-4 py-6 text-center">
               <p className="text-sm font-medium">No known estimated action costs yet.</p>
               <p className="text-muted-foreground mt-1 text-xs">
                 {costChartData.unknownCount > 0

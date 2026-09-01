@@ -6,6 +6,11 @@
     "types": ["node"],
     "skipLibCheck": true,
 
+    /* Rules tests and boundary tests reach into `src` for the real payload
+       builders and view helpers. Some of those live in `.tsx` modules, so this
+       project has to be able to parse JSX even though it renders none. */
+    "jsx": "react-jsx",
+
     /* Bundler mode */
     "moduleResolution": "bundler",
     "module": "esnext",

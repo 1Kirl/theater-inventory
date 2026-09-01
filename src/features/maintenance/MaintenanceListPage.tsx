@@ -130,7 +130,7 @@ export function MaintenanceListPage() {
       </div>
 
       <Card>
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3">
           <div className="relative">
             <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" aria-hidden="true" />
             <Input
@@ -196,7 +196,7 @@ export function MaintenanceListPage() {
         <p className="text-muted-foreground text-sm">Loading maintenance records…</p>
       ) : records.length === 0 ? (
         <Card>
-          <CardContent className="space-y-3 pt-6">
+          <CardContent className="space-y-3">
             <p className="text-sm font-medium">No repair records yet.</p>
             <p className="text-muted-foreground text-sm">
               {canCreate
@@ -209,7 +209,7 @@ export function MaintenanceListPage() {
           </CardContent>
         </Card>
       ) : visible.length === 0 ? (
-        <Card><CardContent className="pt-6"><p className="text-muted-foreground text-sm">No records match these filters.</p></CardContent></Card>
+        <Card><CardContent><p className="text-muted-foreground text-sm">No records match these filters.</p></CardContent></Card>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">
@@ -287,7 +287,7 @@ export function MaintenanceListPage() {
               return (
                 <li key={record.maintenance_id}>
                   <Card>
-                    <CardContent className="space-y-2 pt-6">
+                    <CardContent className="space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <Link
                           to={paths.maintenanceRecord(record.maintenance_id)}
