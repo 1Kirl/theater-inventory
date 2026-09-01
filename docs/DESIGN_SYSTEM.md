@@ -88,9 +88,13 @@ tokens rather than applied to components directly.
 
 Rules:
 
-- **Colour is used selectively.** The page background is near-white with only a
-  trace of the hue; cards are white. The eye needs neutral places to rest, and a
-  uniformly pale-green interface reads as a tint applied by accident.
+- **Colour is used selectively.** The page ground is a pale sage-gray and cards
+  are white, far enough apart that a card reads as raised without a heavy
+  shadow. It was near-white once, six thousandths of lightness from the cards,
+  and the whole interface read as one flat sheet. The ground still reads as
+  neutral: the hue is there to be recognised, not noticed. The eye needs
+  neutral places to rest, and a uniformly pale-green interface reads as a tint
+  applied by accident.
 - **Light and dark are one design system, not two.** Every colour token defined
   under `:root` has a counterpart under `.dark`, and a test in
   `tests/unit/theme-boundaries.test.ts` fails if one is added without the other.
@@ -488,14 +492,24 @@ Test at least:
 
 ## 18. Design Scope Control
 
-Do not spend MVP time on:
+Still deliberately out of scope. Do not spend MVP time on:
 
 - custom animation systems,
 - advanced chart libraries — the three charts in section 3d are built from
   inline SVG and CSS against theme tokens, with no charting dependency,
 - elaborate illustrations,
-- complex theme switching beyond the single light/dark choice described in section 3a,
-- per-organization or account-synced themes,
-- item photo galleries, QR labels, or any interface for features excluded from the MVP.
+- complex theme switching beyond the single light/dark choice described in
+  section 3a,
+- per-organization or account-synced themes — the theme is a browser-local
+  preference on purpose,
+- item photo galleries,
+- any interface for a feature the MVP excludes; the current exclusion list
+  lives in `README.md` and `docs/PROJECT_OVERVIEW.md`.
+
+**Shipped since this section was first written.** QR labels appeared here as an
+excluded feature until Phase 11I. They were built in Phase 11E and are part of
+the product: printable label sheets, an equipment QR card on the unit page, and
+the camera scanner. Their design rules are not "do not build this" — they are
+in sections 3a (labels stay black on white whatever the theme) and 17.
 
 Focus on clarity and completion.

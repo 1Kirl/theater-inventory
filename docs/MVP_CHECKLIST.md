@@ -7,19 +7,30 @@ This document defines what must be finished before optional stretch work begins.
 **How to read the boxes**
 
 - `[x]` — implemented, and verified in a real browser by the project owner.
-- `[x] … — implemented, browser QA pending` — built and covered by automated tests, but nobody has
-  driven it in a browser yet. Unit tests passing is not verification.
+- `[x] … — verified from source and tests` — a structural or deterministic property that a browser
+  cannot show better than a test can: a schema's shape, a route guard, a resolution rule. Marked
+  distinctly so the two kinds of evidence are not confused with each other.
 - `[ ]` — not done.
 
 The Dashboard, the lazy-route refactor, the 375px responsive pass, and the seeded demo dataset have
 all been verified in a browser, as both demo accounts.
 
-One thing remains outstanding, and only one:
+Nothing is outstanding. **AI QA is complete**, on localhost and against the deployed build, with
+App Check enforced. Both features were driven in a browser against real seeded data, and that QA is
+what found the structured-schema HTTP 400 incident recorded in `docs/ARCHITECTURE.md`.
 
-- **AI quality QA.** Both AI features are implemented and unit-tested with the model boundary
-  stubbed, but nobody has judged the answers they give against the seeded data. Blocked on the
-  Gemini free tier's 20 requests per day. The demo *data* for those questions exists; the *answers*
-  have not been assessed.
+What that QA established, stated no wider than the evidence:
+
+- both features execute and return usable results in production
+- every record shown is one the application fetched; a model reference the request did not supply
+  produces nothing
+- the approval boundary holds — generation alone writes nothing, and Gemini never mutated Firestore
+- matching, shortage, and cost totals stayed application-owned, and an unknown cost stayed unknown
+
+What it does **not** establish, and no box below should be read as claiming: that AI output is
+always correct, that hallucination is impossible, that every possible prompt has been tried, or
+that answer quality is guaranteed. Suggestions require human review — that is the product's design,
+not a gap in testing.
 
 Firebase Hosting is deployed at https://theater-inventory.web.app and the production App Check site
 key is configured. The deployed build was smoke-tested as both demo accounts.
@@ -128,24 +139,29 @@ key is configured. The deployed build was smoke-tested as both demo accounts.
 
 ### AI Smart Search — REQUIRED AI FEATURE
 
-- [x] Natural-language input — implemented, browser QA pending
-- [x] Structured filter output using team_name, never team_id — implemented, browser QA pending
-- [x] Conditions returned as an array — implemented, browser QA pending
-- [x] Runtime validation of AI output with Zod — implemented, browser QA pending
-- [x] Display interpreted filters — implemented, browser QA pending
-- [x] Query real Firestore inventory — implemented, browser QA pending
-- [x] No fabricated inventory results — implemented, browser QA pending
-- [x] Permission/org scope preserved — implemented, browser QA pending
-- [x] Error/retry state — implemented, browser QA pending
-- [x] Manual search remains available — implemented, browser QA pending
-- [x] Result count and clear/reset action — implemented, browser QA pending
-- [x] Interpreted filters land in the manual filter state and stay editable there — implemented, browser QA pending
-- [x] An unresolvable team or category is reported, not guessed at — implemented, browser QA pending
-- [x] Smart Search hidden from users without Inventory view — implemented, browser QA pending
-- [x] AI answers from the accessible inventory, not only from the question — implemented, browser QA pending
-- [x] Natural-language answer shown above the real records — implemented, browser QA pending
-- [x] Temporary inventory refs validated; an unsupplied ref shows nothing — implemented, browser QA pending
-- [x] Never-inspected, condition, and availability questions answered — implemented, browser QA pending
+Browser QA passed on localhost and in production, with App Check enforced. Grounded record
+resolution was verified for both Inventory Items and Equipment Units, across lifecycle,
+condition, availability, planned/current maintenance, and known-versus-unknown cost. A model
+reference the request did not supply was confirmed to produce no card.
+
+- [x] Natural-language input
+- [x] Structured filter output using team_name, never team_id — verified from source and tests
+- [x] Conditions returned as an array — verified from source and tests
+- [x] Runtime validation of AI output with Zod — verified from source and tests
+- [x] Display interpreted filters
+- [x] Query real Firestore inventory
+- [x] No fabricated inventory results
+- [x] Permission/org scope preserved
+- [x] Error/retry state
+- [x] Manual search remains available
+- [x] Result count and clear/reset action
+- [x] Interpreted filters land in the manual filter state and stay editable there
+- [x] An unresolvable team or category is reported, not guessed at — verified from source and tests
+- [x] Smart Search hidden from users without Inventory view — verified from source and tests
+- [x] AI answers from the accessible inventory, not only from the question
+- [x] Natural-language answer shown above the real records
+- [x] Temporary inventory refs validated; an unsupplied ref shows nothing
+- [x] Never-inspected, condition, and availability questions answered
 
 ### Maintenance & Repair
 
@@ -186,33 +202,38 @@ key is configured. The deployed build was smoke-tested as both demo accounts.
 
 ### AI Requirement Generator — REQUIRED AI FEATURE
 
-- [x] Production description input/context — implemented, browser QA pending
-- [x] Generate Requirements with AI — implemented, browser QA pending
-- [x] Structured suggestion validation with Zod — implemented, browser QA pending
-- [x] Suggested item name — implemented, browser QA pending
-- [x] Suggested quantity — implemented, browser QA pending
-- [x] Suggested category and suggested_team_name when useful — implemented, browser QA pending
-- [x] inventory_match_keyword returned instead of an inventory item ID — implemented, browser QA pending
-- [x] Application resolves names and keywords to real IDs — implemented, browser QA pending
-- [x] Inventory matching suggestions — implemented, browser QA pending
-- [x] Accept suggestion — implemented, browser QA pending
-- [x] Edit suggestion — implemented, browser QA pending
-- [x] Remove suggestion — implemented, browser QA pending
-- [x] Regenerate — implemented, browser QA pending
-- [x] Save only approved suggestions — implemented, browser QA pending
-- [x] No direct AI Firestore writes — implemented, browser QA pending
-- [x] Shortages calculated after approval using real data — implemented, browser QA pending
-- [x] Error/retry state — implemented, browser QA pending
-- [x] Suggestions start unaccepted; generation alone saves nothing — implemented, browser QA pending
-- [x] Suggested team name resolved deterministically against real teams — implemented, browser QA pending
-- [x] A team the reviewer cannot write to blocks acceptance until they choose another — implemented, browser QA pending
-- [x] Approved requirements saved with source = ai_approved — implemented, browser QA pending
-- [x] Manual requirement entry still available when AI fails — implemented, browser QA pending
-- [x] AI assessment shown above the review list — implemented, browser QA pending
-- [x] Available and shortage shown as facts come from the app, not the model — implemented, browser QA pending
-- [x] suggested_action stays transient and is never persisted — implemented, browser QA pending
-- [x] General guidance mode when the user has no Inventory view — implemented, browser QA pending
-- [x] Malformed individual suggestions dropped without losing the rest — implemented, browser QA pending
+Browser QA passed on localhost and in production. Real inventory, production, requirement,
+action, and stored-cost context were exercised; structured response parsing was verified after
+the `maxItems` wire-schema fix; the approval boundary held, with no direct Firestore write by
+the model; and matching, shortage, and cost stayed application-owned.
+
+- [x] Production description input/context
+- [x] Generate Requirements with AI
+- [x] Structured suggestion validation with Zod — verified from source and tests
+- [x] Suggested item name
+- [x] Suggested quantity
+- [x] Suggested category and suggested_team_name when useful
+- [x] inventory_match_keyword returned instead of an inventory item ID — verified from source and tests
+- [x] Application resolves names and keywords to real IDs
+- [x] Inventory matching suggestions
+- [x] Accept suggestion
+- [x] Edit suggestion
+- [x] Remove suggestion
+- [x] Regenerate
+- [x] Save only approved suggestions
+- [x] No direct AI Firestore writes
+- [x] Shortages calculated after approval using real data
+- [x] Error/retry state
+- [x] Suggestions start unaccepted; generation alone saves nothing
+- [x] Suggested team name resolved deterministically against real teams
+- [x] A team the reviewer cannot write to blocks acceptance until they choose another — verified from source and tests
+- [x] Approved requirements saved with source = ai_approved
+- [x] Manual requirement entry still available when AI fails
+- [x] AI assessment shown above the review list
+- [x] Available and shortage shown as facts come from the app, not the model
+- [x] suggested_action stays transient and is never persisted — verified from source and tests
+- [x] General guidance mode when the user has no Inventory view — verified from source and tests
+- [x] Malformed individual suggestions dropped without losing the rest — verified from source and tests
 
 ### Action List
 

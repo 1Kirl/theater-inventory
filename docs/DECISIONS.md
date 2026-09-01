@@ -3355,3 +3355,105 @@ document — rather than taking the role as given.
 `src/domain/assigned-member-boundary.test.ts` runs the same cases the Rules
 suite runs, so the two can be read against each other without either one parsing
 the other's source.
+
+### 99. Three defects found by somebody using the product
+
+Final review turned up three faults that every automated check had passed. They
+are recorded together because what they have in common is more useful than any
+of them alone: each was a rule that was correct somewhere and wrong everywhere
+else, and in each case the thing that made it invisible was the same thing that
+made it feel safe.
+
+**The dashboard's upcoming events were out of order, and one was missing.**
+`compareEvents` ordered by all-day, then start time, then title, and never
+looked at the date. That is the right rule *within* a day, which is exactly why
+`eventsOnDate` was correct and hid it — pre-filtering to one date turns the
+missing comparison into a tie. Every caller that sorted across days was wrong,
+and because the dashboard slices the sorted list to five, the wrong order also
+chose which event disappeared. The month agenda and the date-bucket grouping had
+it too. One date comparison in the comparator fixed all three, and reverting it
+reproduces the exact ordering the user reported.
+
+**A serialized item's estimated cost vanished when its first unit was created.**
+Three services each kept a private copy of the object describing the parent for
+a mirror update, and all three omitted `unitCostCents`. A mirror update is a
+whole-document write, so seven paths deleted the cost — not just the one anybody
+noticed. The duplication was the defect. One shared `serializedMirrorInput()`
+replaced all three, and the test that matters is not "cost survives" but
+"nothing the parent owns is missing", which catches the next forgotten field
+rather than this one.
+
+**Bulk items had no QR at all.** The most scannable thing in a storage room — a
+bin of cable — was the one thing nobody could scan. Items now carry
+`/inventory/{itemId}` beside the existing `/equipment/{unitId}`. The parser
+widened by exactly one thing: which first path segment it accepts, from one
+value to a closed set of two. Host, scheme, credential, query, fragment and
+segment-count checks are unchanged, and `/inventory/new` and `/inventory/scan`
+are refused by name because they fit the shape a label has.
+
+That third fix produced a fourth problem immediately. `/inventory/:itemId` sat
+inside `OrganizationGuard` while `/equipment/:unitId` did not, so the two label
+types behaved differently across organizations: somebody with inventory access
+in A, browsing B, was refused a record A had already authorized — while the same
+person scanning a *unit* label from A was offered a switch. For a workflow where
+the person is holding a sticker and cannot tell which kind it is, two behaviours
+is worse than either. Both routes now resolve through one `resolveDeepLink()`
+and one switch card. Security Rules were not touched: they already gated each
+read on the record's own `organization_id`, and what moved was where the render
+boundary sits.
+
+### 100. The light theme had no surfaces
+
+`--background` was `oklch(0.994 …)` against a `--card` of `oklch(1 …)`. Six
+thousandths of lightness apart, which is to say identical: nothing in the
+product looked raised, and the whole interface read as one flat sheet. The
+ground is now a pale sage-gray far enough below white that a card is visibly a
+card, with a very small elevation on the card primitive so the boundary is not
+merely a drawn line.
+
+Colour went to the three dashboard quick actions rather than onto the six
+headline cards. Tinted KPI surfaces were built first and removed after review —
+a whole card of colour behind a number made the page muddy without making
+anything easier to find, and the identity that was doing real work was already
+on the icons. The three actions share one green: adding an item, a production
+and an event are the same kind of act, and giving each its own hue turned a row
+of related buttons into three unrelated ones.
+
+The light chart palette was dark and earthy against a white card. It is lighter
+now, held below 0.88 lightness so a wedge still has an edge and above 0.09
+chroma so a legend dot is still a colour. Apricot and butter carry the
+distinction the product most depends on — "Unusable, on hand" against "In
+Maintenance" — so they sit fifty degrees of hue and six hundredths of lightness
+apart rather than adjacent. The dark palette is untouched, and every surface
+token added for light resolves in `.dark` to something already in use there.
+
+Two vertical-balance faults shared one cause: a grid stretches its items to the
+tallest in the row, and neither card did anything with the height it was given.
+The headline numbers sat at the top of a stretched card with the surplus below
+them; the equipment ring did the same beside a taller category list. The ring
+and its legend are now one container centred as a group, stacked rather than
+side by side — which also removes the arrangement that produced the earlier
+mobile legend bug, since the legend no longer competes with the ring for width.
+
+Every headerless card carried `pt-6` on its `CardContent`, doubling the padding
+the `Card` primitive already applies: forty pixels above the content against
+sixteen below. Twenty-four pixels is about a line of text, which is what it
+looked like — a blank row where a subtitle would go, on cards that have none.
+The habit comes from a Card that pads nothing and a CardHeader that pads the
+top; this project's Card is not that Card. All twenty-four uses were wrong the
+same way, so the fix was a deletion.
+
+On the inventory list, "Individual Equipment" sat in the Location column,
+answering a question nobody asks of that column. It moved under the name as
+muted metadata, and Location shows a location or the em dash Team and Last
+inspected already use for a serialized parent. The condition chip was colourless
+with the tone on a six-pixel dot; the chip carries the tone now and keeps the
+dot, which is what still separates "Good" from "Available". Decision 96a's
+distinction survives — it is made by the marker rather than by the absence of
+colour.
+
+One inconsistency is left deliberately. The inventory list sits on a white card;
+the maintenance and action-list tables still render on the page ground. The
+visual pass was scoped to inventory, and matching the other two is polish nobody
+has asked for. It is recorded here rather than papered over with a claim that
+all list pages look alike.

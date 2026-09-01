@@ -611,29 +611,64 @@ top of it.**
 
 ## 11. Route Guards
 
-Recommended route layers:
+The guards as built, in `src/routes/guards.tsx`. An earlier draft of this
+section named an `AssignmentGuard`; no such component exists. Blocking
+Unassigned users is `OrganizationGuard`'s job, because role is computed and
+"unassigned" is one of the three values it returns.
 
 ### AuthGuard
 
-Requires authenticated Firebase user.
+Requires an authenticated Firebase user. Also the Suspense boundary for the
+routes outside the application shell.
 
 ### OrganizationGuard
 
-Requires membership in active organization.
+Requires an active organization **and** an assignment inside it. A computed
+role of `unassigned` renders `UnassignedPage` instead of the route. Admin
+passes regardless of teams and permissions.
 
-### AssignmentGuard
+### MembershipGuard
 
-Blocks Unassigned users from operational modules.
+Requires an active membership and nothing more. The narrow exception to
+`OrganizationGuard`, and the only one: it guards Contacts, so somebody waiting
+for an assignment can still see who is in the organization and how to reach
+them. It grants no module access.
 
 ### PermissionGuard
 
-Requires module-level view/edit permission for one of the four modules.
+Requires a module at `view` or `edit`. Nests inside `OrganizationGuard`, so an
+Unassigned member never reaches it. Admin passes every `PermissionGuard` for
+the active organization.
 
-Admin passes all normal PermissionGuards for the active organization.
+### AdminGuard
 
-The Dashboard route has no PermissionGuard, because Dashboard has no permission. It sits behind
-AssignmentGuard and renders each summary card only if the underlying module is viewable. Action
-List routes are guarded by the `productions` permission.
+Organization Settings only.
+
+### Notes
+
+The Dashboard route has no `PermissionGuard`, because Dashboard has no
+permission of its own. It sits behind `OrganizationGuard` and renders each
+summary card only if the underlying module is viewable. Action List is guarded
+by `productions`.
+
+Two routes sit outside `OrganizationGuard` deliberately, and only two:
+`/equipment/:unitId` and `/inventory/:itemId`. Both are what a scanned QR label
+opens. A label carries a document id and nothing else, and which organization
+owns it is a fact stored in the record — so a guard bound to whichever
+organization the browser has open would refuse a legitimate scan by somebody who
+belongs to two.
+
+The item route joined the unit route when bulk items got labels of their own.
+Leaving it inside the guards meant they judged the *active* organization rather
+than the owning one: somebody with inventory access in A, browsing B, was
+refused a record A had already authorized. Both now resolve through one shared
+`resolveDeepLink`, so the two label types cannot behave differently. Security Rules gate the read on the unit's
+own `organization_id`, so a successful read already proves membership and
+inventory access in the owning organization, and a failed one yields a message
+that does not distinguish "denied" from "does not exist".
+
+Guards decide what is rendered. They are not the authorization boundary —
+Security Rules are, and they are tested independently against the emulator.
 
 ## 12. AI Permission Rules
 
