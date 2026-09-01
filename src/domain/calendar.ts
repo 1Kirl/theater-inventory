@@ -95,12 +95,30 @@ export function validateVisibility(params: {
 }
 
 /**
- * All-day events first, then timed events by start time, then title.
+ * Chronological: by date, then all-day first, then start time, then title.
  *
- * All-day comes first because it applies to the whole day rather than a slot
- * within it, so it reads as a heading for the others.
+ * The date comparison is the whole reason this function is not just the
+ * within-a-day rule. It was, once, and every caller that sorted across more
+ * than one day was silently wrong: the dashboard's upcoming list and the
+ * calendar's month agenda ordered events by time of day regardless of which day
+ * they fell on, so a 9am event three weeks out sorted above a 2pm event
+ * tomorrow. `eventsOnDate` hid the bug, because pre-filtering to one date makes
+ * the missing comparison a tie.
+ *
+ * Compared as local date keys rather than raw timestamps, for the same reason
+ * every other date decision in this file is: a stored `event_date` is a day, and
+ * comparing instants would let a timezone move an event to the day before.
+ *
+ * Within a day, all-day comes first because it applies to the whole day rather
+ * than a slot within it, so it reads as a heading for the others. `event_id` is
+ * the final tie-breaker so that two events sharing a date, a time, and a title
+ * still have one stable order rather than one that depends on arrival.
  */
 export function compareEvents(left: CalendarEvent, right: CalendarEvent): number {
+  const leftDate = dateKeyOf(left)
+  const rightDate = dateKeyOf(right)
+  if (leftDate !== rightDate) return leftDate < rightDate ? -1 : 1
+
   const leftAllDay = isAllDay(left)
   const rightAllDay = isAllDay(right)
 
@@ -109,7 +127,9 @@ export function compareEvents(left: CalendarEvent, right: CalendarEvent): number
     return (left.start_time ?? '').localeCompare(right.start_time ?? '')
   }
 
-  return left.title.localeCompare(right.title)
+  if (left.title !== right.title) return left.title.localeCompare(right.title)
+
+  return left.event_id.localeCompare(right.event_id)
 }
 
 export function sortEvents(events: readonly CalendarEvent[]): CalendarEvent[] {

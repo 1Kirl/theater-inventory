@@ -14,24 +14,42 @@ import { currentlyInService, isOverdue } from '@/domain/maintenance'
 import { promotionMaintenanceBlock } from '@/domain/inventory-unit'
 import { conditionSummaryLabel, teamNameOf, unclassifiedOf } from '@/features/inventory/inventory-view'
 import { InventoryUnitsCard } from '@/features/inventory/InventoryUnitsCard'
+import { ItemQrCard } from '@/features/inventory/ItemQrCard'
+import { DeepLinkNotice } from '@/features/inventory/DeepLinkNotice'
+import { resolveDeepLink } from '@/features/inventory/record-deep-link'
 import { PromoteToSerializedDialog } from '@/features/inventory/PromoteToSerializedDialog'
 import { statusLabel, maintenanceStatusTone } from '@/features/maintenance/maintenance-view'
 import { getInventoryItem } from '@/services/inventory-service'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
-import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem } from '@/types/inventory'
 import type { MaintenanceRecord } from '@/types/maintenance'
 import { paths } from '@/routes/paths'
 import { activeQuantityOf, estimatedInventoryValue } from '@/domain/inventory-value'
 import { UNKNOWN_COST_LABEL, formatCents, formatCostOrUnknown } from '@/domain/money'
 
+/**
+ * Says nothing it cannot prove, exactly as the unit page does. "That item does
+ * not exist" would be a claim the client cannot check, and confirming which ids
+ * are real is what somebody probing printed labels would want.
+ */
+const UNAVAILABLE_ITEM = 'We couldn\u2019t open this inventory item. '
+  + 'It may not exist, or it may belong to an organization you do not have access to.'
+
+const ITEM_WORDING = {
+  noun: 'inventory item',
+  belongsTo: 'This inventory item belongs to',
+  switchAction: 'Switch organization and view item',
+}
+
 export function InventoryItemDetailPage() {
   const { itemId } = useParams<{ itemId: string }>()
-  const { organization, membership, role, teams } = useOrganization()
+  const {
+    organization, membership, role, teams, loading: organizationLoading,
+  } = useOrganization()
 
-  const [item, setItem] = useState<InventoryItem | null | undefined>(undefined)
+  const [loadedItem, setItem] = useState<InventoryItem | null | undefined>(undefined)
   const [records, setRecords] = useState<MaintenanceRecord[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [failure, setFailure] = useState<unknown>(null)
   const [promoting, setPromoting] = useState(false)
 
   // In Service is derived from maintenance data, so it follows the maintenance
@@ -71,8 +89,8 @@ export function InventoryItemDetailPage() {
     }
 
     return read().then(
-      (loaded) => { setItem(loaded.item); setRecords(loaded.records); setError(null) },
-      (caught: unknown) => { setError(toOrganizationErrorMessage(caught)); setItem(null) },
+      (loaded) => { setItem(loaded.item); setRecords(loaded.records); setFailure(null) },
+      (caught: unknown) => { setFailure(caught); setItem(null) },
     )
   }, [itemId, canSeeMaintenance])
 
@@ -80,26 +98,26 @@ export function InventoryItemDetailPage() {
     void load()
   }, [load])
 
-  if (item === undefined) {
-    return <p className="text-muted-foreground text-sm">Loading item…</p>
+  // This page is where a scanned item label lands, and the only route besides
+  // the unit page that sits outside the active organization's guards. The
+  // organization that owns the item is a fact stored in the item, so the person
+  // arriving may be in the wrong organization, in none, or not entitled to this
+  // item at all. The same resolver the unit page uses decides which, and the
+  // Firestore read is what settles the last of those — nothing about the item
+  // is rendered before it does.
+  const outcome = resolveDeepLink({
+    record: loadedItem,
+    error: failure,
+    activeOrganizationId: organization?.organization_id ?? null,
+    organizationLoading,
+    unavailableMessage: UNAVAILABLE_ITEM,
+  })
+
+  if (outcome.kind !== 'ready') {
+    return <DeepLinkNotice outcome={outcome} wording={ITEM_WORDING} />
   }
 
-  if (error) {
-    return <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>
-  }
-
-  if (!item || item.organization_id !== organization?.organization_id) {
-    return (
-      <div className="space-y-4">
-        <Alert variant="destructive">
-          <AlertDescription>That inventory item was not found in this organization.</AlertDescription>
-        </Alert>
-        <Button asChild variant="outline" size="sm">
-          <Link to={paths.inventory}>Back to inventory</Link>
-        </Button>
-      </div>
-    )
-  }
+  const item = outcome.record
 
   const canEdit = canEditTeamScopedRecord(role, membership, 'inventory', item.team_id)
   const serialized = isSerialized(item)
@@ -313,6 +331,11 @@ export function InventoryItemDetailPage() {
       {serialized ? (
         <InventoryUnitsCard item={item} canEdit={canEdit} onUnitsChanged={load} />
       ) : null}
+
+      {/* Every item gets one, serialized included. On a serialized item it sits
+          below the units so the per-unit labels — which identify one physical
+          piece — stay the more prominent offer. */}
+      <ItemQrCard item={item} organization={organization} />
 
       {/* With every equipment fact moved onto the units, a serialized item has
           nothing left for this card but its notes — so it only appears when

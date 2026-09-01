@@ -1,5 +1,5 @@
 import { FirebaseError } from 'firebase/app'
-import { parseEquipmentQr } from '@/domain/equipment-qr'
+import { parseAppQr } from '@/domain/equipment-qr'
 import { planScan, successMessage } from '@/features/scanner/scan-actions'
 import {
   admitScan, beginScan, clearSession, completeScan, emptySession, forgetScan, switchMode,
@@ -35,10 +35,11 @@ export interface ScanContext {
   usingMemberUid: string | null
 }
 
-const INVALID_QR = 'That QR code is not a Theater Inventory equipment label.'
+const INVALID_QR = 'That QR code is not a Theater Inventory label.'
 const UNAVAILABLE = 'We couldn’t open this equipment. It may not exist, or it may belong to '
   + 'an organization you do not have access to.'
 const DENIED = 'You don’t have permission to update this equipment.'
+const ITEM_SCANNED = 'That is an inventory item label. Open it to see the record.'
 const GENERIC_FAILURE = 'That did not work. Try scanning it again.'
 
 /** Firebase errors never reach a person; a scanner in a dark room least of all. */
@@ -54,6 +55,18 @@ function failureMessage(error: unknown): string {
 export type DecodeRejection =
   | { kind: 'invalid_qr'; message: string }
   | { kind: 'duplicate'; unitId: string; message: string }
+  /**
+   * A real label, for an inventory record rather than a physical unit.
+   *
+   * Not an error, and not a session entry either. The scanner's three modes are
+   * lifecycle actions and a bulk item has no lifecycle to act on — there is no
+   * unit to check out, because the quantity is a number rather than a set of
+   * identities. Offering Check Out here would be a control that writes nothing.
+   *
+   * So the scan is reported back with the item it names, and the page turns it
+   * into a way to open that item. Recognised, and honest about what it is.
+   */
+  | { kind: 'item'; itemId: string; message: string }
 
 export interface ScanRunner {
   getSession: () => ScanSession
@@ -160,8 +173,14 @@ export function createScanRunner(params: {
     },
 
     handleDecoded(raw) {
-      const unitId = parseEquipmentQr(raw)
-      if (unitId === null) return { kind: 'invalid_qr', message: INVALID_QR }
+      const label = parseAppQr(raw)
+      if (label === null) return { kind: 'invalid_qr', message: INVALID_QR }
+
+      if (label.kind === 'item') {
+        return { kind: 'item', itemId: label.itemId, message: ITEM_SCANNED }
+      }
+
+      const { unitId } = label
 
       const admission = admitScan(session, unitId)
       if (!admission.admit) {

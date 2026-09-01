@@ -219,7 +219,9 @@ export function summarizeProductions(params: {
  *
  * Compared as local date keys rather than timestamps, which is what keeps an
  * early-morning event from falling into yesterday. `sortEvents` then applies the
- * calendar's own order: all-day first, then start time, then title.
+ * calendar's own order: by date, then all-day first, then start time, then
+ * title. The date half of that used to be missing, which is what made this list
+ * order by time of day across different days.
  */
 export function upcomingEvents(
   events: readonly CalendarEvent[],

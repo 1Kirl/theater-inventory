@@ -1,4 +1,4 @@
-import { equipmentQrUrl } from '@/domain/equipment-links'
+import { equipmentQrUrl, inventoryItemQrUrl } from '@/domain/equipment-links'
 import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 import type { Organization } from '@/types/organization'
 
@@ -35,6 +35,31 @@ export function equipmentLabel(params: {
     qrUrl: equipmentQrUrl(params.unit.unit_id),
     assetCode: params.unit.asset_code,
     itemName: params.item?.name ?? 'Equipment',
+    organizationName: params.organization?.name ?? '',
+  }
+}
+
+/**
+ * The label for an inventory record rather than a physical piece.
+ *
+ * Reuses the same three lines, because a printed sticker is a printed sticker
+ * and there is no reason for two layouts. What changes is what the top line
+ * says: a unit's asset code identifies one microphone, and an item has no such
+ * thing — so the line names what the label *is* instead of pretending to be a
+ * code somebody could read off the equipment.
+ *
+ * A bulk item's label deliberately does not carry the quantity. Quantity is the
+ * fastest-changing fact about a bulk item, and a sticker saying "20" on a hook
+ * holding six is worse than a sticker saying nothing.
+ */
+export function inventoryItemLabel(params: {
+  item: Pick<InventoryItem, 'item_id' | 'name' | 'tracking_mode'>
+  organization: Pick<Organization, 'name'> | null
+}): EquipmentLabel {
+  return {
+    qrUrl: inventoryItemQrUrl(params.item.item_id),
+    assetCode: params.item.tracking_mode === 'serialized' ? 'Item' : 'Bulk item',
+    itemName: params.item.name,
     organizationName: params.organization?.name ?? '',
   }
 }

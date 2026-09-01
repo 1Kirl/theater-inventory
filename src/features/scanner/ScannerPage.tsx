@@ -325,7 +325,17 @@ export function ScannerPage() {
 
           {rejection ? (
             <Alert role="status">
-              <AlertDescription>{rejection.message}</AlertDescription>
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span>{rejection.message}</span>
+                {/* An item label is a real label, so it gets somewhere to go.
+                    It gets no Check Out or Check In: a bulk item has no unit to
+                    act on, and a control that writes nothing is worse than none. */}
+                {rejection.kind === 'item' ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link to={paths.inventoryItem(rejection.itemId)}>Open item</Link>
+                  </Button>
+                ) : null}
+              </AlertDescription>
             </Alert>
           ) : null}
         </CardContent>

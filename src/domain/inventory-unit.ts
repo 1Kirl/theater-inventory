@@ -6,6 +6,7 @@ import type {
   ConditionCounts, ConditionKey, InventoryItem, InventoryUnit, UnitCounts, UnitStatus,
 } from '@/types/inventory'
 import type { MaintenanceRecord } from '@/types/maintenance'
+import type { InventoryItemInput } from '@/domain/inventory-payloads'
 
 /**
  * The arithmetic of keeping a serialized item's parent in step with its units.
@@ -28,6 +29,43 @@ export const EMPTY_MIRRORS: ItemMirrors = {
   condition_counts: { ...EMPTY_CONDITION_COUNTS },
   quantity_total: 0,
   quantity_available: 0,
+}
+
+/**
+ * The parent item, with its mirrors replaced — as an update input.
+ *
+ * A mirror update is a whole-document write, so every field the parent owns has
+ * to be listed here or it is deleted. Three services used to keep their own
+ * copy of this object and all three omitted `unitCostCents`, which meant adding
+ * a single unit to a serialized item silently erased its estimated cost. The
+ * item still reported a cost until the first unit existed, which is exactly the
+ * moment the cost starts to matter.
+ *
+ * One copy, in the module that already owns the mirror arithmetic, so the next
+ * field added to `InventoryItemInput` has one place to be remembered rather
+ * than three. Nothing here decides anything: the mirrors are computed by the
+ * functions below and the rest is carried through untouched.
+ */
+export function serializedMirrorInput(
+  item: InventoryItem,
+  mirrors: ItemMirrors,
+): InventoryItemInput {
+  return {
+    name: item.name,
+    category: item.category,
+    teamId: item.team_id,
+    trackingMode: 'serialized',
+    unitCounts: mirrors.unit_counts,
+    quantityTotal: mirrors.quantity_total,
+    quantityAvailable: mirrors.quantity_available,
+    conditionCounts: mirrors.condition_counts,
+    location: item.location,
+    // Presence, not truthiness. A known zero is a decision somebody recorded and
+    // must survive; `undefined` stays undefined and remains unknown.
+    unitCostCents: item.unit_cost_cents ?? null,
+    lastInspectedAt: item.last_inspected_at ?? null,
+    notes: item.notes,
+  }
 }
 
 /** Read the mirrors off an item, filling in what a bulk item never had. */

@@ -6,7 +6,9 @@ import { getFirebaseAuth, getFirebaseDb } from '@/lib/firebase'
 import { COLLECTIONS } from '@/domain/organization-ids'
 import { OrganizationError } from '@/domain/organization-errors'
 import { isSerialized } from '@/domain/inventory'
-import { mirrorsOf, withStatusChanged, type ItemMirrors } from '@/domain/inventory-unit'
+import {
+  mirrorsOf, serializedMirrorInput, withStatusChanged,
+} from '@/domain/inventory-unit'
 import { buildBatchAssetEventDocument } from '@/domain/asset-event-payloads'
 import { buildInventoryItemUpdate } from '@/domain/inventory-payloads'
 import {
@@ -39,22 +41,6 @@ function requireUid(): string {
   const user = getFirebaseAuth().currentUser
   if (!user) throw new OrganizationError('not-signed-in', 'You are not signed in.')
   return user.uid
-}
-
-function itemInputWithMirrors(item: InventoryItem, mirrors: ItemMirrors) {
-  return {
-    name: item.name,
-    category: item.category,
-    teamId: item.team_id,
-    trackingMode: 'serialized' as const,
-    unitCounts: mirrors.unit_counts,
-    quantityTotal: mirrors.quantity_total,
-    quantityAvailable: mirrors.quantity_available,
-    conditionCounts: mirrors.condition_counts,
-    location: item.location,
-    lastInspectedAt: item.last_inspected_at ?? null,
-    notes: item.notes,
-  }
 }
 
 /** The unit document a send or return leaves behind. */
@@ -505,7 +491,7 @@ export async function sendUnitsToMaintenance(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
 
     transaction.set(eventRef, buildBatchAssetEventDocument({
@@ -646,7 +632,7 @@ export async function startPlannedMaintenance(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
 
     transaction.set(eventRef, buildBatchAssetEventDocument({
@@ -794,7 +780,7 @@ export async function updateSerializedMaintenance(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
 
     transaction.set(recordRef, buildMaintenanceUpdate({

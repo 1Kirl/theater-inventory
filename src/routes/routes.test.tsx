@@ -10,15 +10,22 @@ import {
 /**
  * The guard chain, asserted as data.
  *
- * Phase 11E moved exactly one route — the equipment deep link — out from under
- * the active organization's guards, because a scanned QR carries a unit id and
- * nothing else: which organization owns that unit is stored in the unit, so a
- * guard bound to whichever organization the browser happens to have open would
- * refuse legitimate scans before the page could find out.
+ * Phase 11E moved one route — the equipment deep link — out from under the
+ * active organization's guards, because a scanned QR carries a document id and
+ * nothing else: which organization owns it is stored in the record, so a guard
+ * bound to whichever organization the browser happens to have open would refuse
+ * legitimate scans before the page could find out.
  *
- * That is a deliberate exception, and exceptions spread. These tests walk the
- * real route tree so that the day somebody adds a page next to it, or re-nests
- * it "for consistency", the suite says so.
+ * Phase 11I moved the item detail page to join it, when bulk items got labels of
+ * their own. Leaving it inside the guards meant they were evaluated against the
+ * wrong organization — a person with inventory access in A, browsing B, was
+ * refused for a record A had already authorized — and two label types with
+ * different cross-organization behavior is worse than one shared resolver.
+ *
+ * So the exception is now exactly two routes, both of which reconstruct the
+ * render boundary in the page via `resolveDeepLink`. Exceptions spread, and
+ * these tests walk the real route tree so that the day somebody adds a third, or
+ * re-nests one "for consistency", the suite says so.
  *
  * No DOM and no router are involved. This inspects configuration, which is
  * exactly the thing at risk.
@@ -63,6 +70,7 @@ function isUnder(path: string, guard: GuardComponent): boolean {
 }
 
 const EQUIPMENT = '/equipment/:unitId'
+const ITEM_DETAIL = '/inventory/:itemId'
 
 describe('the equipment deep link', () => {
   it('is still configured, at the path the QR encodes', () => {
@@ -103,6 +111,8 @@ describe('the exception did not spread', () => {
     // argues otherwise in a decision record.
     const allowedOutside = new Set<string>([
       EQUIPMENT,
+      // The item deep link, for the same reason and with the same resolver.
+      ITEM_DETAIL,
       // The directory asks only for an active membership, so somebody waiting
       // for an assignment can still see who is here. It grants nothing else.
       paths.contacts,
@@ -156,10 +166,34 @@ describe('the exception did not spread', () => {
   })
 
   it('keeps every other inventory page behind the inventory permission', () => {
-    for (const path of [paths.inventory, paths.inventoryNew, paths.scanner, '/inventory/:itemId']) {
+    // The two deep links are absent on purpose; everything else that touches
+    // inventory — including editing an item — still asks the active
+    // organization's guards.
+    for (const path of [paths.inventory, paths.inventoryNew, paths.scanner, '/inventory/:itemId/edit']) {
       expect(isUnder(path, PermissionGuard), path).toBe(true)
       expect(isUnder(path, OrganizationGuard), path).toBe(true)
     }
+  })
+
+  it('places the item deep link exactly where the equipment one is', () => {
+    // Same guards, so the two labels cannot drift into different behavior.
+    for (const path of [EQUIPMENT, ITEM_DETAIL]) {
+      expect(isUnder(path, AuthGuard), path).toBe(true)
+      expect(isUnder(path, OrganizationGuard), path).toBe(false)
+      expect(isUnder(path, PermissionGuard), path).toBe(false)
+      expect(isUnder(path, MembershipGuard), path).toBe(false)
+      expect(isUnder(path, AdminGuard), path).toBe(false)
+    }
+
+    const names = (path: string) => guardsFor(path).map((g) => (g as GuardComponent).name)
+    expect(names(ITEM_DETAIL)).toEqual(names(EQUIPMENT))
+  })
+
+  it('still requires editing an item to pass the guards the deep link skips', () => {
+    // Reading a scanned label is the exception. Changing what it points at is
+    // not, and the edit route is the one that would quietly inherit it.
+    expect(isUnder('/inventory/:itemId/edit', OrganizationGuard)).toBe(true)
+    expect(isUnder('/inventory/:itemId/edit', PermissionGuard)).toBe(true)
   })
 
   it('keeps administration behind the admin guard', () => {

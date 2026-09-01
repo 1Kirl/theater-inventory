@@ -90,10 +90,30 @@ export function publicAppOrigin(): string {
  * equipment beyond which one it is.
  */
 export function equipmentQrUrl(unitId: string, origin = publicAppOrigin()): string {
-  const id = unitId.trim()
-  if (id.length === 0) {
-    throw new Error('A unit id is required to build an equipment link.')
+  return canonicalLink('equipment', unitId, origin, 'unit')
+}
+
+/**
+ * The URL an item's QR code encodes.
+ *
+ * Bulk items have no units to label, and a shelf of two hundred feet of cable is
+ * still one thing somebody needs to look up. This points at the item record,
+ * which is the honest thing for it to identify: it does not claim to be one
+ * piece of the quantity, because no such record exists.
+ *
+ * Same rules as a unit link — the document id, nothing else, and the canonical
+ * origin. A serialized parent can carry one of these too; it does not replace
+ * the units' own labels, which remain the only way to identify a specific piece.
+ */
+export function inventoryItemQrUrl(itemId: string, origin = publicAppOrigin()): string {
+  return canonicalLink('inventory', itemId, origin, 'item')
+}
+
+function canonicalLink(segment: string, id: string, origin: string, what: string): string {
+  const trimmed = id.trim()
+  if (trimmed.length === 0) {
+    throw new Error(`A ${what} id is required to build a label link.`)
   }
 
-  return `${normalizeOrigin(origin)}/equipment/${encodeURIComponent(id)}`
+  return `${normalizeOrigin(origin)}/${segment}/${encodeURIComponent(trimmed)}`
 }

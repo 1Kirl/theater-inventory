@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { FirebaseError } from 'firebase/app'
 import { createScanRunner, type ScanContext } from '@/features/scanner/scan-runner'
-import { equipmentQrUrl } from '@/domain/equipment-links'
+import { equipmentQrUrl, inventoryItemQrUrl } from '@/domain/equipment-links'
 import type { LifecycleAction } from '@/services/unit-lifecycle-service'
 import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 
@@ -54,7 +54,12 @@ function harness(options: {
     },
   })
 
-  return { runner, performed, qr: (id: string) => equipmentQrUrl(id) }
+  return {
+    runner,
+    performed,
+    qr: (id: string) => equipmentQrUrl(id),
+    itemQr: (id: string) => inventoryItemQrUrl(id),
+  }
 }
 
 /** Lets every pending promise settle. */
@@ -66,11 +71,21 @@ describe('pointing the camera at something that is not ours', () => {
 
     const rejection = runner.handleDecoded('https://example.com/equipment/u1')
     expect(rejection?.kind).toBe('invalid_qr')
-    expect(rejection?.message).toContain('not a Theater Inventory equipment label')
+    expect(rejection?.message).toContain('not a Theater Inventory label')
     expect(runner.getSession().entries).toHaveLength(0)
   })
 
-  it.each(['hello world', '', 'WIFI:S:x;;', 'https://theater-inventory.web.app/inventory/i1'])(
+  it.each([
+    'hello world',
+    '',
+    'WIFI:S:x;;',
+    // Was refused outright until item labels existed. It is now a recognised
+    // label — the case below asserts the new answer — so it moved out of this
+    // list rather than being deleted from the suite.
+    'https://theater-inventory.web.app/productions/p1',
+    'https://theater-inventory.web.app/inventory/i1/edit',
+    'https://theater-inventory.web.app/inventory',
+  ])(
     'refuses %s without touching the session',
     (value) => {
       const { runner } = harness()
@@ -78,6 +93,15 @@ describe('pointing the camera at something that is not ours', () => {
       expect(runner.getSession().entries).toHaveLength(0)
     },
   )
+
+  it('now reads /inventory/{id} as an item label instead of refusing it', () => {
+    const { runner } = harness()
+
+    const outcome = runner.handleDecoded('https://theater-inventory.web.app/inventory/i1')
+
+    expect(outcome?.kind).toBe('item')
+    expect(runner.getSession().entries).toHaveLength(0)
+  })
 })
 
 describe('the same code sitting in front of the lens', () => {
@@ -363,5 +387,74 @@ describe('telling the interface what changed', () => {
     await settle()
 
     expect(seen).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * An item label is a real label the scanner has no action for.
+ *
+ * The scanner's three modes are unit lifecycle writes. A bulk item has no unit
+ * to write to — its quantity is a number, not a set of identities — so the only
+ * honest response is to say what was scanned and offer to open it. What must not
+ * happen is a Check Out that appears to work and changes nothing, or an item id
+ * quietly entering the session as though it were a unit.
+ */
+describe('scanning an inventory item label', () => {
+  it('recognises it rather than rejecting it as an unknown code', () => {
+    const { runner } = harness()
+
+    const outcome = runner.handleDecoded(inventoryItemQrUrl('item-1'))
+
+    expect(outcome?.kind).toBe('item')
+    expect(outcome && 'itemId' in outcome ? outcome.itemId : null).toBe('item-1')
+  })
+
+  it('performs no lifecycle write, in any mode', async () => {
+    for (const mode of ['inspect', 'check_out', 'check_in'] as const) {
+      const { runner, performed } = harness()
+      runner.setMode(mode)
+
+      runner.handleDecoded(inventoryItemQrUrl('item-1'))
+      await settle()
+
+      expect(performed).toEqual([])
+    }
+  })
+
+  it('adds nothing to the scan session', async () => {
+    const { runner } = harness()
+
+    runner.handleDecoded(inventoryItemQrUrl('item-1'))
+    await settle()
+
+    expect(runner.getSession().entries).toEqual([])
+  })
+
+  it('does not read the item id as a unit id', async () => {
+    const readUnit = vi.fn(async () => null)
+    const { runner } = harness({ readUnit })
+
+    runner.handleDecoded(inventoryItemQrUrl('item-1'))
+    await settle()
+
+    expect(readUnit).not.toHaveBeenCalled()
+  })
+
+  it('still runs the ordinary unit flow for a unit label', async () => {
+    const { runner, performed } = harness()
+    runner.setMode('check_out')
+
+    runner.handleDecoded(equipmentQrUrl('u1'))
+    await settle()
+
+    expect(performed).toHaveLength(1)
+    expect(runner.getSession().entries).toHaveLength(1)
+  })
+
+  it('still refuses a code that is neither', () => {
+    const { runner } = harness()
+
+    expect(runner.handleDecoded('https://example.com/inventory/item-1')?.kind).toBe('invalid_qr')
+    expect(runner.handleDecoded('not a url')?.kind).toBe('invalid_qr')
   })
 })

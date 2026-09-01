@@ -7,7 +7,7 @@ import { COLLECTIONS } from '@/domain/organization-ids'
 import { OrganizationError } from '@/domain/organization-errors'
 import { canTransition, isOfferedTransition, isSerialized } from '@/domain/inventory'
 import {
-  isOperationallyAvailable, mirrorsOf, withStatusChanged, type ItemMirrors,
+  isOperationallyAvailable, mirrorsOf, serializedMirrorInput, withStatusChanged,
 } from '@/domain/inventory-unit'
 import { buildAssetEventDocument, eventTypeFor } from '@/domain/asset-event-payloads'
 import { buildInventoryUnitUpdate } from '@/domain/inventory-unit-payloads'
@@ -86,22 +86,6 @@ export function lifecycleRefusal(action: LifecycleAction): string | null {
   }
 
   return null
-}
-
-function itemInputWithMirrors(item: InventoryItem, mirrors: ItemMirrors) {
-  return {
-    name: item.name,
-    category: item.category,
-    teamId: item.team_id,
-    trackingMode: 'serialized' as const,
-    unitCounts: mirrors.unit_counts,
-    quantityTotal: mirrors.quantity_total,
-    quantityAvailable: mirrors.quantity_available,
-    conditionCounts: mirrors.condition_counts,
-    location: item.location,
-    lastInspectedAt: item.last_inspected_at ?? null,
-    notes: item.notes,
-  }
 }
 
 /**
@@ -223,7 +207,7 @@ export async function performLifecycleAction(action: LifecycleAction): Promise<v
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
 
     transaction.set(eventRef as DocumentReference, buildAssetEventDocument({

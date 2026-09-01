@@ -11,9 +11,7 @@ import {
 import { buildInventoryItemUpdate } from '@/domain/inventory-payloads'
 import { isSerialized } from '@/domain/inventory'
 import {
-  EMPTY_MIRRORS, MAX_BULK_UNITS, mirrorsOf, promotionMaintenanceBlock, validatePromotion,
-  withConditionChanged, withUnitsAdded,
-  type ItemMirrors, type PromotionDraft,
+  EMPTY_MIRRORS, MAX_BULK_UNITS, mirrorsOf, promotionMaintenanceBlock, serializedMirrorInput, type PromotionDraft, validatePromotion, withConditionChanged, withUnitsAdded,
 } from '@/domain/inventory-unit'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
 import type { InventoryItem, InventoryUnit, UnitStatus } from '@/types/inventory'
@@ -161,23 +159,6 @@ export async function listAssetCodes(organizationId: string): Promise<string[]> 
   return snapshot.docs.map((entry) => (entry.data() as InventoryUnit).asset_code)
 }
 
-/** The parent fields a serialized item mirrors, as an item update input. */
-function itemInputWithMirrors(item: InventoryItem, mirrors: ItemMirrors) {
-  return {
-    name: item.name,
-    category: item.category,
-    teamId: item.team_id,
-    trackingMode: 'serialized' as const,
-    unitCounts: mirrors.unit_counts,
-    quantityTotal: mirrors.quantity_total,
-    quantityAvailable: mirrors.quantity_available,
-    conditionCounts: mirrors.condition_counts,
-    location: item.location,
-    lastInspectedAt: item.last_inspected_at ?? null,
-    notes: item.notes,
-  }
-}
-
 /**
  * A unit's owning team has to exist.
  *
@@ -295,7 +276,7 @@ export async function createInventoryUnits(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
   })
 
@@ -387,7 +368,7 @@ export async function updateInventoryUnit(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, next),
+      input: serializedMirrorInput(item, next),
     }))
   })
 }
@@ -515,7 +496,7 @@ export async function promoteToSerialized(params: {
       createdByUid: item.created_by_uid,
       createdAt: item.created_at,
       now: serverTimestamp,
-      input: itemInputWithMirrors(item, mirrors),
+      input: serializedMirrorInput(item, mirrors),
     }))
   })
 }

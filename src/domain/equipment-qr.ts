@@ -18,13 +18,37 @@ import { publicAppOrigin } from '@/domain/equipment-links'
 
 /**
  * A Firestore document id is never empty, never whitespace, and never contains a
- * path separator. A segment that does is not a unit id however it was encoded.
+ * path separator. A segment that does is not a document id however it was
+ * encoded.
  */
-function isPlausibleUnitId(value: string): boolean {
+function isPlausibleDocumentId(value: string): boolean {
   return value.trim().length > 0 && !value.includes('/') && !value.includes('\\')
 }
 
-export function parseEquipmentQr(value: unknown, origin = publicAppOrigin()): string | null {
+/** Application routes under `/inventory/` that are pages rather than records. */
+const RESERVED_INVENTORY_SEGMENTS = new Set(['new', 'scan'])
+
+/**
+ * What a label turned out to point at.
+ *
+ * Two kinds, because there are two kinds of label. A unit label names one
+ * physical piece and supports the lifecycle actions; an item label names an
+ * inventory record and supports none of them, which is why the difference is in
+ * the type rather than left for a caller to infer from the id.
+ */
+export type ScannedLabel =
+  | { kind: 'unit'; unitId: string }
+  | { kind: 'item'; itemId: string }
+
+/**
+ * Read any of this application's labels.
+ *
+ * Every check the unit-only parser made still applies, unchanged — exact host,
+ * https only, no credentials, no query, no fragment, exactly two path segments.
+ * The only thing that widened is which first segment is accepted, and it is a
+ * closed set of two rather than "anything on our host".
+ */
+export function parseAppQr(value: unknown, origin = publicAppOrigin()): ScannedLabel | null {
   if (typeof value !== 'string') return null
 
   const text = value.trim()
@@ -59,20 +83,39 @@ export function parseEquipmentQr(value: unknown, origin = publicAppOrigin()): st
   // so it is refused rather than trimmed down to something that looks right.
   if (scanned.search.length > 0 || scanned.hash.length > 0) return null
 
-  // Exactly `/equipment/{id}`: two segments, no more. `/equipment/a/b` is not a
-  // unit, and neither is `/inventory/{id}`.
+  // Exactly two segments, no more. `/equipment/a/b` is not a unit, and
+  // `/inventory` on its own is the list page rather than a label.
   const segments = scanned.pathname.split('/').filter((part) => part.length > 0)
   if (segments.length !== 2) return null
-  if (segments[0] !== 'equipment') return null
 
-  const encoded = segments[1] ?? ''
-  let unitId: string
+  const prefix = segments[0]
+  if (prefix !== 'equipment' && prefix !== 'inventory') return null
+
+  let id: string
   try {
-    unitId = decodeURIComponent(encoded)
+    id = decodeURIComponent(segments[1] ?? '')
   } catch {
     // A stray percent sign. Not something our generator produces.
     return null
   }
 
-  return isPlausibleUnitId(unitId) ? unitId : null
+  if (!isPlausibleDocumentId(id)) return null
+
+  // `/inventory/new` and `/inventory/scan` are real application routes that
+  // happen to fit the shape. Neither is a document, and printing a label for one
+  // is impossible, so a scan claiming to be one is refused.
+  if (prefix === 'inventory' && RESERVED_INVENTORY_SEGMENTS.has(id)) return null
+
+  return prefix === 'equipment' ? { kind: 'unit', unitId: id } : { kind: 'item', itemId: id }
+}
+
+/**
+ * A unit label, or nothing.
+ *
+ * Kept for the callers that genuinely accept only a unit, so an item label is a
+ * refusal there rather than something they have to remember to check for.
+ */
+export function parseEquipmentQr(value: unknown, origin = publicAppOrigin()): string | null {
+  const parsed = parseAppQr(value, origin)
+  return parsed?.kind === 'unit' ? parsed.unitId : null
 }
