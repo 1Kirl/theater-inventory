@@ -1,5 +1,7 @@
 import type { FieldValue, Timestamp } from 'firebase/firestore'
-import type { ConditionCounts, TrackingMode, UnitCounts } from '@/types/inventory'
+import type {
+  ConditionCounts, RetirementReason, TrackingMode, UnitCounts, UnitStatus,
+} from '@/types/inventory'
 import { isValidCostCents } from '@/domain/money'
 
 /**
@@ -34,6 +36,19 @@ export interface InventoryItemInput {
   unitCostCents?: number | null
   lastInspectedAt?: Timestamp | null
   notes?: string | undefined
+  /**
+   * A bulk item's lifecycle status, and the history it points at.
+   *
+   * Carried rather than set, in every caller but the lifecycle service itself.
+   * An update replaces the whole document, so a form that did not pass these
+   * through would silently return a retired item to `available` and drop the
+   * event that explains how it got there — the same trap `trackingMode`
+   * documents above, and the reason `undefined` is preserved as `undefined`
+   * here instead of being defaulted.
+   */
+  status?: UnitStatus | undefined
+  retirementReason?: RetirementReason | undefined
+  lastLifecycleEventId?: string | undefined
 }
 
 /** Fields the user may set. Identity and authorship are not among them. */
@@ -61,6 +76,16 @@ function editableFields(input: InventoryItemInput) {
       : {}),
     ...(input.lastInspectedAt ? { last_inspected_at: input.lastInspectedAt } : {}),
     ...(notes ? { notes } : {}),
+    // Bulk only. A serialized item's units carry their own statuses and Rules
+    // refuse the field here, so it is dropped rather than passed along if a
+    // caller ever hands one over.
+    ...(trackingMode === 'bulk' && input.status ? { status: input.status } : {}),
+    ...(trackingMode === 'bulk' && input.status === 'retired' && input.retirementReason
+      ? { retirement_reason: input.retirementReason }
+      : {}),
+    ...(trackingMode === 'bulk' && input.lastLifecycleEventId
+      ? { last_lifecycle_event_id: input.lastLifecycleEventId }
+      : {}),
   }
 }
 

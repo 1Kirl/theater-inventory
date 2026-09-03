@@ -120,12 +120,60 @@ describe('equipment lifecycle chart', () => {
     expect(chart.serializedItemCount).toBe(2)
   })
 
-  it('7. ignores bulk items entirely', () => {
+  it('7. counts a bulk item once, never by its quantity', () => {
+    // QA-13. The rule the whole aggregation rests on: five hundred cables are
+    // one thing with one status. Adding the quantity would bury the
+    // individually tracked equipment under numbers that were never units.
     const chart = lifecycleChart([bulk({ quantity_total: 500 })])
 
+    expect(chart.bulkItemCount).toBe(1)
     expect(chart.serializedItemCount).toBe(0)
-    expect(chart.total).toBe(0)
-    for (const slice of chart.slices) expect(slice.value).toBe(0)
+    expect(chart.total).toBe(1)
+    expect(valueOf(chart.slices, 'available')).toBe(1)
+  })
+
+  it('7a. reads a bulk item with no stored status as available', () => {
+    // Every bulk item written before item lifecycle existed is in exactly this
+    // position, and nothing is migrated to make it true.
+    const { status: _dropped, ...legacy } = { ...bulk(), status: undefined }
+    const chart = lifecycleChart([legacy as InventoryItem])
+
+    expect(valueOf(chart.slices, 'available')).toBe(1)
+    expect(chart.bulkItemCount).toBe(1)
+  })
+
+  it('7b. places a bulk item under its own status', () => {
+    const chart = lifecycleChart([
+      bulk({ item_id: 'a', status: 'in_use' }),
+      bulk({ item_id: 'b', status: 'in_use' }),
+      bulk({ item_id: 'c', status: 'lost' }),
+      bulk({ item_id: 'd', status: 'retired' }),
+    ])
+
+    expect(valueOf(chart.slices, 'in_use')).toBe(2)
+    expect(valueOf(chart.slices, 'lost')).toBe(1)
+    expect(valueOf(chart.slices, 'retired')).toBe(1)
+    // Retired is history, not active equipment — the same rule units follow.
+    expect(chart.activeTotal).toBe(3)
+    expect(chart.total).toBe(4)
+  })
+
+  it('7c. adds individual units and bulk items together', () => {
+    // The worked example from QA-13: units contribute per unit, bulk items
+    // contribute one apiece.
+    const chart = lifecycleChart([
+      serialized({ item_id: 's', unit_counts: counts({ active_total: 14, available: 10, in_use: 4 }) }),
+      bulk({ item_id: 'b1', status: 'available' }),
+      bulk({ item_id: 'b2', status: 'available' }),
+      bulk({ item_id: 'b3', status: 'available' }),
+      bulk({ item_id: 'b4', status: 'in_use' }),
+      bulk({ item_id: 'b5', status: 'in_use' }),
+    ])
+
+    expect(valueOf(chart.slices, 'available')).toBe(13)
+    expect(valueOf(chart.slices, 'in_use')).toBe(6)
+    expect(chart.serializedItemCount).toBe(1)
+    expect(chart.bulkItemCount).toBe(5)
   })
 
   it('8. ignores an item marked serialized that has no unit counts', () => {
@@ -135,10 +183,10 @@ describe('equipment lifecycle chart', () => {
     expect(chart.serializedItemCount).toBe(0)
   })
 
-  it('8a. ignores a bulk item that still carries unit counts', () => {
+  it('8a. ignores unit counts left on a bulk item, and counts the item once', () => {
     // `trackingModeOf` reads an absent mode as bulk, so counts left on an item
-    // that is not serialized are stale data, not equipment. Charting them would
-    // put a quantity nobody counted piece by piece onto the unit ring.
+    // that is not serialized are stale data, not equipment. They must not reach
+    // the ring — the item contributes itself, and nothing else.
     const { tracking_mode: _omitted, ...withoutMode } = bulk()
     const chart = lifecycleChart([
       { ...bulk(), tracking_mode: 'bulk', unit_counts: counts() },
@@ -147,7 +195,10 @@ describe('equipment lifecycle chart', () => {
     ])
 
     expect(chart.serializedItemCount).toBe(0)
-    expect(chart.total).toBe(0)
+    expect(chart.bulkItemCount).toBe(2)
+    // Two items, not the eighteen their stale counts would have contributed.
+    expect(chart.total).toBe(2)
+    expect(valueOf(chart.slices, 'available')).toBe(2)
   })
 
   it('9. reports no items rather than an empty chart when there is nothing', () => {

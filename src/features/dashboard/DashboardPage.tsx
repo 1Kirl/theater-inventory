@@ -134,9 +134,12 @@ function lifecycleSummaryText(chart: LifecycleChart): string {
     .filter((slice) => slice.value > 0)
     .map((slice) => `${slice.label}: ${String(slice.value)}`)
 
+  // "Pieces" rather than "units": the ring now mixes individually tracked units
+  // with whole bulk items, and calling a box of twenty cables a unit would be
+  // the same overstatement the counting rule exists to avoid.
   return parts.length === 0
-    ? 'Equipment status: no individually tracked units.'
-    : `Equipment status, ${String(chart.total)} units in total. ${parts.join('. ')}.`
+    ? 'Equipment status: nothing tracked yet.'
+    : `Equipment status, ${String(chart.total)} in total. ${parts.join('. ')}.`
 }
 
 /** True only when the module was requested and came back. */
@@ -338,9 +341,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Equipment status</CardTitle>
-              <CardDescription>
-  Individually tracked equipment only. Bulk quantities are not counted.
-</CardDescription>
+              <CardDescription>Current equipment by status.</CardDescription>
             </CardHeader>
             {/*
               * A vertical composition: the ring first, at a size that makes it
@@ -370,12 +371,12 @@ export function DashboardPage() {
               * second layout to maintain.
               */}
             <CardContent className="flex flex-1 flex-col justify-center">
-              {lifecycle.serializedItemCount === 0 ? (
+              {lifecycle.serializedItemCount + lifecycle.bulkItemCount === 0 ? (
                 <div className="border-border flex w-full flex-col items-center gap-2 rounded-lg border border-dashed bg-surface-sunken px-4 py-8 text-center">
                   <Package className="text-muted-foreground size-5" aria-hidden="true" />
-                  <p className="text-sm font-medium">No individually tracked equipment yet</p>
+                  <p className="text-sm font-medium">No equipment yet</p>
                   <p className="text-muted-foreground text-xs">
-                    Items tracked as a bulk quantity have no per-unit status to chart.
+                    Add an item and its status appears here.
                   </p>
                 </div>
               ) : (

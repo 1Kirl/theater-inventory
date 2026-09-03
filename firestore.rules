@@ -629,16 +629,23 @@ service cloud.firestore {
                 'quantity_available', 'condition_counts', 'location', 'created_by_uid',
                 'created_at', 'updated_at'],
                ['tracking_mode', 'unit_counts', 'last_inspected_at', 'notes',
-                'unit_cost_cents'])
+                'unit_cost_cents', 'status', 'retirement_reason',
+                'last_lifecycle_event_id'])
         && trackingModeOf(request.resource.data) in ['bulk', 'serialized']
         // A bulk item has no units, so it has nothing to summarize. Written as
         // two guarded alternatives rather than a ternary: `&&` short-circuits
         // reliably here, so the mirror checks never look at a map a bulk item
         // does not carry.
         && ((trackingModeOf(request.resource.data) == 'serialized'
-             && serializedMirrorsValid(request.resource.data))
+             && serializedMirrorsValid(request.resource.data)
+             // A serialized item's units each carry their own status. A second
+             // answer here would be a contradiction with nothing to resolve it.
+             && !('status' in request.resource.data)
+             && !('retirement_reason' in request.resource.data)
+             && !('last_lifecycle_event_id' in request.resource.data))
             || (trackingModeOf(request.resource.data) == 'bulk'
-                && !('unit_counts' in request.resource.data)))
+                && !('unit_counts' in request.resource.data)
+                && itemStatusShapeValid()))
         && request.resource.data.item_id == itemId
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
@@ -695,6 +702,65 @@ service cloud.firestore {
       );
     }
 
+    /**
+     * A bulk item's own lifecycle status, defaulting the way the client does.
+     *
+     * Absent reads as `available`, which is what every item written before item
+     * lifecycle existed is. Nothing has to be migrated for that to be true.
+     */
+    function itemStatusOf(data) {
+      return 'status' in data ? data.status : 'available';
+    }
+
+    /** The status field and its companion, checked without reference to the move. */
+    function itemStatusShapeValid() {
+      return itemStatusOf(request.resource.data) in
+               ['available', 'in_use', 'in_maintenance', 'lost', 'retired']
+        && (itemStatusOf(request.resource.data) == 'retired'
+            ? ('retirement_reason' in request.resource.data
+               && request.resource.data.retirement_reason in
+                    ['disposed', 'permanently_lost', 'donated', 'sold', 'other'])
+            : !('retirement_reason' in request.resource.data));
+    }
+
+    /**
+     * A bulk item's status move, and the history that has to come with it.
+     *
+     * The same device the unit rule uses: Rules cannot search a collection, so
+     * the item names the event and the event is read back to confirm it
+     * describes this move. An item cannot change state without leaving a
+     * record, and a record cannot be filed for a move that did not happen.
+     */
+    function itemLifecycleEventValid() {
+      return 'last_lifecycle_event_id' in request.resource.data
+        && request.resource.data.last_lifecycle_event_id
+             != resource.data.get('last_lifecycle_event_id', '')
+        && existsAfter(eventPath(request.resource.data.last_lifecycle_event_id))
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .inventory_item_id == request.resource.data.item_id
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .from_status == itemStatusOf(resource.data)
+        && getAfter(eventPath(request.resource.data.last_lifecycle_event_id)).data
+             .to_status == itemStatusOf(request.resource.data);
+    }
+
+    /**
+     * Either the status stayed put and its history pointer stayed with it, or
+     * it moved along an allowed edge and brought a new event.
+     *
+     * `unitTransitionAllowed` is reused deliberately: the shape of the
+     * lifecycle is one thing in this product, and a second table for bulk items
+     * would be a second answer to drift from.
+     */
+    function itemStatusTransitionValid() {
+      return itemStatusOf(request.resource.data) == itemStatusOf(resource.data)
+        ? request.resource.data.get('last_lifecycle_event_id', '')
+            == resource.data.get('last_lifecycle_event_id', '')
+        : (unitTransitionAllowed(itemStatusOf(resource.data),
+                                 itemStatusOf(request.resource.data))
+           && itemLifecycleEventValid());
+    }
+
     match /inventory_items/{itemId} {
 
       // Organization-wide read for anyone with the module, Admin included.
@@ -732,7 +798,8 @@ service cloud.firestore {
             : (canWriteInventoryForTeam(resource.data.organization_id, resource.data.team_id)
                && (request.resource.data.team_id == resource.data.team_id
                    || canWriteInventoryForTeam(resource.data.organization_id,
-                                               request.resource.data.team_id))));
+                                               request.resource.data.team_id))
+               && itemStatusTransitionValid()));
 
       // No delete flow in the MVP. Maintenance history and, from Phase 5,
       // production requirements reference these items.
@@ -1723,8 +1790,29 @@ service cloud.firestore {
         ['sent_to_maintenance', 'returned_from_maintenance'];
     }
 
+    /**
+     * A bulk item's own move, which names no unit because a bulk item has none.
+     *
+     * Detected by absence rather than by event type, and checked before the
+     * batch test, which is what makes this addition invisible to everything
+     * already written: every existing event carries one of the two unit fields,
+     * so every existing event still routes exactly where it did. A bulk item's
+     * maintenance move shares the batch vocabulary — `sent_to_maintenance` —
+     * and would otherwise be misrouted into the batch shape and refused for a
+     * unit list it can never have.
+     */
+    function isItemEvent() {
+      return !('inventory_unit_id' in request.resource.data)
+        && !('inventory_unit_ids' in request.resource.data);
+    }
+
     function assetEventFieldsValid(eventId) {
-      return (isBatchEvent()
+      return (isItemEvent()
+              ? hasExactly(
+                  ['event_id', 'organization_id', 'inventory_item_id', 'event_type',
+                   'from_status', 'to_status', 'actor_uid', 'occurred_at'],
+                  ['using_team_id', 'using_member_uid', 'retirement_reason', 'note'])
+              : isBatchEvent()
               ? hasExactly(
                   ['event_id', 'organization_id', 'inventory_item_id', 'inventory_unit_ids',
                    'maintenance_record_id', 'event_type', 'from_status', 'to_status',
@@ -1760,7 +1848,11 @@ service cloud.firestore {
         && (!('note' in request.resource.data)
             || (request.resource.data.note is string
                 && request.resource.data.note.size() <= 2000))
-        && (!isBatchEvent()
+        // Item events share the maintenance verbs but have no unit list, so they
+        // are excluded here rather than being asked for one they cannot have.
+        // Their own move is checked against the item in `assetEventMatchesItem`.
+        && (isItemEvent()
+            || !isBatchEvent()
             || (request.resource.data.inventory_unit_ids is list
                 && request.resource.data.inventory_unit_ids.size() > 0
                 && request.resource.data.inventory_unit_ids.size() <= 200
@@ -1832,12 +1924,42 @@ service cloud.firestore {
                                     getAfter(unitPath(data.inventory_unit_id)).data.team_id);
     }
 
+    /**
+     * The item as it will be once this write commits.
+     *
+     * The mirror of `assetEventMatchesUnit`, reading the item instead of a
+     * unit. It is what stops an event being filed against an item the actor has
+     * no authority over, and what keeps the log honest: `from_status` and
+     * `to_status` both have to be what the item actually was and became, so a
+     * history line cannot claim a move that did not happen, and the item has to
+     * point back at this event, which stops a spare event riding along with a
+     * legitimate transition.
+     *
+     * The item must be a bulk one. A serialized item cannot carry `status` at
+     * all, so `itemStatusOf` would read `available` for it forever and an event
+     * claiming to move it would be describing nothing.
+     */
+    function assetEventMatchesItem(data) {
+      return existsAfter(itemPath(data.inventory_item_id))
+        && getAfter(itemPath(data.inventory_item_id)).data.organization_id == data.organization_id
+        && trackingModeOf(getAfter(itemPath(data.inventory_item_id)).data) == 'bulk'
+        && exists(itemPath(data.inventory_item_id))
+        && itemStatusOf(get(itemPath(data.inventory_item_id)).data) == data.from_status
+        && itemStatusOf(getAfter(itemPath(data.inventory_item_id)).data) == data.to_status
+        && getAfter(itemPath(data.inventory_item_id)).data
+             .get('last_lifecycle_event_id', '') == data.event_id
+        && canWriteInventoryForTeam(data.organization_id,
+                                    getAfter(itemPath(data.inventory_item_id)).data.team_id);
+    }
+
     match /asset_events/{eventId} {
 
       allow get, list: if canViewInventory(resource.data.organization_id);
 
       allow create: if assetEventFieldsValid(eventId)
-        && (isBatchEvent()
+        && (isItemEvent()
+            ? assetEventMatchesItem(request.resource.data)
+            : isBatchEvent()
             ? batchEventMatchesRecord(request.resource.data)
             : assetEventMatchesUnit(request.resource.data));
 

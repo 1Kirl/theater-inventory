@@ -133,6 +133,34 @@ export function isSerialized(item: Pick<InventoryItem, 'tracking_mode'>): boolea
   return trackingModeOf(item) === 'serialized'
 }
 
+/**
+ * A bulk item's lifecycle status, defaulting the way `trackingModeOf` does.
+ *
+ * Absent means `available`. Every bulk item written before item lifecycle
+ * existed is in exactly that position, and reading the field directly would
+ * make each of those an `undefined` to handle at every call site.
+ *
+ * Only meaningful for a bulk item. A serialized item's units each carry their
+ * own status and the item mirrors them in `unit_counts`; asking this of one
+ * would invent a sixth answer next to the five its units already give.
+ */
+export function itemStatusOf(item: Pick<InventoryItem, 'status'>): UnitStatus {
+  return item.status ?? 'available'
+}
+
+/**
+ * Whether this item's own lifecycle status means anything.
+ *
+ * Bulk only, by construction rather than by convention: Security Rules refuse
+ * `status` on a serialized item, so a serialized one can never carry a value
+ * for this to read.
+ */
+export function tracksItemStatus(
+  item: Pick<InventoryItem, 'tracking_mode'>,
+): boolean {
+  return trackingModeOf(item) === 'bulk'
+}
+
 export const EMPTY_UNIT_COUNTS: UnitCounts = {
   active_total: 0,
   available: 0,
@@ -304,6 +332,40 @@ const OFFERED_ACTIONS: Record<UnitStatus, readonly UnitStatus[]> = {
   in_maintenance: [],
   lost: ['available', 'retired'],
   retired: [],
+}
+
+/**
+ * The moves offered on a bulk item's own lifecycle.
+ *
+ * Deliberately not the same list as `OFFERED_ACTIONS`, and the difference is
+ * the maintenance pair. A *unit* cannot be moved in or out of maintenance from
+ * its own page because Rules require it to name the repair it is away for, and
+ * creating that record is the other half of the operation.
+ *
+ * A bulk item carries no such pointer. Bulk repairs have always been recorded
+ * as a quantity on `maintenance_records` — four of the twenty-four went out —
+ * and have never touched the item document at all. So moving the group's state
+ * to `in_maintenance` leaves nothing half-written, and there is no record for
+ * it to disagree with: the repair records go on being the authority on *how
+ * many* are out, and this says what has happened to the group.
+ *
+ * `retired` stays terminal, as it is for a unit. The shape of the lifecycle is
+ * `canTransition`; this is only what the application offers a person to do.
+ */
+const OFFERED_BULK_ACTIONS: Record<UnitStatus, readonly UnitStatus[]> = {
+  available: ['in_use', 'in_maintenance', 'lost', 'retired'],
+  in_use: ['available', 'in_maintenance', 'lost', 'retired'],
+  in_maintenance: ['available', 'lost', 'retired'],
+  lost: ['available', 'retired'],
+  retired: [],
+}
+
+export function offeredBulkTransitions(from: UnitStatus): readonly UnitStatus[] {
+  return OFFERED_BULK_ACTIONS[from] ?? []
+}
+
+export function isOfferedBulkTransition(from: UnitStatus, to: UnitStatus): boolean {
+  return OFFERED_BULK_ACTIONS[from]?.includes(to) ?? false
 }
 
 export function isOfferedTransition(from: UnitStatus, to: UnitStatus): boolean {

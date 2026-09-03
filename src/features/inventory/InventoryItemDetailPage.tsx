@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { canEditTeamScopedRecord, hasModuleAccess } from '@/domain/module-access'
-import { CONDITION_KEYS, CONDITION_LABELS, isSerialized } from '@/domain/inventory'
+import { CONDITION_KEYS, CONDITION_LABELS, isSerialized, itemStatusOf } from '@/domain/inventory'
 import { currentlyInService, isOverdue } from '@/domain/maintenance'
 import { promotionMaintenanceBlock } from '@/domain/inventory-unit'
 import { conditionSummaryLabel, teamNameOf, unclassifiedOf } from '@/features/inventory/inventory-view'
@@ -18,6 +18,10 @@ import { ItemQrCard } from '@/features/inventory/ItemQrCard'
 import { DeepLinkNotice } from '@/features/inventory/DeepLinkNotice'
 import { resolveDeepLink } from '@/features/inventory/record-deep-link'
 import { PromoteToSerializedDialog } from '@/features/inventory/PromoteToSerializedDialog'
+import { ItemLifecycleDialog } from '@/features/inventory/ItemLifecycleDialog'
+import { itemLifecyclePanel } from '@/features/inventory/item-lifecycle-view'
+import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { unitStatusTone } from '@/domain/status-tone'
 import { statusLabel, maintenanceStatusTone } from '@/features/maintenance/maintenance-view'
 import { getInventoryItem } from '@/services/inventory-service'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
@@ -51,6 +55,7 @@ export function InventoryItemDetailPage() {
   const [records, setRecords] = useState<MaintenanceRecord[]>([])
   const [failure, setFailure] = useState<unknown>(null)
   const [promoting, setPromoting] = useState(false)
+  const [managingStatus, setManagingStatus] = useState(false)
 
   // In Service is derived from maintenance data, so it follows the maintenance
   // permission — the same principle as the dashboard cards. Without it Rules
@@ -121,6 +126,7 @@ export function InventoryItemDetailPage() {
 
   const canEdit = canEditTeamScopedRecord(role, membership, 'inventory', item.team_id)
   const serialized = isSerialized(item)
+  const lifecyclePanelForItem = itemLifecyclePanel({ item, role, membership })
   const unclassified = unclassifiedOf(item)
   // Repairs are recorded as a quantity, not against named units, so an open one
   // cannot survive the conversion. `records` is empty without the maintenance
@@ -197,6 +203,42 @@ export function InventoryItemDetailPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {/*
+        * A bulk item's own lifecycle, which is a different question from how
+        * much of it there is. The card below goes on answering that one.
+        *
+        * Serialized items have nothing here: each of their units carries its
+        * own status, and the Summary card already reports the spread.
+        */}
+      {serialized ? null : (
+        <Card>
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <CardTitle className="text-base">Status</CardTitle>
+                <CardDescription>
+                  Where this item is in its life. Separate from the quantities below.
+                </CardDescription>
+              </div>
+              {lifecyclePanelForItem.visible && lifecyclePanelForItem.actions.length > 0 ? (
+                <Button size="sm" variant="outline" onClick={() => setManagingStatus(true)}>
+                  Manage status
+                </Button>
+              ) : null}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <StatusBadge
+              tone={unitStatusTone(itemStatusOf(item))}
+              label={UNIT_STATUS_LABELS[itemStatusOf(item)]}
+            />
+            {lifecyclePanelForItem.reason ? (
+              <p className="text-muted-foreground text-sm">{lifecyclePanelForItem.reason}</p>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -455,6 +497,15 @@ export function InventoryItemDetailPage() {
           open={promoting}
           onOpenChange={setPromoting}
           onConverted={load}
+        />
+      ) : null}
+
+      {managingStatus ? (
+        <ItemLifecycleDialog
+          item={item}
+          open={managingStatus}
+          onOpenChange={setManagingStatus}
+          onDone={load}
         />
       ) : null}
     </div>
