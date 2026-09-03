@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { CONDITION_KEYS, CONDITION_LABELS } from '@/domain/inventory'
 import { assignableTeamIds } from '@/domain/module-access'
 import { useOrganization } from '@/features/organizations/useOrganization'
-import { planBulkGeneration } from '@/domain/inventory-unit'
+import { nextStartFor, planBulkGeneration } from '@/domain/inventory-unit'
 import { createInventoryUnits } from '@/services/inventory-unit-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { ConditionKey, InventoryItem } from '@/types/inventory'
@@ -33,7 +33,16 @@ const PREVIEW_LIMIT = 8
  */
 export function BulkGenerateUnitsDialog({ item, usedCodes, open, onOpenChange, onSaved }: Props) {
   const [prefix, setPrefix] = useState(item.name.slice(0, 8).toUpperCase().replace(/\s+/g, '-'))
-  const [start, setStart] = useState('1')
+  /**
+   * Empty means "use the suggestion", which is why this starts empty rather
+   * than at '1'.
+   *
+   * The suggestion follows the prefix, so changing the prefix re-answers the
+   * question; anything typed here is kept exactly as typed and is never
+   * recomputed underneath the person typing it. Clearing the field hands the
+   * decision back rather than falling to zero.
+   */
+  const [start, setStart] = useState('')
   const [count, setCount] = useState('10')
   const [condition, setCondition] = useState<ConditionKey>('good')
   const [storageLocation, setStorageLocation] = useState(item.location)
@@ -47,9 +56,14 @@ export function BulkGenerateUnitsDialog({ item, usedCodes, open, onOpenChange, o
   // time, which is how they actually come up.
   const [owningTeamId, setOwningTeamId] = useState(item.team_id)
 
+  // One past the highest number already used under this prefix, so a second run
+  // does not restart at 1 and collide with the batch already on the shelf.
+  const suggestedStart = nextStartFor(prefix, usedCodes)
+  const effectiveStart = start.trim() === '' ? suggestedStart : Number(start)
+
   const plan = planBulkGeneration({
     prefix,
-    start: Number(start),
+    start: effectiveStart,
     count: Number(count),
     existingCodes: usedCodes,
   })
@@ -108,6 +122,7 @@ export function BulkGenerateUnitsDialog({ item, usedCodes, open, onOpenChange, o
                 id="bulk-start"
                 inputMode="numeric"
                 value={start}
+                placeholder={String(suggestedStart)}
                 onChange={(event) => setStart(event.target.value)}
                 disabled={submitting}
               />

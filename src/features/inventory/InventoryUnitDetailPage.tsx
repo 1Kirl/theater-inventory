@@ -187,9 +187,8 @@ export function InventoryUnitDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">This unit</CardTitle>
           <CardDescription>
-            This unit&rsquo;s own team, condition, and whereabouts. Status follows what happens to
-            the equipment; condition is recorded by hand.
-          </CardDescription>
+  Status follows what happens to the equipment; condition is recorded by hand.
+</CardDescription>
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -293,9 +292,8 @@ export function InventoryUnitDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Current repair</CardTitle>
             <CardDescription>
-              This unit is away. The details live on the repair record rather than being copied
-              here.
-            </CardDescription>
+  This unit is away. The details are on the repair record.
+</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <dl className="grid gap-4 sm:grid-cols-3">
@@ -337,9 +335,8 @@ export function InventoryUnitDetailPage() {
           <CardHeader>
             <CardTitle className="text-base">Planned maintenance</CardTitle>
             <CardDescription>
-              This unit is intended for a repair that has not started. It is not reserved and may
-              still be used; availability is checked again when the repair begins.
-            </CardDescription>
+  Planned for a repair that has not started. It is not reserved and may still be used.
+</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <dl className="grid gap-4 sm:grid-cols-3">

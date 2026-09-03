@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Timestamp } from 'firebase/firestore'
 import {
-  dashboardAccess, hasAnyAccess, summarizeCalendar, summarizeInventory,
+  dashboardAccess, hasAnyAccess, summarizeActionItems, summarizeCalendar, summarizeInventory,
   summarizeMaintenance, summarizeProductions, upcomingEvents,
 } from '@/features/dashboard/dashboard-summary'
 import { EMPTY_CONDITION_COUNTS } from '@/domain/inventory'
@@ -578,5 +578,70 @@ describe('what counts as equipment currently away for repair', () => {
     )
 
     expect(summary.openCount).toBe(2)
+  })
+})
+
+describe('summarizeActionItems', () => {
+  it('counts only work that is still open', () => {
+    // The same rule Needs & Actions page and the productions card use:
+    // done and cancelled are finished, to-do and in-progress are not.
+    const summary = summarizeActionItems([
+      action({ status: 'todo' }),
+      action({ status: 'in_progress' }),
+      action({ status: 'done' }),
+      action({ status: 'cancelled' }),
+    ])
+
+    expect(summary.openCount).toBe(2)
+  })
+
+  it('splits the open work by what it calls for', () => {
+    const summary = summarizeActionItems([
+      action({ action_type: 'buy', status: 'todo' }),
+      action({ action_type: 'buy', status: 'in_progress' }),
+      action({ action_type: 'build', status: 'todo' }),
+      action({ action_type: 'repair', status: 'todo' }),
+    ])
+
+    expect(summary.openByType).toEqual({ buy: 2, rent: 0, build: 1, repair: 1 })
+  })
+
+  it('leaves closed work out of the breakdown as well as the total', () => {
+    // A card that counted four open actions and then listed five would be
+    // reporting two different answers to the same question.
+    const summary = summarizeActionItems([
+      action({ action_type: 'rent', status: 'done' }),
+      action({ action_type: 'rent', status: 'cancelled' }),
+    ])
+
+    expect(summary.openCount).toBe(0)
+    expect(summary.openByType.rent).toBe(0)
+  })
+
+  it('adds the breakdown back up to the open total', () => {
+    const actions = [
+      action({ action_type: 'buy', status: 'todo' }),
+      action({ action_type: 'rent', status: 'in_progress' }),
+      action({ action_type: 'build', status: 'done' }),
+      action({ action_type: 'repair', status: 'todo' }),
+    ]
+    const summary = summarizeActionItems(actions)
+    const fromBreakdown = Object.values(summary.openByType).reduce((sum, n) => sum + n, 0)
+
+    expect(fromBreakdown).toBe(summary.openCount)
+  })
+
+  it('keeps a total that includes closed work, so an empty card can say why', () => {
+    // Nothing planned yet and everything already finished both show zero open
+    // actions, and they are not the same message.
+    expect(summarizeActionItems([]).totalCount).toBe(0)
+    expect(summarizeActionItems([action({ status: 'done' })].concat()).totalCount).toBe(1)
+  })
+
+  it('reports every type as zero when there is nothing at all', () => {
+    const summary = summarizeActionItems([])
+
+    expect(summary.openCount).toBe(0)
+    expect(summary.openByType).toEqual({ buy: 0, rent: 0, build: 0, repair: 0 })
   })
 })

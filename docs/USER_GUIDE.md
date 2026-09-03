@@ -80,7 +80,7 @@ later, those permissions come straight back.
 |---|---|---|
 | **Inventory** | See all inventory and equipment in the organization | Create and change items and units owned by *your* teams |
 | **Maintenance** | See all repair records | Create and change repairs for *your* teams |
-| **Productions** | See productions, requirements, and the Action List | Create and change them; requirements and actions are limited to *your* teams |
+| **Productions** | See productions, requirements, and Needs & Actions | Create and change them; requirements and actions are limited to *your* teams |
 | **Calendar** | See the whole schedule | Create and change any event |
 
 **Reading is organization-wide; editing is team-limited.** You can see every crew's equipment,
@@ -90,7 +90,7 @@ Two modules are organization-level for editing as well: productions themselves a
 carry no owning team, so `edit` on those lets you change any of them.
 
 The **Dashboard** has no permission of its own — each card follows the module it summarizes, and is
-absent rather than empty when you cannot see that module. The **Action List** follows Productions.
+absent rather than empty when you cannot see that module. The **Needs & Actions** follows Productions.
 
 ### For Admins: assigning someone
 
@@ -317,7 +317,7 @@ Four kinds:
 Each action carries a quantity, a status (To Do, In Progress, Done, Cancelled), optionally an
 assignee, a due date, and an estimated cost per unit.
 
-The **Action List** collects every action across every production in one place, so somebody
+The **Needs & Actions** collects every action across every production in one place, so somebody
 responsible for getting things done has one list rather than several.
 
 ### Production cost

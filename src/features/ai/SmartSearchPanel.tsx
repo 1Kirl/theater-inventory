@@ -10,6 +10,7 @@ import { aiFailureMessage } from '@/features/ai/ai-errors'
 import { reportAiFailure } from '@/features/ai/ai-diagnostics'
 import type { SmartSearchResult } from '@/features/ai/smart-search'
 import { MAX_QUERY_LENGTH, askInventoryQuestion } from '@/features/ai/smart-search-service'
+import { AI_SEARCHING, AiThinking } from '@/features/ai/AiThinking'
 import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { unitStatusTone } from '@/domain/status-tone'
@@ -105,6 +106,8 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
             {running ? 'Looking…' : 'Ask'}
           </Button>
         </form>
+
+        {running ? <AiThinking label={AI_SEARCHING} /> : null}
 
         {/* Stacked on a phone, chips on a wider screen. The button base sets
             `whitespace-nowrap` and `shrink-0`, which together make a long

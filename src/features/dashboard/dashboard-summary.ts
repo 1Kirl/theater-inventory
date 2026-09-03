@@ -7,7 +7,7 @@ import { hasModuleAccess } from '@/domain/module-access'
 import type { EffectiveRole } from '@/domain/effective-role'
 import type { InventoryItem } from '@/types/inventory'
 import type { MaintenanceRecord } from '@/types/maintenance'
-import type { ActionItem, Production, ProductionRequirement } from '@/types/production'
+import type { ActionItem, ActionType, Production, ProductionRequirement } from '@/types/production'
 import type { CalendarEvent } from '@/types/calendar'
 import type { ModulePermissions } from '@/types/organization'
 
@@ -207,6 +207,40 @@ export function summarizeProductions(params: {
     ),
     active: rows.slice(0, params.limit ?? 3),
   }
+}
+
+export interface ActionsSummary {
+  /** Actions still to do or in progress. What the card reports. */
+  openCount: number
+  /** The same open actions, split by the work they call for. */
+  openByType: Record<ActionType, number>
+  /** Every action ever raised, open or not, so an empty card can say which it is. */
+  totalCount: number
+}
+
+/**
+ * Needs & Actions, counted the way its own page counts it.
+ *
+ * The dashboard already loads action items — the productions module reads them
+ * alongside productions and requirements — so this is arithmetic over records
+ * the page has in hand, not a new query and not a stored aggregate.
+ *
+ * Open is `isOpenAction`, the same predicate the list page and the production
+ * summary use. Done and cancelled work is excluded from the breakdown but still
+ * counted in `totalCount`, which is what lets the card tell "nothing has been
+ * planned yet" apart from "everything is finished".
+ */
+export function summarizeActionItems(actions: readonly ActionItem[]): ActionsSummary {
+  const openByType: Record<ActionType, number> = { buy: 0, rent: 0, build: 0, repair: 0 }
+  let openCount = 0
+
+  for (const action of actions) {
+    if (!isOpenAction(action.status)) continue
+    openCount += 1
+    openByType[action.action_type] += 1
+  }
+
+  return { openCount, openByType, totalCount: actions.length }
 }
 
 /**

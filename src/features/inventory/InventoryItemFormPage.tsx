@@ -346,7 +346,7 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
               <Input
                 id={`${fieldId}-cost`}
                 inputMode="decimal"
-                placeholder="18.50"
+                placeholder="$XX.XX"
                 value={state.unitCost}
                 onChange={(event) => set('unitCost', event.target.value)}
                 disabled={submitting}
@@ -402,9 +402,8 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
             <CardHeader>
               <CardTitle className="text-base">Units</CardTitle>
               <CardDescription>
-                Save the item first, then add its units from the item page. Totals
-                and condition are counted from the units themselves.
-              </CardDescription>
+  Save the item first, then add units from its page. Totals come from the units.
+</CardDescription>
             </CardHeader>
           </Card>
         ) : null}
@@ -452,8 +451,8 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
           <CardHeader>
             <CardTitle className="text-base">Condition</CardTitle>
             <CardDescription>
-              Counts may add up to less than the total; the remainder shows as Unclassified. They
-              may not add up to more.
+              May add up to less than the total — the remainder shows as Unclassified — but never
+              more.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -491,7 +490,7 @@ export function InventoryItemFormPage({ mode }: { mode: 'create' | 'edit' }) {
               rows={4}
               disabled={submitting}
               aria-label="Notes"
-              className="border-input bg-transparent placeholder:text-muted-foreground focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+              className="border-input bg-transparent focus-visible:ring-ring w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
             />
           </CardContent>
         </Card>

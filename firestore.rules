@@ -948,6 +948,49 @@ service cloud.firestore {
         && get(itemPath(data.inventory_item_id)).data.organization_id == data.organization_id;
     }
 
+    /**
+     * A unit nothing has happened to yet.
+     *
+     * Every pointer here is one this document carries itself, which is the only
+     * kind of question Rules can ask: there is no query, so "does any asset
+     * event name this unit" is unanswerable here.
+     *
+     * It does not need to be asked. A status change cannot be written without
+     * `last_lifecycle_event_id` moving to a new event in the same commit — see
+     * `unitLifecycleEventValid` and `unitMaintenanceEventValid` above — and a
+     * trip to maintenance must append to `maintenance_record_ids`. So a unit
+     * with no lifecycle pointer has never changed status, and nothing in
+     * `asset_events` or `maintenance_records` can be naming it. The planned
+     * pointer is checked on its own because `plannedRefValid` allows a plan to
+     * be attached while the status stays put.
+     */
+    function unitNeverUsed() {
+      return resource.data.status == 'available'
+        && !('last_lifecycle_event_id' in resource.data)
+        && !('current_maintenance_record_id' in resource.data)
+        && !('planned_maintenance_record_id' in resource.data)
+        && resource.data.get('maintenance_record_ids', []).size() == 0
+        && !('using_team_id' in resource.data)
+        && !('using_member_uid' in resource.data)
+        && !('checked_out_at' in resource.data)
+        && !('retirement_reason' in resource.data);
+    }
+
+    /**
+     * The parent must lose exactly this unit in the same commit.
+     *
+     * Without it a client could delete the unit and leave the item claiming a
+     * piece of equipment that no longer exists. The item's own update rule
+     * still checks that its mirrors are internally consistent and that the
+     * writer may move them, so those two together keep the pair coherent: one
+     * fewer active unit here, and a parent that still adds up.
+     */
+    function parentDropsThisUnit() {
+      return existsAfter(itemPath(resource.data.inventory_item_id))
+        && getAfter(itemPath(resource.data.inventory_item_id)).data.unit_counts.active_total
+             == get(itemPath(resource.data.inventory_item_id)).data.unit_counts.active_total - 1;
+    }
+
     match /inventory_units/{unitId} {
 
       // Organization-wide, like the parent item. Reading what the organization
@@ -1001,10 +1044,25 @@ service cloud.firestore {
                           : maintenanceHistoryUnchanged()))
                    : (unitLifecycleEventValid() && maintenanceHistoryUnchanged()))));
 
-      // Equipment leaves the inventory by being retired, which keeps its
-      // history. Deleting it would destroy exactly the record this collection
-      // exists to hold. See decision 7 of the Phase 11 analysis.
-      allow delete: if false;
+      /*
+       * Equipment leaves the inventory by being retired, which keeps its
+       * history. Deleting it would destroy exactly the record this collection
+       * exists to hold. See decision 7 of the Phase 11 analysis.
+       *
+       * The one exception is a unit that has no history to destroy: generated
+       * by mistake, never used, never repaired, never moved. `unitNeverUsed`
+       * is what establishes that, and it is a statement about this document
+       * rather than a search of the collections that could reference it —
+       * which is what makes it enforceable here at all.
+       *
+       * Everything else is unchanged: the same team-scoped inventory
+       * permission that authorizes editing the unit, and the parent has to
+       * account for the loss in the same commit.
+       */
+      allow delete: if canWriteInventoryForTeam(resource.data.organization_id,
+                                                resource.data.team_id)
+        && unitNeverUsed()
+        && parentDropsThisUnit();
     }
 
     // ---------------------------------------------------- maintenance_records

@@ -235,9 +235,9 @@ the model; and matching, shortage, and cost stayed application-owned.
 - [x] General guidance mode when the user has no Inventory view — verified from source and tests
 - [x] Malformed individual suggestions dropped without losing the rest — verified from source and tests
 
-### Action List
+### Needs & Actions
 
-- [x] Action List page, gated by the productions permission
+- [x] Needs & Actions page, gated by the productions permission
 - [x] Action item document ID equals requirement_id
 - [x] Created or updated only when the user chooses an action type
 - [x] Quantity defaults to the shortage and is never overwritten by later recalculation

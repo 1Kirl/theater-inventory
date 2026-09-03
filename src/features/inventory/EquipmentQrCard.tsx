@@ -52,9 +52,8 @@ export function EquipmentQrCard({
       <CardHeader>
         <CardTitle className="text-base">Label</CardTitle>
         <CardDescription>
-          Scanning this code with any phone camera opens this page. The link stays the same for as
-          long as this piece of equipment exists, so a label only has to be printed once.
-        </CardDescription>
+  Any phone camera opens this page. The link never changes, so a label is printed once.
+</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="bg-white rounded-md border p-3 self-start">

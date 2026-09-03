@@ -200,22 +200,21 @@ export function InventoryItemDetailPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">{serialized ? 'Units' : 'Quantity'}</CardTitle>
+          <CardTitle className="text-base">{serialized ? 'Summary' : 'Quantity'}</CardTitle>
           <CardDescription>
             {serialized
-              ? 'Counted from the units below. Retired units are listed for their history but '
-                + 'are not part of the active inventory.'
-              : 'Available quantity is maintained by hand. Nothing else changes it.'}
+              ? 'Counted from the units below. Retired units are excluded.'
+              : 'Available quantity is maintained by hand.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {serialized && counts ? (
             <dl className="grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
               <div>
-                {/* Not "Total": retired units stay in the list below for their
-                    history but are out of the inventory, so a plain total would
-                    be smaller than the number of rows a reader can count. */}
-                <dt className="text-muted-foreground text-sm">Active</dt>
+                {/* Retired units stay in the list below for their history but are
+                    out of the inventory, so this is smaller than the number of
+                    rows a reader can count. The card's description says so. */}
+                <dt className="text-muted-foreground text-sm">Total</dt>
                 <dd className="text-2xl font-semibold tabular-nums">{counts.active_total}</dd>
               </div>
               <div>

@@ -248,13 +248,13 @@ Sidebar modules:
 - Inventory
 - Maintenance
 - Productions
-- Action List
+- Needs & Actions
 - Calendar
 - Team & Members (Admin)
 - Organization Settings (Admin)
 
 Navigation items must respect permissions. Dashboard is always present for an assigned member
-because it has no permission of its own. Action List appears whenever Productions is viewable.
+because it has no permission of its own. Needs & Actions appears whenever Productions is viewable.
 
 ### Mobile
 
@@ -278,7 +278,7 @@ Examples:
 - Inventory List
 - Maintenance Overview
 - Production Requirements
-- Action List
+- Needs & Actions
 - Member list
 
 ### Mobile

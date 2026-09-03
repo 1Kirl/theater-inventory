@@ -143,7 +143,7 @@ Module notes:
   `calendar`.
 - **Dashboard has no permission of its own.** Each dashboard summary card renders only when the
   user can view the module it summarizes.
-- **Action List has no permission of its own.** It follows the `productions` permission.
+- **Needs & Actions has no permission of its own.** It follows the `productions` permission.
 
 Rules:
 
@@ -1169,6 +1169,19 @@ the organization never reaches zero Admins.
 
 Inventory items and teams have no delete flow in the MVP either. Deleting a team would orphan
 `membership.team_ids`, `inventory_items.team_id`, and `maintenance_records.team_id`.
+
+Inventory *units* have one narrow exception, added in QA round 1. Equipment still leaves the
+inventory by being retired, which keeps its history; the exception exists only for a unit generated
+by mistake that nothing has happened to yet. Security Rules allow the delete when the unit is
+`available` and carries no `last_lifecycle_event_id`, no `current_maintenance_record_id`, no
+`planned_maintenance_record_id`, no `maintenance_record_ids`, and nobody is holding it — and when
+the parent item drops exactly one from `unit_counts.active_total` in the same commit.
+
+Those pointers are sufficient because Rules cannot query. A status change cannot be written without
+setting `last_lifecycle_event_id` in the same commit, and a trip to maintenance must append to
+`maintenance_record_ids`, so a unit carrying neither has never moved and nothing in `asset_events`
+or `maintenance_records` can be naming it. Nothing cascades: a unit with any history is refused
+outright rather than cleaned up around.
 
 Join codes are never deleted. A superseded code keeps its document with `active: false` and a
 `revoked_at` timestamp, so a code is never silently reused and a revoked code fails validation for

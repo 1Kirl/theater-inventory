@@ -135,9 +135,8 @@ export function OrganizationSelectionPage() {
             <CardHeader>
               <CardTitle className="text-base">You are not in an organization yet</CardTitle>
               <CardDescription>
-                Create one to become its Admin, or join an existing one with a code from your
-                director or stage manager.
-              </CardDescription>
+  Create one to become its Admin, or join with a code from your director.
+</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
               <Button asChild>

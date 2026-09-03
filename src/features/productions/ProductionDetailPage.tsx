@@ -42,6 +42,19 @@ import {
 } from '@/domain/production-costs'
 import { formatCents } from '@/domain/money'
 
+/**
+ * Why the action button is dead, in the two cases where it is.
+ *
+ * The Action column beside it already says which case this is — an "Already
+ * Available" badge, or "Not Matched" — so these are a second, quieter statement
+ * for somebody who reached the button first and wants to know why it will not
+ * respond. They are genuinely different reasons and must not share a message:
+ * telling somebody that stock covers a requirement which was never matched to
+ * any stock is worse than saying nothing.
+ */
+const ALREADY_AVAILABLE_HINT = 'Stock already covers this requirement.'
+const NOT_MATCHED_HINT = 'Match this requirement to an inventory item first.'
+
 export function ProductionDetailPage() {
   const { productionId } = useParams<{ productionId: string }>()
   const { organization, membership, role, teams } = useOrganization()
@@ -126,14 +139,27 @@ export function ProductionDetailPage() {
     const mayEditRow = canEditTeamScopedRecord(role, membership, 'productions', row.requirement.team_id)
     if (!mayEditRow) return null
 
+    // A requirement already covered by stock has nothing to plan, so its action
+    // button used to be absent. Absent and disabled say different things: the
+    // row simply lost a control its neighbours had, and the column stopped
+    // lining up. It stays, and says it is unavailable.
+    const satisfied = !row.action && !canCreateActionItem(row.availability)
+    const hint = !satisfied
+      ? undefined
+      : row.availability.matched ? ALREADY_AVAILABLE_HINT : NOT_MATCHED_HINT
+
     return (
       <div className="flex flex-wrap gap-1">
-        <Button size="sm" variant="ghost" onClick={() => setEditingRequirement(row.requirement)}>Edit</Button>
-        {row.action || canCreateActionItem(row.availability) ? (
-          <Button size="sm" variant="ghost" onClick={() => setActioning(row)}>
-            {row.action ? 'Edit action' : 'Plan action'}
-          </Button>
-        ) : null}
+        <Button size="sm" variant="outline" onClick={() => setEditingRequirement(row.requirement)}>Edit</Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={satisfied}
+          onClick={() => setActioning(row)}
+          title={hint}
+        >
+          {row.action ? 'Edit action' : 'Plan action'}
+        </Button>
       </div>
     )
   }
@@ -209,10 +235,9 @@ export function ProductionDetailPage() {
         <CardHeader>
           <CardTitle className="text-base">Estimated cost</CardTitle>
           <CardDescription>
-            Added up from this production&rsquo;s action items. Planning estimates, not what has
-            been spent. Cancelled work is left out; work already done is not, because the
-            production still had to pay for it.
-          </CardDescription>
+  Planning estimates from this production&rsquo;s action items, not what has been spent.
+  Cancelled work is excluded.
+</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>

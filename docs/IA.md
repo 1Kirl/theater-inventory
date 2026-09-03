@@ -19,7 +19,7 @@ This document is the text source of truth for page structure and navigation.
 - Inventory
 - Maintenance & Repair
 - Productions
-- Action List
+- Needs & Actions
 - Calendar
 - Team & Member Management
 - Organization Settings
@@ -403,7 +403,7 @@ Content:
 - shortage quantity,
 - responsible team,
 - action type/status,
-- link to Action List.
+- link to Needs & Actions.
 
 Rules:
 
@@ -468,13 +468,13 @@ Fields:
 - preferred action type,
 - notes.
 
-## 8. Action List
+## 8. Needs & Actions
 
-### 8.1 Purchase / Build / Repair Action List
+### 8.1 Purchase / Build / Repair Actions
 
 Purpose: Convert production shortages into practical tasks.
 
-The Action List has no permission of its own; it follows the `productions` permission.
+Needs & Actions has no permission of its own; it follows the `productions` permission.
 
 Action types:
 
@@ -619,8 +619,8 @@ Modules:
 - Productions
 - Calendar
 
-Dashboard and Action List are deliberately absent. Dashboard cards follow the module each card
-summarizes; the Action List follows Productions.
+Dashboard and Needs & Actions are deliberately absent. Dashboard cards follow the module each card
+summarizes; Needs & Actions follows Productions.
 
 Team assignment is a separate control on the same screen. Permission decides which module and
 whether the user may write; team decides which records inside the team-scoped modules —

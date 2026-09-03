@@ -150,9 +150,9 @@ Two application areas deliberately have no permission of their own:
   can view the module it summarizes — the inventory card requires `inventory` view, the repair
   card requires `maintenance` view, and so on. A user with no viewable module sees an empty-state
   dashboard rather than a broken one.
-- **Action List.** There is no `action_list` permission. The Action List follows the
+- **Needs & Actions.** There is no `action_list` permission. The Needs & Actions follows the
   `productions` permission, because an action item exists only as the resolution of a production
-  requirement. `productions: view` can read the Action List; `productions: edit` can create and
+  requirement. `productions: view` can read Needs & Actions; `productions: edit` can create and
   update action items.
 
 ## 5. Team Scope
@@ -239,7 +239,7 @@ Permissions:
 
 Result:
 
-The user may edit Lighting-owned inventory and repair records, and — because Action List follows
+The user may edit Lighting-owned inventory and repair records, and — because Needs & Actions follows
 the `productions` permission — may work the action items for Lighting-owned requirements. They
 may not edit Costume-owned records. Dashboard shows the inventory, repair, production, and
 calendar cards, since all four modules are viewable.
@@ -648,7 +648,7 @@ Organization Settings only.
 
 The Dashboard route has no `PermissionGuard`, because Dashboard has no
 permission of its own. It sits behind `OrganizationGuard` and renders each
-summary card only if the underlying module is viewable. Action List is guarded
+summary card only if the underlying module is viewable. Needs & Actions is guarded
 by `productions`.
 
 Two routes sit outside `OrganizationGuard` deliberately, and only two:

@@ -41,7 +41,7 @@ describe('an unassigned member', () => {
   it('is offered no module, whatever their permissions map happens to say', () => {
     // Their role is what decides. A stale permissions map on an unassigned
     // membership must not open anything.
-    for (const label of ['Inventory', 'Maintenance', 'Productions', 'Action List', 'Calendar', 'Scan']) {
+    for (const label of ['Inventory', 'Maintenance', 'Productions', 'Needs & Actions', 'Calendar', 'Scan']) {
       expect(visibleTo('unassigned', ALL_VIEW, false)).not.toContain(label)
     }
   })

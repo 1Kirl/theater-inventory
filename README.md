@@ -46,7 +46,7 @@ count. The quantity currently in service is derived, never stored.
 **Productions and requirements.** What a production needs, matched against real inventory, with the
 shortage calculated from live availability by application code.
 
-**Action list.** Buy, rent, build, or repair — one action per short requirement, with assignee, due
+**Needs & Actions.** Buy, rent, build, or repair — one action per short requirement, with assignee, due
 date, and an optional cost estimate. Production cost is summed from those estimates in whole cents.
 
 **Calendar.** Rehearsals, build days, inspections, and deadlines, with optional links to a

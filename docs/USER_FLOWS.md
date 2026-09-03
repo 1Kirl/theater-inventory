@@ -229,7 +229,7 @@ Possible AI interpretation:
 11. App calculates shortages deterministically.
 12. Action planning continues from real data.
 
-## 15. Action List — Resolve a Shortage
+## 15. Needs & Actions — Resolve a Shortage
 
 1. Production requirement is linked to an inventory item and has a shortage greater than zero.
 2. User selects an action type:
@@ -246,7 +246,7 @@ Possible AI interpretation:
    - due date,
    - status,
    - notes.
-6. Action appears in the Production Action List and global Action List. Access to both follows the
+6. Action appears in the Production Needs & Actions and global Needs & Actions. Access to both follows the
    productions permission.
 7. When complete, user marks it Done.
 

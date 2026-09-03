@@ -62,9 +62,8 @@ export function SignUpPage() {
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
         <CardDescription>
-          Your account is separate from any theater organization. You can join or create one after
-          signing up.
-        </CardDescription>
+  Your account is separate from any organization. Join or create one after signing up.
+</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
