@@ -1,0 +1,251 @@
+/*
+ * Landing page styling that Tailwind utilities cannot express.
+ *
+ * Everything here is scoped under `.landing-root`, which exists only while the
+ * landing page is mounted. The authenticated application never renders that
+ * class, so none of these rules can reach it.
+ *
+ * No colour is written literally. The three surfaces below are mixed from the
+ * application's own tokens, so the page follows the light and dark themes the
+ * product already ships instead of introducing a second palette. The visitor's
+ * theme is whatever they last chose; a browser that has never chosen sees
+ * light, which is the design this page was drawn for.
+ */
+
+.landing-root {
+  --landing-ground: var(--background);
+  --landing-panel: var(--card);
+  /* Warm off-white: the card, carrying just enough of the mint to read as a
+     different sheet of paper rather than as a different colour. */
+  --landing-cream: color-mix(in oklab, var(--card) 90%, var(--secondary));
+  --landing-sage: color-mix(in oklab, var(--secondary) 55%, var(--card));
+  /* The one band that is meant to read as green rather than as paper.
+     Kept as the product's own soft mint so the closing section is the
+     application's colour, not a colour invented for a landing page. */
+  --landing-band: var(--secondary);
+  --landing-line: var(--border);
+
+  /* Restrained ease-out. No overshoot, no spring: this is an editorial page,
+     and a bounce would read as a toy. */
+  --reveal-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  background-color: var(--landing-ground);
+  color: var(--foreground);
+}
+
+/*
+ * Smooth anchor scrolling, and only here.
+ *
+ * `scroll-behavior` belongs to the scrolling element, which is the document —
+ * so it cannot be set on a wrapper. Conditioning it on the landing page being
+ * present is what keeps it out of the application, where an instant jump is
+ * the correct behaviour for navigation.
+ */
+html:has(.landing-root) {
+  scroll-behavior: smooth;
+  /* Clears the sticky header when an anchor link lands. */
+  scroll-padding-top: 5.5rem;
+}
+
+/* ---------------------------------------------------------------- typography */
+
+.landing-root .landing-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.landing-root .landing-display {
+  font-size: clamp(2.5rem, 7.2vw, 5.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-h2 {
+  font-size: clamp(1.95rem, 4.6vw, 3.5rem);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-h3 {
+  font-size: clamp(1.6rem, 3.3vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.024em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-lead {
+  font-size: clamp(1.0625rem, 1.35vw, 1.3125rem);
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  max-width: 42ch;
+}
+
+.landing-root .landing-body {
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  max-width: 58ch;
+}
+
+/* -------------------------------------------------------------- scroll reveal */
+
+/*
+ * One transition, driven by a single attribute.
+ *
+ * A group container is marked `data-revealed` by one IntersectionObserver when
+ * it first enters the viewport, and every `data-reveal` descendant animates
+ * from its own offset. The observer disconnects immediately afterwards, so an
+ * element reveals exactly once and scrolling back up replays nothing.
+ */
+.landing-root [data-reveal] {
+  opacity: 0;
+  transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, 28px), 0)
+    scale(var(--reveal-scale, 1));
+  transition:
+    opacity var(--reveal-duration, 700ms) var(--reveal-ease) var(--reveal-delay, 0ms),
+    transform var(--reveal-duration, 700ms) var(--reveal-ease) var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] [data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Barely-noticeable stagger. Label, then headline, then copy, then media. */
+.landing-root .reveal-d1 { --reveal-delay: 90ms; }
+.landing-root .reveal-d2 { --reveal-delay: 180ms; }
+.landing-root .reveal-d3 { --reveal-delay: 280ms; }
+.landing-root .reveal-d4 { --reveal-delay: 380ms; }
+.landing-root .reveal-d5 { --reveal-delay: 480ms; }
+
+/* Side reveals, for the alternating feature rows. Kept well under 40px so the
+   movement reads as settling rather than as sliding in from off-screen. */
+.landing-root .reveal-left { --reveal-x: -32px; --reveal-y: 0px; }
+.landing-root .reveal-right { --reveal-x: 32px; --reveal-y: 0px; }
+
+/* Large media. Slower and with a fraction of scale, because it is the thing
+   the section is about. */
+.landing-root .reveal-frame {
+  --reveal-y: 30px;
+  --reveal-scale: 0.978;
+  --reveal-duration: 900ms;
+}
+
+/* ------------------------------------------------------------ problem section */
+
+/*
+ * Scattered, then settled.
+ *
+ * Each label rests in a grid cell and starts a short distance further out, so
+ * the reveal reads as five separate things converging on one workspace. The
+ * grid positions carry the meaning on their own; the motion only makes it
+ * legible, which is why removing it costs nothing.
+ */
+.landing-root .landing-drift {
+  opacity: 0;
+  transform: translate3d(var(--drift-x, 0px), var(--drift-y, 0px), 0)
+    rotate(var(--drift-r, 0deg));
+  transition:
+    opacity 850ms var(--reveal-ease) var(--reveal-delay, 0ms),
+    transform 850ms var(--reveal-ease) var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] .landing-drift {
+  opacity: 1;
+  transform: none;
+}
+
+.landing-root .drift-a { --drift-x: -38px; --drift-y: -26px; --drift-r: -2.5deg; --reveal-delay: 0ms; }
+.landing-root .drift-b { --drift-x: 6px; --drift-y: -36px; --drift-r: 1.75deg; --reveal-delay: 90ms; }
+.landing-root .drift-c { --drift-x: 40px; --drift-y: -22px; --drift-r: 2.5deg; --reveal-delay: 180ms; }
+.landing-root .drift-d { --drift-x: -42px; --drift-y: 24px; --drift-r: 2deg; --reveal-delay: 270ms; }
+.landing-root .drift-e { --drift-x: 42px; --drift-y: 26px; --drift-r: -2deg; --reveal-delay: 360ms; }
+
+/* --------------------------------------------------------------- photo strip */
+
+/*
+ * A seamless loop, without a JavaScript ticker.
+ *
+ * The track holds the same group twice. Each group carries its own internal
+ * gap plus a trailing gap of the same size, so the two halves are exactly equal
+ * and translating the track by half its width lands the second group precisely
+ * where the first began. That is why there is no jump at the reset — the
+ * arithmetic is exact rather than close.
+ */
+.landing-root .landing-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent, black 5%, black 95%, transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent, black 5%, black 95%, transparent
+  );
+}
+
+.landing-root .landing-marquee__track {
+  display: flex;
+  width: max-content;
+  animation: landing-marquee-scroll 78s linear infinite;
+}
+
+.landing-root .landing-marquee__group {
+  display: flex;
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.landing-root .landing-marquee:hover .landing-marquee__track,
+.landing-root .landing-marquee:focus-within .landing-marquee__track {
+  animation-play-state: paused;
+}
+
+@keyframes landing-marquee-scroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+/* ------------------------------------------------------------ reduced motion */
+
+/*
+ * Motion is never how this page communicates.
+ *
+ * Everything above is decoration on content that is already in the document, so
+ * switching it off leaves a complete, readable page. The strip becomes a row
+ * the visitor scrolls themselves.
+ *
+ * Implemented here rather than in JavaScript on purpose: the preference is a
+ * media query, and the browser already re-evaluates it when it changes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html:has(.landing-root) {
+    scroll-behavior: auto;
+  }
+
+  .landing-root [data-reveal],
+  .landing-root .landing-drift {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .landing-root .landing-marquee {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .landing-root .landing-marquee__track {
+    animation: none !important;
+    transform: none !important;
+  }
+}

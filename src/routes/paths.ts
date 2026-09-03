@@ -9,6 +9,17 @@ export const paths = {
   // Public
   logIn: '/login',
   signUp: '/signup',
+  /**
+   * The public landing page.
+   *
+   * Deliberately the same path as the dashboard below. `/` is the product's
+   * front door, and which of the two renders there is a fact about
+   * authentication rather than about the URL — see `LandingGate`. Named
+   * separately so that a caller can say which of the two it means: signing out
+   * goes to the landing page, and reading `paths.dashboard` there would be a
+   * lie about the destination.
+   */
+  landing: '/',
 
   // Authenticated, before an organization is chosen
   organizations: '/organizations',

@@ -5,7 +5,8 @@ import { AuthLayout } from '@/features/auth/AuthLayout'
 import { LogInPage } from '@/features/auth/LogInPage'
 import { SignUpPage } from '@/features/auth/SignUpPage'
 import {
-  AdminGuard, AuthGuard, GuestGuard, MembershipGuard, OrganizationGuard, PermissionGuard,
+  AdminGuard, AuthGuard, GuestGuard, LandingGate, MembershipGuard, OrganizationGuard,
+  PermissionGuard,
 } from '@/routes/guards'
 import { NotFound } from '@/routes/NotFound'
 import { paths } from '@/routes/paths'
@@ -119,91 +120,114 @@ export const routes: RouteObject[] = [
           },
         ],
       },
+    ],
+  },
 
-      // Inside an organization.
+  // The root path, and the application that lives beneath it.
+  //
+  // Split out of the AuthGuard branch above for one reason: `/` is public now.
+  // LandingGate has to sit *above* AuthGuard, because AuthGuard's job is to
+  // send a signed-out visitor to the log-in form and that is exactly what must
+  // not happen at the root. Everything below it is the tree that was here
+  // before, unmoved and unchanged — same guards in the same order, and one
+  // AppShell instance shared by every module page, so navigating between them
+  // still does not remount the shell.
+  //
+  // The dashboard keeps `/`. It is where organization selection sends somebody
+  // after they pick an organization, so redirecting a signed-in visitor away
+  // from `/` would send them straight back to selection and round again.
+  {
+    element: <LandingGate />,
+    children: [
       {
-        element: <OrganizationGuard />,
+        element: <AuthGuard />,
         children: [
+          // Inside an organization.
           {
-            path: paths.dashboard,
-            element: <AppShell />,
+            element: <OrganizationGuard />,
             children: [
-              { index: true, element: <DashboardPage /> },
-              { path: paths.account, element: <AccountPage /> },
               {
-                element: <PermissionGuard module="inventory" level="view" />,
+                path: paths.dashboard,
+                element: <AppShell />,
                 children: [
-                  { path: paths.inventory, element: <InventoryListPage /> },
-                  // Deliberately inside the current organization's guards,
-                  // unlike the equipment deep link: a scanning session is
-                  // opened in one organization on purpose.
-                  { path: paths.scanner, element: <ScannerPage /> },
+                  { index: true, element: <DashboardPage /> },
+                  { path: paths.account, element: <AccountPage /> },
                   {
-                    element: <PermissionGuard module="inventory" level="edit" />,
+                    element: <PermissionGuard module="inventory" level="view" />,
                     children: [
-                      { path: paths.inventoryNew, element: <InventoryItemFormPage mode="create" /> },
+                      { path: paths.inventory, element: <InventoryListPage /> },
+                      // Deliberately inside the current organization's guards,
+                      // unlike the equipment deep link: a scanning session is
+                      // opened in one organization on purpose.
+                      { path: paths.scanner, element: <ScannerPage /> },
                       {
-                        path: '/inventory/:itemId/edit',
-                        element: <InventoryItemFormPage mode="edit" />,
+                        element: <PermissionGuard module="inventory" level="edit" />,
+                        children: [
+                          { path: paths.inventoryNew, element: <InventoryItemFormPage mode="create" /> },
+                          {
+                            path: '/inventory/:itemId/edit',
+                            element: <InventoryItemFormPage mode="edit" />,
+                          },
+                        ],
                       },
                     ],
                   },
-                ],
-              },
-              {
-                element: <PermissionGuard module="maintenance" level="view" />,
-                children: [
-                  { path: paths.maintenance, element: <MaintenanceListPage /> },
                   {
-                    element: <PermissionGuard module="maintenance" level="edit" />,
+                    element: <PermissionGuard module="maintenance" level="view" />,
                     children: [
-                      { path: paths.maintenanceNew, element: <MaintenanceRecordFormPage mode="create" /> },
+                      { path: paths.maintenance, element: <MaintenanceListPage /> },
                       {
-                        path: '/maintenance/:recordId/edit',
-                        element: <MaintenanceRecordFormPage mode="edit" />,
+                        element: <PermissionGuard module="maintenance" level="edit" />,
+                        children: [
+                          { path: paths.maintenanceNew, element: <MaintenanceRecordFormPage mode="create" /> },
+                          {
+                            path: '/maintenance/:recordId/edit',
+                            element: <MaintenanceRecordFormPage mode="edit" />,
+                          },
+                        ],
                       },
+                      { path: '/maintenance/:recordId', element: <MaintenanceRecordDetailPage /> },
                     ],
                   },
-                  { path: '/maintenance/:recordId', element: <MaintenanceRecordDetailPage /> },
-                ],
-              },
-              {
-                // Action List follows the productions permission; it has none of
-                // its own.
-                element: <PermissionGuard module="productions" level="view" />,
-                children: [
-                  { path: paths.productions, element: <ProductionListPage /> },
-                  { path: paths.actionList, element: <ActionListPage /> },
                   {
-                    element: <PermissionGuard module="productions" level="edit" />,
+                    // Action List follows the productions permission; it has none of
+                    // its own.
+                    element: <PermissionGuard module="productions" level="view" />,
                     children: [
-                      { path: paths.productionNew, element: <ProductionFormPage mode="create" /> },
-                      { path: '/productions/:productionId/edit', element: <ProductionFormPage mode="edit" /> },
+                      { path: paths.productions, element: <ProductionListPage /> },
+                      { path: paths.actionList, element: <ActionListPage /> },
+                      {
+                        element: <PermissionGuard module="productions" level="edit" />,
+                        children: [
+                          { path: paths.productionNew, element: <ProductionFormPage mode="create" /> },
+                          { path: '/productions/:productionId/edit', element: <ProductionFormPage mode="edit" /> },
+                        ],
+                      },
+                      { path: '/productions/:productionId', element: <ProductionDetailPage /> },
                     ],
                   },
-                  { path: '/productions/:productionId', element: <ProductionDetailPage /> },
+                  {
+                    // Calendar is an organization-level resource: view grants the
+                    // whole schedule, and team tags are only labels and filters.
+                    element: <PermissionGuard module="calendar" level="view" />,
+                    children: [{ path: paths.calendar, element: <CalendarPage /> }],
+                  },
+                  {
+                    // Teams, members, permissions, and administration all live in
+                    // Organization Settings. The old path is kept as a redirect so
+                    // a bookmark still lands somewhere useful.
+                    path: paths.team,
+                    element: <Navigate to={paths.organizationSettings} replace />,
+                  },
+                  {
+                    element: <AdminGuard />,
+                    children: [
+                      { path: paths.organizationSettings, element: <OrganizationSettingsPage /> },
+                    ],
+                  },
+                  { path: '*', element: <NotFound /> },
                 ],
               },
-              {
-                // Calendar is an organization-level resource: view grants the
-                // whole schedule, and team tags are only labels and filters.
-                element: <PermissionGuard module="calendar" level="view" />,
-                children: [{ path: paths.calendar, element: <CalendarPage /> }],
-              },
-              {
-                // Teams, members, permissions, and administration all live in
-                // Organization Settings. The old path is kept as a redirect so
-                // a bookmark still lands somewhere useful.
-                path: paths.team,
-                element: <Navigate to={paths.organizationSettings} replace />,
-              },
-              {
-                element: <AdminGuard />,
-                children: [
-                  { path: paths.organizationSettings, element: <OrganizationSettingsPage /> },
-                ],
-              },
-              { path: '*', element: <NotFound /> },
             ],
           },
         ],

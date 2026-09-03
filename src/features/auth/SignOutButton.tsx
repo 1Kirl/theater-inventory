@@ -18,7 +18,10 @@ export function SignOutButton({ variant = 'outline', withIcon = false }: SignOut
     setSubmitting(true)
     try {
       await logOut()
-      navigate(paths.logIn, { replace: true })
+      // To the landing page, not the log-in form. Signing out is leaving, and
+      // the front door is where leaving puts you; somebody who wants to sign
+      // straight back in has Log in in the header there.
+      navigate(paths.landing, { replace: true })
     } finally {
       setSubmitting(false)
     }

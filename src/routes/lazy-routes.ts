@@ -23,6 +23,12 @@ export const InventoryUnitDetailPage = lazy(() => import('@/features/inventory/I
 export const ContactsPage = lazy(() => import('@/features/contacts/ContactsPage').then((m) => ({ default: m.ContactsPage })))
 export const ScannerPage = lazy(() => import('@/features/scanner/ScannerPage').then((m) => ({ default: m.ScannerPage })))
 export const InventoryListPage = lazy(() => import('@/features/inventory/InventoryListPage').then((m) => ({ default: m.InventoryListPage })))
+/**
+ * The public landing page. Lazy like every other page, so its code and its
+ * stylesheet stay out of the bundle for everybody who is already signed in and
+ * will never see it.
+ */
+export const LandingPage = lazy(() => import('@/features/landing/LandingPage').then((m) => ({ default: m.LandingPage })))
 export const JoinOrganizationPage = lazy(() => import('@/features/organizations/JoinOrganizationPage').then((m) => ({ default: m.JoinOrganizationPage })))
 export const MaintenanceListPage = lazy(() => import('@/features/maintenance/MaintenanceListPage').then((m) => ({ default: m.MaintenanceListPage })))
 export const MaintenanceRecordDetailPage = lazy(() => import('@/features/maintenance/MaintenanceRecordDetailPage').then((m) => ({ default: m.MaintenanceRecordDetailPage })))

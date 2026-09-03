@@ -1,9 +1,10 @@
 import { Suspense } from 'react'
-import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { Navigate, Outlet, useLocation, useMatch } from 'react-router-dom'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useAuth } from '@/features/auth/useAuth'
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { UnassignedPage } from '@/features/organizations/UnassignedPage'
+import { LandingPage } from '@/routes/lazy-routes'
 import { hasModuleAccess, type RequiredLevel } from '@/domain/module-access'
 import { paths } from '@/routes/paths'
 import { afterAuthDestination, locationToReturnPath } from '@/routes/return-to'
@@ -216,6 +217,55 @@ export function AdminGuard() {
   }
 
   return <Outlet />
+}
+
+/**
+ * The public face of the root path.
+ *
+ * `/` is two pages. For a visitor who is not signed in it is the landing page;
+ * for somebody who is, it is the dashboard, exactly as before. Which one
+ * renders is a fact about authentication rather than about the URL, so the
+ * decision is made here — above `AuthGuard`, because that guard would otherwise
+ * send every signed-out visitor to the log-in form before the landing page
+ * could render.
+ *
+ * Sitting above the whole root branch means every module path passes through
+ * here too, and those are not public. The root-path check is what keeps them
+ * behind `AuthGuard` unchanged: anywhere but `/`, this renders nothing of its
+ * own and the existing chain decides.
+ *
+ * Nothing is decided until Firebase has finished restoring the session. That is
+ * the point of the loading branch — showing the landing page for a frame and
+ * then replacing it with the dashboard is the flash this whole arrangement
+ * exists to avoid, and it is why there is no stored "has seen the landing page"
+ * flag anywhere: the only input is auth state.
+ */
+export function LandingGate() {
+  const { loading, user, configError } = useAuth()
+  // Exactly `/`, and nothing nested under it.
+  const atRoot = useMatch(paths.landing) !== null
+
+  if (!atRoot) {
+    return <Outlet />
+  }
+
+  if (configError) {
+    return <ConfigErrorScreen message={configError} />
+  }
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  if (user) {
+    return <Outlet />
+  }
+
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <LandingPage />
+    </Suspense>
+  )
 }
 
 /**
