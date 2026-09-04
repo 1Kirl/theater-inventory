@@ -68,6 +68,13 @@ export function itemLifecycleRefusal(action: ItemLifecycleAction): string | null
   }
   if (from === to) return 'That is already this item’s status.'
   if (!canTransition(from, to)) return 'That is not a move this item can make.'
+  // Maintenance is not Inventory's to perform. The repair record and the status
+  // move together in `maintenance-service`, so a status set from here would be
+  // equipment claiming to be at a shop with no repair to show for it — the same
+  // reason a unit cannot make this move from its own page either.
+  if (to === 'in_maintenance' || from === 'in_maintenance') {
+    return 'Maintenance status follows the repair record. Use Maintenance instead.'
+  }
   if (!isOfferedBulkTransition(from, to)) return 'That move is not offered here.'
   if (to === 'retired' && !action.retirementReason) {
     return 'Choose why this item is being retired.'

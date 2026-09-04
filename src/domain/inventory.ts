@@ -334,46 +334,35 @@ const OFFERED_ACTIONS: Record<UnitStatus, readonly UnitStatus[]> = {
   retired: [],
 }
 
-/**
- * The moves offered on a bulk item's own lifecycle.
- *
- * Deliberately not the same list as `OFFERED_ACTIONS`, and the difference is
- * the maintenance pair. A *unit* cannot be moved in or out of maintenance from
- * its own page because Rules require it to name the repair it is away for, and
- * creating that record is the other half of the operation.
- *
- * A bulk item carries no such pointer. Bulk repairs have always been recorded
- * as a quantity on `maintenance_records` — four of the twenty-four went out —
- * and have never touched the item document at all. So moving the group's state
- * to `in_maintenance` leaves nothing half-written, and there is no record for
- * it to disagree with: the repair records go on being the authority on *how
- * many* are out, and this says what has happened to the group.
- *
- * `retired` stays terminal, as it is for a unit. The shape of the lifecycle is
- * `canTransition`; this is only what the application offers a person to do.
- */
-const OFFERED_BULK_ACTIONS: Record<UnitStatus, readonly UnitStatus[]> = {
-  available: ['in_use', 'in_maintenance', 'lost', 'retired'],
-  in_use: ['available', 'in_maintenance', 'lost', 'retired'],
-  in_maintenance: ['available', 'lost', 'retired'],
-  lost: ['available', 'retired'],
-  retired: [],
-}
-
-export function offeredBulkTransitions(from: UnitStatus): readonly UnitStatus[] {
-  return OFFERED_BULK_ACTIONS[from] ?? []
-}
-
-export function isOfferedBulkTransition(from: UnitStatus, to: UnitStatus): boolean {
-  return OFFERED_BULK_ACTIONS[from]?.includes(to) ?? false
-}
-
 export function isOfferedTransition(from: UnitStatus, to: UnitStatus): boolean {
   return OFFERED_ACTIONS[from]?.includes(to) ?? false
 }
 
 export function offeredTransitions(from: UnitStatus): readonly UnitStatus[] {
   return OFFERED_ACTIONS[from] ?? []
+}
+
+/**
+ * The moves offered on a bulk item's own lifecycle: the same ones a unit gets.
+ *
+ * A bulk item differs from a unit in how finely it is counted, not in how
+ * equipment moves through its life, so Inventory offers it the same three
+ * things — and maintenance is not among them.
+ *
+ * That exclusion is the whole point of routing through `OFFERED_ACTIONS`
+ * rather than a table of its own. Equipment enters and leaves `in_maintenance`
+ * through the maintenance workflow, which writes the repair record and the
+ * status together; offering the move from Inventory would let somebody say
+ * equipment is at the shop with no repair to show for it. `ALLOWED_TRANSITIONS`
+ * stays broad because the maintenance service still has to make that move —
+ * this is only what a person is offered.
+ */
+export function offeredBulkTransitions(from: UnitStatus): readonly UnitStatus[] {
+  return offeredTransitions(from)
+}
+
+export function isOfferedBulkTransition(from: UnitStatus, to: UnitStatus): boolean {
+  return isOfferedTransition(from, to)
 }
 
 export function canTransition(from: UnitStatus, to: UnitStatus): boolean {

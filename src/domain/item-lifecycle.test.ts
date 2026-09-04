@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
-  canTransition, isOfferedBulkTransition, itemStatusOf, offeredBulkTransitions,
+  canTransition, isOfferedBulkTransition, isSerialized, itemStatusOf, offeredBulkTransitions,
   offeredTransitions, tracksItemStatus,
 } from '@/domain/inventory'
 import { buildItemAssetEventDocument, itemEventTypeFor } from '@/domain/asset-event-payloads'
+import { bulkMaintenanceStatusFor, currentlyInService } from '@/domain/maintenance'
 import { buildInventoryItemUpdate } from '@/domain/inventory-payloads'
 import { EMPTY_CONDITION_COUNTS } from '@/domain/inventory'
 import { UNIT_STATUSES, type InventoryItem, type UnitStatus } from '@/types/inventory'
@@ -81,15 +82,23 @@ describe('bulk transitions', () => {
     expect(offeredBulkTransitions('retired')).toEqual([])
   })
 
-  it('offers the maintenance pair, which a unit does not', () => {
-    // The one deliberate difference. A unit cannot be moved in or out of
-    // maintenance from its own page because Rules make it name the repair it is
-    // away for; a bulk item carries no such pointer, so nothing is left half
-    // written.
-    expect(isOfferedBulkTransition('available', 'in_maintenance')).toBe(true)
-    expect(isOfferedBulkTransition('in_maintenance', 'available')).toBe(true)
+  it('offers exactly what a unit is offered, and nothing else', () => {
+    // A bulk item differs from a unit in how finely it is counted, not in how
+    // equipment moves through its life. Any divergence here is a second
+    // workflow for the same operation.
+    for (const from of UNIT_STATUSES) {
+      expect(offeredBulkTransitions(from), from).toEqual(offeredTransitions(from))
+    }
+  })
 
-    expect(offeredTransitions('available')).not.toContain('in_maintenance')
+  it('never offers a maintenance move from Inventory', () => {
+    // Maintenance is entered and left through the repair record, which moves
+    // the status in the same write. Offering it here would let somebody say
+    // equipment is at a shop with no repair behind it.
+    for (const from of UNIT_STATUSES) {
+      expect(offeredBulkTransitions(from), from).not.toContain('in_maintenance')
+    }
+    expect(offeredBulkTransitions('in_maintenance')).toEqual([])
   })
 
   it('refuses a move to itself', () => {
@@ -121,6 +130,13 @@ describe('itemEventTypeFor', () => {
         expect(itemEventTypeFor(from, to), `${from} -> ${to}`).not.toBeNull()
       }
     }
+  })
+
+  it('still names the maintenance moves the maintenance service makes', () => {
+    // Not offered from Inventory, but the repair workflow performs them and
+    // Rules require every status change to carry an event.
+    expect(itemEventTypeFor('available', 'in_maintenance')).toBe('sent_to_maintenance')
+    expect(itemEventTypeFor('in_maintenance', 'available')).toBe('returned_from_maintenance')
   })
 })
 
@@ -262,5 +278,88 @@ describe('the item document a status change writes', () => {
 
     expect(doc).not.toHaveProperty('status')
     expect(doc).not.toHaveProperty('last_lifecycle_event_id')
+  })
+})
+
+describe('maintenance drives the bulk item status', () => {
+  const rec = (status: string) => ({ status }) as never
+
+  it('sends the group away when a repair becomes active', () => {
+    // The QA correction: Inventory does not offer this move; the repair does.
+    expect(bulkMaintenanceStatusFor('available', [rec('sent')])).toBe('in_maintenance')
+    expect(bulkMaintenanceStatusFor('available', [rec('in_service')])).toBe('in_maintenance')
+    expect(bulkMaintenanceStatusFor('available', [rec('ready')])).toBe('in_maintenance')
+  })
+
+  it('leaves it alone for a repair that has not left yet', () => {
+    // `planned` is a commitment, not equipment that is away — the same
+    // distinction `ACTIVE_STATUSES` already draws for the quantity figures.
+    expect(bulkMaintenanceStatusFor('available', [rec('planned')])).toBeNull()
+  })
+
+  it('brings the group back only when the last repair closes', () => {
+    // A bulk item can be on several repairs at once, unlike a unit. One
+    // returning while another is still out must not bring it back.
+    expect(bulkMaintenanceStatusFor('in_maintenance', [rec('returned'), rec('sent')])).toBeNull()
+    expect(bulkMaintenanceStatusFor('in_maintenance', [rec('returned'), rec('cancelled')]))
+      .toBe('available')
+    expect(bulkMaintenanceStatusFor('in_maintenance', [])).toBe('available')
+  })
+
+  it('never overwrites where the equipment actually is', () => {
+    // Maintenance swaps available and in_maintenance and nothing else, exactly
+    // as `isMaintenanceMove` allows for a unit. Equipment signed out or lost is
+    // not at a repair shop, and a repair filed against it says nothing about
+    // where it is.
+    for (const status of ['in_use', 'lost', 'retired'] as const) {
+      expect(bulkMaintenanceStatusFor(status, [rec('sent')]), status).toBeNull()
+      expect(bulkMaintenanceStatusFor(status, [rec('returned')]), status).toBeNull()
+    }
+  })
+
+  it('asks for no move when the status already matches', () => {
+    expect(bulkMaintenanceStatusFor('in_maintenance', [rec('sent')])).toBeNull()
+    expect(bulkMaintenanceStatusFor('available', [rec('returned')])).toBeNull()
+  })
+
+  it('leaves quantity_sent to answer its own question', () => {
+    // The lifecycle status says the group is away; the records go on saying how
+    // many pieces. Five of twenty is still five.
+    const records = [
+      { status: 'sent', quantity_sent: 3 },
+      { status: 'in_service', quantity_sent: 2 },
+      { status: 'returned', quantity_sent: 9 },
+    ] as never[]
+
+    expect(currentlyInService(records)).toBe(5)
+    expect(bulkMaintenanceStatusFor('available', records)).toBe('in_maintenance')
+  })
+})
+
+describe('the Inventory lifecycle service refuses maintenance moves', () => {
+  it('is the service, not only the UI, that refuses them', async () => {
+    // Hiding the button is an affordance; this is the guarantee. Imported
+    // lazily so this file stays a pure domain test.
+    const { itemLifecycleRefusal } = await import('@/services/item-lifecycle-service')
+
+    for (const [from, to] of [['available', 'in_maintenance'], ['in_maintenance', 'available']] as const) {
+      const reason = itemLifecycleRefusal({ item: bulk({ status: from }), to })
+      expect(reason, `${from} -> ${to}`).toContain('Use Maintenance instead')
+    }
+  })
+
+  it('still allows the ordinary lifecycle moves', () => {
+    // Available -> In Use / Lost / Retired, the three Inventory offers.
+    expect(offeredBulkTransitions('available')).toEqual(['in_use', 'lost', 'retired'])
+  })
+})
+
+describe('bulk quantities are never turned into units', () => {
+  it('keeps a bulk item bulk, with no unit counts', () => {
+    const item = bulk({ quantity_total: 20 })
+
+    expect(isSerialized(item)).toBe(false)
+    expect(item).not.toHaveProperty('unit_counts')
+    expect(tracksItemStatus(item)).toBe(true)
   })
 })

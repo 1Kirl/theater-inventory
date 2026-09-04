@@ -205,13 +205,6 @@ export function ItemLifecycleDialog({ item, open, onOpenChange, onDone }: Props)
               </div>
             ) : null}
 
-            {move.to === 'in_maintenance' ? (
-              <p className="text-muted-foreground text-sm">
-                This records that the group has gone for repair. It does not create a repair
-                record, and it does not change how many are counted as available.
-              </p>
-            ) : null}
-
             <div className="space-y-2">
               <Label htmlFor="item-lifecycle-note">Note (optional)</Label>
               <Input
@@ -248,9 +241,9 @@ export function ItemLifecycleDialog({ item, open, onOpenChange, onDone }: Props)
   )
 }
 
+/** The unit dialog's wording, with the item's name in place of an asset code. */
 function descriptionFor(to: UnitStatus, name: string): string {
   if (to === 'in_use') return `${name} is going out. Say which team is taking it.`
-  if (to === 'in_maintenance') return `${name} is going for repair.`
   if (to === 'lost') return `${name} cannot be found. It stays in the inventory as missing.`
   if (to === 'retired') return `${name} is leaving the inventory for good.`
   return `${name} is coming back.`
