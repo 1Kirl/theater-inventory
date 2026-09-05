@@ -120,9 +120,13 @@ describe('the foundation animates transform and opacity, and little else', () =>
     expect(css).not.toMatch(/animation:[^;]*\bblur\b/)
   })
 
-  it('promotes only what actually moves on scroll', () => {
-    // `will-change` on everything is its own performance problem.
-    expect((css.match(/will-change:/g) ?? []).length).toBeLessThanOrEqual(2)
+  it('promotes only what actually moves', () => {
+    // `will-change` on everything is its own performance problem: each hint
+    // costs a compositor layer whether or not the element ever animates.
+    // Counted as promotions only — `will-change: auto` is the reduced-motion
+    // reset giving a layer back, which is the opposite of a cost.
+    const promotions = css.match(/will-change:\s*(?!auto)[a-z-]+/g) ?? []
+    expect(promotions.length).toBeLessThanOrEqual(3)
   })
 })
 

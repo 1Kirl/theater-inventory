@@ -173,6 +173,192 @@ html:has(.landing-root) {
   --reveal-duration: 900ms;
 }
 
+/* ------------------------------------------------------------- hero section */
+
+/*
+ * The opening has its own choreography.
+ *
+ * Everything else on the page shares one reveal, which is right for a page of
+ * sections and wrong for the first thing anybody sees: the hero is a sequence,
+ * not a group. The eyebrow arrives, the headline lands a line at a time, the
+ * copy follows it, the actions settle, and the product appears last with the
+ * depth the rest of the page does not use.
+ *
+ * The whole thing is done in about 1.4 seconds. Longer than that and a visitor
+ * is waiting on an introduction rather than reading one; shorter and the order
+ * stops being legible as an order at all.
+ */
+.landing-root .hero-line,
+.landing-root .hero-copy,
+.landing-root .hero-actions {
+  --reveal-y: var(--landing-distance-text);
+}
+
+.landing-root .hero-line {
+  /* Each half of the headline is its own box so it can arrive on its own.
+     Inline-block keeps the two flowing as one sentence when the line break
+     between them is hidden on a narrow screen. */
+  display: inline-block;
+  --reveal-y: 20px;
+}
+
+.landing-root .hero-eyebrow { --reveal-delay: 0ms; }
+.landing-root .hero-line-1 { --reveal-delay: 80ms; }
+.landing-root .hero-line-2 { --reveal-delay: 160ms; }
+.landing-root .hero-copy { --reveal-delay: 300ms; }
+.landing-root .hero-actions { --reveal-delay: 420ms; }
+
+/*
+ * The product, last and with weight.
+ *
+ * A longer travel, a fraction of scale, and a slower curve than anything above
+ * it — the one element on the page allowed to feel like it has mass.
+ */
+.landing-root .hero-screen {
+  --reveal-y: 20px;
+  --reveal-scale: 0.96;
+  --reveal-duration: 900ms;
+  --reveal-delay: 540ms;
+}
+
+/*
+ * Two panels behind the screenshot, offset and dimmed.
+ *
+ * They carry no content and are not media slots: their whole job is to put
+ * something on a plane behind the product so the composition has a back to it.
+ * They arrive after the screenshot, which is what makes it read as the subject
+ * rather than as one of three cards.
+ */
+.landing-root .hero-panel {
+  --reveal-y: 26px;
+  --reveal-scale: 0.94;
+  --reveal-duration: 900ms;
+  position: absolute;
+  inset-inline: 0;
+  border-radius: 1rem;
+  border: 1px solid var(--landing-line);
+  background-color: color-mix(in oklab, var(--landing-panel) 72%, var(--landing-sage));
+}
+
+.landing-root .hero-panel-back {
+  --reveal-delay: 640ms;
+  top: -2.75rem;
+  height: 3rem;
+  margin-inline: 12%;
+}
+
+.landing-root .hero-panel-mid {
+  --reveal-delay: 600ms;
+  top: -1.5rem;
+  height: 2.5rem;
+  margin-inline: 6%;
+}
+
+/*
+ * A panel settles below full opacity, which is what puts it behind.
+ *
+ * Written only in the revealed state, and deliberately not on the base rule:
+ * `[data-reveal]` starts everything at zero, and an opacity here would match
+ * its specificity, win on source order, and quietly cancel the fade — leaving
+ * the panels visible from the first paint and sliding in silently.
+ */
+.landing-root [data-revealed='true'] .hero-panel-back { opacity: 0.55; }
+.landing-root [data-revealed='true'] .hero-panel-mid { opacity: 0.8; }
+
+/*
+ * Depth, from the pointer and from the scroll, sharing one budget.
+ *
+ * Each layer takes a share of `--landing-depth`: the panels behind move most,
+ * the screenshot least, and nothing moves more than a few pixels. The pointer
+ * contributes only where the stylesheet says a pointer exists, which is what
+ * keeps a phone from inheriting a hover effect it can never trigger.
+ *
+ * Text is deliberately excluded. Moving a headline under the cursor makes it
+ * harder to read and buys nothing.
+ */
+.landing-root .hero-layer {
+  transform: translate3d(
+    calc(var(--pointer-x, 0) * var(--layer-depth, 0.2) * var(--landing-depth) * 0.2),
+    calc(
+      (var(--pointer-y, 0) * var(--layer-depth, 0.2) * var(--landing-depth) * 0.2) +
+      ((var(--scroll-progress) - 0.5) * var(--layer-depth, 0.2) * var(--landing-depth))
+    ),
+    0
+  );
+  transition: transform 420ms var(--reveal-ease);
+}
+
+.landing-root .hero-layer-screen { --layer-depth: 0.28; }
+.landing-root .hero-layer-panels { --layer-depth: 0.75; }
+
+/*
+ * Atmosphere.
+ *
+ * Two soft washes drifting behind the opening, on a cycle slow enough that the
+ * movement is never the thing you notice — only that the corner of the page is
+ * not quite static. Radial gradients rather than a blurred shape: a large
+ * animated `filter: blur()` is one of the most expensive things a page can do,
+ * and at this softness it would look identical.
+ *
+ * Desktop only, and behind everything.
+ */
+.landing-root .hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.landing-root .hero-blob-a {
+  inset-block-start: -14%;
+  inset-inline-end: -10%;
+  width: 46rem;
+  height: 46rem;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--secondary) 62%, transparent) 0%,
+    transparent 68%
+  );
+}
+
+.landing-root .hero-blob-b {
+  inset-block-start: 28%;
+  inset-inline-start: -18%;
+  width: 34rem;
+  height: 34rem;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--accent) 46%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+@media (min-width: 768px) {
+  .landing-root .hero-blob-a { animation: hero-drift-a 78s ease-in-out infinite; }
+  .landing-root .hero-blob-b { animation: hero-drift-b 92s ease-in-out infinite; }
+}
+
+@keyframes hero-drift-a {
+  from { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-3.5%, 4%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes hero-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(4%, -3%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+/* The pointer only contributes where there is a pointer to contribute. On a
+   touch screen the layers keep their scroll depth and nothing else. */
+@media (hover: none), (pointer: coarse) {
+  .landing-root .hero-layer {
+    --pointer-x: 0;
+    --pointer-y: 0;
+  }
+}
+
 /* ------------------------------------------------------------ problem section */
 
 /*
@@ -379,6 +565,27 @@ html:has(.landing-root) {
 
   .landing-root .landing-depth {
     transform: none;
+    will-change: auto;
+  }
+
+  /*
+   * The hero settles immediately, in its finished composition.
+   *
+   * Zeroing the depth budget above already stops the pointer and scroll
+   * layers, since both are written as a share of it. What is left is the
+   * entrance itself and the drifting washes, and neither may run: the opening
+   * has to be complete and readable the moment it is on screen, not
+   * assembling.
+   */
+  .landing-root .hero-layer {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .landing-root .hero-blob {
+    animation: none !important;
+    transform: none !important;
     will-change: auto;
   }
 
