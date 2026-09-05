@@ -211,8 +211,11 @@ describe('Phase B changed only the hero', () => {
     }
   })
 
-  it('left the other sections on the shared reveal', () => {
-    for (const section of ['StorySection', 'WorkspaceSection', 'FeatureShowcase']) {
+  it('kept its motion to itself', () => {
+    // The hero's vocabulary is the hero's. A section reaching for `hero-*` or
+    // the pointer hook would be borrowing an entrance built for the top of the
+    // page, which is the start of every section animating slightly differently.
+    for (const section of ['StorySection', 'ProblemSection', 'ProductShowcase']) {
       const text = read(`features/landing/${section}.tsx`)
       expect(text, section).not.toContain('hero-')
       expect(text, section).not.toContain('usePointerDepth')

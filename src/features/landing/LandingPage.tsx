@@ -2,8 +2,7 @@ import { LandingHeader } from '@/features/landing/LandingHeader'
 import { HeroSection } from '@/features/landing/HeroSection'
 import { StorySection } from '@/features/landing/StorySection'
 import { ProblemSection } from '@/features/landing/ProblemSection'
-import { WorkspaceSection } from '@/features/landing/WorkspaceSection'
-import { FeatureShowcase } from '@/features/landing/FeatureShowcase'
+import { ProductShowcase } from '@/features/landing/ProductShowcase'
 import { HowItWorksSection } from '@/features/landing/HowItWorksSection'
 import { BuildJourneySection } from '@/features/landing/BuildJourneySection'
 import { FinalCtaSection } from '@/features/landing/FinalCtaSection'
@@ -30,8 +29,7 @@ export function LandingPage() {
         <HeroSection />
         <StorySection />
         <ProblemSection />
-        <WorkspaceSection />
-        <FeatureShowcase />
+        <ProductShowcase />
         <HowItWorksSection />
         <BuildJourneySection />
         <FinalCtaSection />

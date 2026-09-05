@@ -475,6 +475,213 @@ html:has(.landing-root) {
   transform: none;
 }
 
+/* ---------------------------------------------------------- product showcase */
+
+/*
+ * One product story, in one section.
+ *
+ * The markup is a plain list: each item holds its own copy and its own screen,
+ * which on a phone is exactly what it should be — read a paragraph, see the
+ * screen it describes, scroll on. Nothing below `min-width: 1024px` positions
+ * anything absolutely, nothing sticks, and no content waits on a scroll
+ * position to become visible.
+ *
+ * The desktop layout is an enhancement layered on top of that, not a different
+ * page: the same items are lifted onto a shared sticky stage and driven from
+ * the section's scroll progress.
+ */
+
+.landing-root .showcase {
+  background:
+    linear-gradient(to bottom, var(--landing-ground), var(--landing-cream) 22%, var(--landing-cream) 78%, var(--landing-ground));
+}
+
+.landing-root .showcase-item {
+  padding-block: 3.5rem;
+}
+
+.landing-root .showcase-item__index {
+  margin-inline-end: 0.6rem;
+  color: color-mix(in oklab, var(--foreground) 45%, transparent);
+}
+
+.landing-root .showcase-item__media {
+  margin-block-start: 2rem;
+}
+
+/* The rail is desktop furniture; the phone has the document order instead. */
+.landing-root .showcase-rail {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  /*
+   * The track is the scroll distance the sequence needs; the stage is what
+   * stays put while it is spent. Height in viewport units so the pacing is the
+   * same on a laptop and on a large display — a fixed pixel track would race
+   * past on one and crawl on the other.
+   *
+   * `top` clears the sticky header rather than pinning to the very top, and
+   * the stage is deliberately under a full viewport so the section below stays
+   * slightly visible. A reader can always see there is more page.
+   */
+  .landing-root .showcase-track {
+    height: 260vh;
+    margin-block-start: 4rem;
+  }
+
+  .landing-root .showcase-stage {
+    position: sticky;
+    top: 5rem;
+    height: 80vh;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: 2rem;
+
+    /*
+     * Progress through the sequence, remapped from the track's own travel.
+     *
+     * `--scroll-progress` runs 0 to 1 across the whole track including the
+     * viewport it crosses, so the stage is only actually stuck across the
+     * middle of that range. The window below is that middle, clamped
+     * generously at both ends: erring wide means the first and last stages
+     * hold a little longer, which is what they should do anyway.
+     */
+    --sequence: clamp(0, calc((var(--scroll-progress) - 0.22) / 0.56), 1);
+    /* Position along the five stages, 0 through 4. */
+    --cursor: calc(var(--sequence) * 4);
+    /* The strip along the bottom that belongs to the rail. Declared once, so
+       the stages reserve exactly what the rail occupies. */
+    --rail-strip: 9rem;
+  }
+
+  .landing-root .showcase-items {
+    position: absolute;
+    inset: 0;
+  }
+
+  /*
+   * Every stage occupies the same box; which one is being read is decided by
+   * how near the cursor is to it.
+   *
+   * `--active` is a triangle: 1 at its own stage, falling to 0 one stage away
+   * in either direction. Two neighbours are partly present at any moment,
+   * which is what makes the change a dissolve rather than a cut.
+   */
+  .landing-root .showcase-item {
+    --distance: max(calc(var(--cursor) - var(--stage)), calc(var(--stage) - var(--cursor)));
+    --active: clamp(0, calc(1 - var(--distance)), 1);
+
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: minmax(17rem, 30%) 1fr;
+    align-items: center;
+    gap: 3rem;
+    /* Both columns centre in what is left above the rail, so a long paragraph
+       cannot run down into it. */
+    padding-block: 0 var(--rail-strip);
+    /* Only the stage being read can be interacted with; the others are behind
+       it and must not take a click meant for the screen in front. */
+    pointer-events: none;
+    z-index: 1;
+    z-index: calc(1 + round(down, var(--active) * 10, 1));
+  }
+
+  /*
+   * Copy and screen change on different curves, because they stack
+   * differently.
+   *
+   * A screen that is not being read stays faintly present and reads as depth:
+   * it is offset, turned, and scaled, so five of them look like a stack behind
+   * the one in front. Text has none of that. Two paragraphs at the same size
+   * crossfading in the same column do not read as depth, they read as one
+   * smeared paragraph — and a headline arriving between the lines of the one
+   * leaving is worse than either alone.
+   *
+   * So the copy is switched rather than dissolved. `--active` above 0.5 means
+   * this stage is the nearest one, and only one stage can be nearest, so
+   * keying the fade to that threshold makes two visible paragraphs impossible
+   * rather than merely unlikely. The swap takes about a sixteenth of the
+   * travel between stages, which reads as a cut. Nothing is lost by cutting:
+   * the continuity a reader follows is the screen, which is crossfading
+   * underneath the whole time.
+   */
+  .landing-root .showcase-item__copy {
+    /* Signed, so the stage being left leaves upward and the stage arriving
+       rises into place — a short settle on either side of the cut. */
+    transform: translate3d(0, calc((var(--stage) - var(--cursor)) * 26px), 0);
+    opacity: clamp(0, calc((var(--active) - 0.5) * 16), 1);
+  }
+
+  .landing-root .showcase-item__media {
+    /*
+     * What is not being read rests out to one side, alternating by stage, so
+     * the set reads as a spread rather than a pile — and converges on the
+     * reading position as its stage becomes active.
+     */
+    --rest-x: calc((var(--stage) - 2) * 52px);
+    --rest-y: calc(26px + var(--distance) * 12px);
+
+    margin-block-start: 0;
+    opacity: calc(0.14 + 0.86 * var(--active));
+    transform:
+      translate3d(
+        calc(var(--rest-x) * (1 - var(--active))),
+        calc(var(--rest-y) * (1 - var(--active))),
+        0
+      )
+      scale(calc(0.92 + 0.08 * var(--active)))
+      rotate(calc((var(--stage) - 2) * 0.5deg * (1 - var(--active))));
+  }
+
+  /*
+   * The index rail, along the bottom of the copy column. It says where in the
+   * sequence a reader is, which the stacked copy alone cannot.
+   */
+  .landing-root .showcase-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    position: absolute;
+    inset-block-end: 2rem;
+    inset-inline-start: 2rem;
+    width: 30%;
+    max-width: 17rem;
+    z-index: 20;
+  }
+
+  .landing-root .showcase-rail__item {
+    --distance: max(calc(var(--cursor) - var(--stage)), calc(var(--stage) - var(--cursor)));
+    --active: clamp(0, calc(1 - var(--distance)), 1);
+
+    display: flex;
+    gap: 0.7rem;
+    align-items: baseline;
+    font-size: 0.78rem;
+    opacity: calc(0.3 + 0.7 * var(--active));
+    transform: translate3d(calc(var(--active) * 5px), 0, 0);
+  }
+
+  .landing-root .showcase-rail__index {
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--foreground) 50%, transparent);
+  }
+
+  .landing-root .showcase-rail__label {
+    font-weight: 500;
+  }
+
+  /* The copy block inside each item carries its own index on a phone; on
+     desktop the rail says it, so the inline one would be a second answer. */
+  .landing-root .showcase-item__index {
+    display: none;
+  }
+}
+
+/* Reduced motion and small screens share the same answer: nothing moves, and
+   everything is in the document where it can be read. */
+
 /* --------------------------------------------------------------- photo strip */
 
 /*
@@ -566,6 +773,59 @@ html:has(.landing-root) {
   .landing-root .landing-depth {
     transform: none;
     will-change: auto;
+  }
+
+  /*
+   * The product showcase becomes a document again.
+   *
+   * The sticky stage is abandoned rather than merely frozen: a stuck panel
+   * whose contents no longer change is a reader scrolling past nothing, which
+   * is worse than no effect at all. The items return to the flow they already
+   * have on a phone, each with its copy and its screen, in order.
+   */
+  .landing-root .showcase-track {
+    height: auto;
+    margin-block-start: 0;
+  }
+
+  .landing-root .showcase-stage {
+    position: static;
+    height: auto;
+    max-width: none;
+    padding-inline: 0;
+  }
+
+  .landing-root .showcase-items {
+    position: static;
+  }
+
+  .landing-root .showcase-item {
+    position: static;
+    display: block;
+    opacity: 1;
+    padding-block: 3.5rem;
+    pointer-events: auto;
+  }
+
+  /* Both the offsets and the progress-driven fades: nothing here may depend on
+     `--scroll-progress`, which never moves once the depth budget is zero. */
+  .landing-root .showcase-item__copy,
+  .landing-root .showcase-item__media {
+    transform: none;
+    opacity: 1;
+  }
+
+  .landing-root .showcase-item__media {
+    margin-block-start: 2rem;
+  }
+
+  .landing-root .showcase-item__index {
+    display: inline;
+  }
+
+  /* The rail describes a sequence that is no longer happening. */
+  .landing-root .showcase-rail {
+    display: none;
   }
 
   /*
