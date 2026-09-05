@@ -55,7 +55,10 @@ export function NarrativeSection() {
   return (
     <section
       id="about"
-      className="bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-open),transparent)] py-24 md:py-32"
+      // `overflow-x: clip` and not `hidden`: the scatter the pieces settle in
+      // from must not be able to scroll the page, and a scroll container here
+      // would be a second thing to go wrong.
+      className="overflow-x-clip bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-open),transparent)] py-24 md:py-32"
     >
       <Reveal className="mx-auto w-full max-w-7xl px-5 sm:px-8">
         <p data-reveal className="landing-eyebrow">

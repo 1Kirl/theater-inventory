@@ -542,11 +542,34 @@ html:has(.landing-root) {
   transform: none;
 }
 
-.landing-root .drift-a { --drift-x: -38px; --drift-y: -26px; --drift-r: -2.5deg; --reveal-delay: 0ms; }
-.landing-root .drift-b { --drift-x: 6px; --drift-y: -36px; --drift-r: 1.75deg; --reveal-delay: 90ms; }
-.landing-root .drift-c { --drift-x: 40px; --drift-y: -22px; --drift-r: 2.5deg; --reveal-delay: 180ms; }
-.landing-root .drift-d { --drift-x: -42px; --drift-y: 24px; --drift-r: 2deg; --reveal-delay: 270ms; }
-.landing-root .drift-e { --drift-x: 42px; --drift-y: 26px; --drift-r: -2deg; --reveal-delay: 360ms; }
+/*
+ * The scatter each piece settles in from.
+ *
+ * Vertical offset and rotation everywhere; sideways offset only once there is
+ * room for it. On a phone these cards are the full width of the column, so a
+ * forty-pixel horizontal start pushes them past the edge and the document
+ * scrolls sideways before they arrive — measured at twenty-three pixels of
+ * overflow at 390px wide. There is nothing to see in a horizontal scatter of
+ * items that are all the same width anyway.
+ *
+ * The threshold is the same one the narrative grid widens at. At 768 the three
+ * columns are still tight enough that a forty-pixel start on the right-hand
+ * card runs eleven pixels past the edge, which is how this was found the second
+ * time.
+ */
+.landing-root .drift-a { --drift-y: -26px; --drift-r: -2.5deg; --reveal-delay: 0ms; }
+.landing-root .drift-b { --drift-y: -36px; --drift-r: 1.75deg; --reveal-delay: 90ms; }
+.landing-root .drift-c { --drift-y: -22px; --drift-r: 2.5deg; --reveal-delay: 180ms; }
+.landing-root .drift-d { --drift-y: 24px; --drift-r: 2deg; --reveal-delay: 270ms; }
+.landing-root .drift-e { --drift-y: 26px; --drift-r: -2deg; --reveal-delay: 360ms; }
+
+@media (min-width: 1024px) {
+  .landing-root .drift-a { --drift-x: -38px; }
+  .landing-root .drift-b { --drift-x: 6px; }
+  .landing-root .drift-c { --drift-x: 40px; }
+  .landing-root .drift-d { --drift-x: -42px; }
+  .landing-root .drift-e { --drift-x: 42px; }
+}
 
 /* ------------------------------------------------------ shared primitives */
 
@@ -658,6 +681,17 @@ html:has(.landing-root) {
  * The gradient and its stops are unchanged; only the transparency is new.
  */
 .landing-root .showcase {
+  /*
+   * The spread is decoration, and decoration must not scroll the document.
+   *
+   * A resting screen sits up to 104px out to one side, which the stage's own
+   * max-width absorbs on a large display and does not on a laptop: measured at
+   * 1366 the outermost screen ran 32px past the viewport, and at 1024 it was
+   * 81px. `clip` rather than `hidden`, because `hidden` would make this a
+   * scroll container and the sticky stage inside would stop sticking.
+   */
+  overflow-x: clip;
+
   background:
     linear-gradient(
       to bottom,

@@ -240,7 +240,18 @@ export function FallingTheaterProps() {
         last = now
         Engine.update(engine, delta)
 
+        /*
+         * Only what moved.
+         *
+         * A settled pile is the page's resting state, and it lasts for as long
+         * as the visitor stays. Writing thirty-four transforms every frame for
+         * bodies that are asleep and cannot move is the one piece of real waste
+         * in this loop, and skipping it is safe without any wake detection: a
+         * body's last awake frame already wrote its final position, and a body
+         * that has just been added is placed by its own ref on mount.
+         */
         for (const [id, body] of bodies) {
+          if (body.isSleeping) continue
           const node = nodes.get(id)
           if (node !== undefined) place(node, body)
         }
