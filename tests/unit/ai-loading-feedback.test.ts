@@ -59,7 +59,10 @@ describe.each(FLOWS)('$name', ({ file, busy, label }) => {
   })
 
   it('reports a failure rather than leaving the wait to speak for it', () => {
-    expect(text).toContain('setError(aiFailureMessage(caught))')
+    // The feature is passed so the message can say what this feature's fallback
+    // actually is — Smart Search still has its filters, the generator has
+    // nothing — which is why the argument is asserted rather than just the call.
+    expect(text).toMatch(/setError\(aiFailureMessage\(caught, '[a-z-]+'\)\)/)
   })
 })
 
@@ -90,6 +93,33 @@ describe('the two waits are one component', () => {
     for (const service of consumers) {
       const users = FLOWS.filter(({ file }) => read(file).includes(service))
       expect(users.length, service).toBe(1)
+    }
+  })
+})
+
+describe('the wait is bounded by the SDK, not by a second clock', () => {
+  it('passes an explicit timeout to getGenerativeModel', () => {
+    // Without this the SDK applies its own default of 180 seconds, which is a
+    // batch-job ceiling on an interactive button press. `RequestOptions.timeout`
+    // drives the SDK's internal AbortController and actually cancels the fetch;
+    // a `Promise.race` of our own would leave the request running and merely
+    // stop listening for it, which is how a "cancelled" request goes on costing
+    // quota.
+    const source = read('features/ai/ai-client.ts')
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+
+    expect(code).toContain('{ timeout: AI_REQUEST_TIMEOUT_MS }')
+    expect(code).not.toContain('Promise.race')
+    expect(code).not.toContain('setTimeout')
+  })
+
+  it('measures how long the request ran, for the development diagnostic', () => {
+    // The one thing the error object never carries, and the one that separates
+    // a refusal from a request that ran out the clock.
+    for (const { file } of FLOWS) {
+      const text = read(file)
+      expect(text, file).toContain('const startedAt = Date.now()')
+      expect(text, file).toMatch(/reportAiFailure\(caught, '[a-z-]+', Date\.now\(\) - startedAt\)/)
     }
   })
 })

@@ -1,5 +1,6 @@
 import { FirebaseError } from 'firebase/app'
 import { AiOutputError, describeAiFailure } from '@/features/ai/ai-errors'
+import { AI_REQUEST_TIMEOUT_MS } from '@/features/ai/ai-client'
 
 /**
  * Development-only diagnostics for an AI failure.
@@ -128,18 +129,33 @@ export function buildAiDiagnostic(caught: unknown, projectId?: string | null): A
  * The UI message is unchanged by this; it is an extra line in the console for
  * whoever is looking.
  */
-export function reportAiFailure(caught: unknown, feature: string): void {
+export function reportAiFailure(
+  caught: unknown,
+  feature: string,
+  /**
+   * How long the request ran before it failed.
+   *
+   * The one thing the error object never says, and the one that separates "the
+   * service refused us immediately" from "we waited out the timeout". Optional
+   * so an existing caller that has not measured it still reports everything
+   * else.
+   */
+  elapsedMs?: number,
+): void {
   if (!import.meta.env.DEV) return
 
   const diagnostic = buildAiDiagnostic(caught, import.meta.env.VITE_FIREBASE_PROJECT_ID)
 
   console.groupCollapsed(`[AI diagnostic] ${feature}: ${diagnostic.kind}`)
   console.table({
+    feature,
     classified_as: diagnostic.kind,
     firebase_code: diagnostic.code ?? '(none)',
     http_status: diagnostic.status ?? '(none)',
     http_status_text: diagnostic.statusText ?? '(none)',
     finish_reason: diagnostic.finishReason ?? '(none)',
+    elapsed_ms: elapsedMs ?? '(not measured)',
+    timeout_ms: AI_REQUEST_TIMEOUT_MS,
   })
 
   if (diagnostic.details.length > 0) console.table(diagnostic.details)

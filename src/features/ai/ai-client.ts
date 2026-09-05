@@ -16,6 +16,28 @@ import { getFirebaseApp } from '@/lib/firebase'
 
 const AI_MODEL = 'gemini-3.5-flash'
 
+/**
+ * How long an interactive AI request may take before it is given up on.
+ *
+ * The SDK's own default is 180 seconds (`DEFAULT_FETCH_TIMEOUT_MS` in
+ * `@firebase/ai`), which is a sane ceiling for a batch job and far too long for
+ * somebody who has just pressed a button. Three minutes of a spinner is
+ * indistinguishable from a hang, and the usual response is to reload the page —
+ * which throws the request away and asks the model again.
+ *
+ * Thirty seconds is past the slow end of a normal generation and well short of
+ * the point where a person concludes the app is broken. Both features share it:
+ * Smart Search and the Requirement Generator send comparable prompts to the
+ * same model, so there is no measured reason to give one longer than the other,
+ * and one policy is one thing to reason about.
+ *
+ * Passed to the SDK rather than raced against it. `RequestOptions.timeout` is
+ * how this SDK version bounds a request — it drives an internal
+ * `AbortController` that actually cancels the fetch — whereas a `Promise.race`
+ * of our own would leave the request running and the answer discarded.
+ */
+export const AI_REQUEST_TIMEOUT_MS = 30_000
+
 /** Which feature made the call. Keeps the two distinguishable in code. */
 export type AiFeature = 'smart-search' | 'requirement-generator'
 
@@ -78,7 +100,7 @@ export const generateStructured: AiGenerate = async (request) => {
       // typed, not in the model's sampling.
       temperature: 0.2,
     },
-  })
+  }, { timeout: AI_REQUEST_TIMEOUT_MS })
 
   const result = await model.generateContent(request.prompt)
 

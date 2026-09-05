@@ -194,7 +194,7 @@ describe('describeAiFailure', () => {
 
     const failure = describeAiFailure(error)
     expect(failure.kind).toBe('daily-quota')
-    expect(failure.message).toMatch(/daily limit resets/i)
+    expect(failure.message).toMatch(/daily quota resets/i)
     expect(failure.message).not.toMatch(/busy right now/i)
   })
 
@@ -227,7 +227,12 @@ describe('describeAiFailure', () => {
     })
 
     const message = describeAiFailure(error).message
-    expect(message).not.toMatch(/free.?tier|gemini|quota|20/i)
+
+    // The quota *identifier*, the plan, the model, and the number are what must
+    // not reach a screen. The word "quota" itself is not a leak — the message
+    // has to name the thing that ran out for the sentence to mean anything —
+    // so it is the specifics that are banned, not the concept.
+    expect(message).not.toMatch(/free.?tier|gemini|GenerateRequests|PerProject|\b20\b/i)
   })
 
   it('names the service-not-enabled case', () => {

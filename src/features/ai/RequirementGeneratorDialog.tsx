@@ -103,6 +103,7 @@ export function RequirementGeneratorDialog({
     setRelated([])
     setFindings([])
     setGenerating(true)
+    const startedAt = Date.now()
 
     try {
       // Every quantity and every amount of money is worked out here, from the
@@ -154,8 +155,8 @@ export function RequirementGeneratorDialog({
     } catch (caught) {
       // The message on screen stays deliberately vague; the console gets the
       // sanitized detail, in development only.
-      reportAiFailure(caught, 'requirement-generator')
-      setError(aiFailureMessage(caught))
+      reportAiFailure(caught, 'requirement-generator', Date.now() - startedAt)
+      setError(aiFailureMessage(caught, 'requirement-generator'))
     } finally {
       setGenerating(false)
     }

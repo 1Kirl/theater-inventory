@@ -57,6 +57,9 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
 
     setRunning(true)
     setError(null)
+    // Measured for the development diagnostic, which is the only place that can
+    // tell a refusal from a request that ran out the clock.
+    const startedAt = Date.now()
 
     try {
       const result = await askInventoryQuestion({ query: trimmed, items, units, teams })
@@ -65,8 +68,8 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
     } catch (caught) {
       // The message on screen stays deliberately vague; the console gets the
       // sanitized detail, in development only.
-      reportAiFailure(caught, 'smart-search')
-      setError(aiFailureMessage(caught))
+      reportAiFailure(caught, 'smart-search', Date.now() - startedAt)
+      setError(aiFailureMessage(caught, 'smart-search'))
     } finally {
       setRunning(false)
     }
@@ -141,10 +144,9 @@ export function SmartSearchPanel({ items, units, teams, onAnswer, onClear, activ
 
         {error ? (
           <Alert variant="destructive">
-            <AlertDescription className="space-y-2">
-              <span className="block">{error}</span>
-              <span className="text-xs">The search and filters below keep working without AI.</span>
-            </AlertDescription>
+            {/* The fallback sentence lives in the message now, so the two
+                cannot drift apart or say it twice. */}
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
 
