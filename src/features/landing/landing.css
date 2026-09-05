@@ -29,6 +29,38 @@
      and a bounce would read as a toy. */
   --reveal-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 
+  /*
+   * The page's motion vocabulary, in one place.
+   *
+   * Read off what the page already does rather than invented beside it: the
+   * reveal has always been 700ms over 28px with a 90ms stagger, and these name
+   * those values so a new section reaches for the same ones instead of picking
+   * its own. A page where every section animates slightly differently reads as
+   * unfinished, and the difference is never visible in any single diff.
+   *
+   * `--landing-depth` is the ceiling on scroll-driven displacement, not a
+   * suggestion. Forty pixels is enough for one plane to separate from another
+   * and small enough that a phone scrolling quickly does not feel like it is
+   * sliding. It is also the single switch reduced motion turns off: a rule
+   * written as a fraction of this depth needs no reduced-motion branch of its
+   * own, because zero depth resolves it to its final position.
+   */
+  --landing-duration-micro: 200ms;
+  --landing-duration-reveal: 700ms;
+  --landing-duration-media: 450ms;
+  --landing-stagger: 90ms;
+  --landing-distance-reveal: 28px;
+  --landing-distance-text: 14px;
+  --landing-depth: 40px;
+
+  /*
+   * Maintained by `useScrollProgress` on sections that opt in, and 0 on every
+   * section that does not. Declared here so a rule reading it always finds a
+   * number: an undefined custom property inside `calc()` invalidates the whole
+   * declaration, which fails as a broken layout rather than as no animation.
+   */
+  --scroll-progress: 0;
+
   background-color: var(--landing-ground);
   color: var(--foreground);
 }
@@ -107,11 +139,13 @@ html:has(.landing-root) {
  */
 .landing-root [data-reveal] {
   opacity: 0;
-  transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, 28px), 0)
+  transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, var(--landing-distance-reveal)), 0)
     scale(var(--reveal-scale, 1));
   transition:
-    opacity var(--reveal-duration, 700ms) var(--reveal-ease) var(--reveal-delay, 0ms),
-    transform var(--reveal-duration, 700ms) var(--reveal-ease) var(--reveal-delay, 0ms);
+    opacity var(--reveal-duration, var(--landing-duration-reveal)) var(--reveal-ease)
+      var(--reveal-delay, 0ms),
+    transform var(--reveal-duration, var(--landing-duration-reveal)) var(--reveal-ease)
+      var(--reveal-delay, 0ms);
 }
 
 .landing-root [data-revealed='true'] [data-reveal] {
@@ -168,6 +202,92 @@ html:has(.landing-root) {
 .landing-root .drift-c { --drift-x: 40px; --drift-y: -22px; --drift-r: 2.5deg; --reveal-delay: 180ms; }
 .landing-root .drift-d { --drift-x: -42px; --drift-y: 24px; --drift-r: 2deg; --reveal-delay: 270ms; }
 .landing-root .drift-e { --drift-x: 42px; --drift-y: 26px; --drift-r: -2deg; --reveal-delay: 360ms; }
+
+/* ------------------------------------------------------ shared primitives */
+
+/*
+ * A short text reveal, for a line that should arrive rather than travel.
+ *
+ * The standard 28px is right for a block; a headline broken into lines wants
+ * less, or the lines chase each other up the screen instead of settling
+ * together. Opt in per element, beside the delay classes.
+ */
+.landing-root .reveal-text {
+  --reveal-y: var(--landing-distance-text);
+}
+
+/*
+ * Depth, expressed as a share of the page's one depth budget.
+ *
+ * Anything scroll-driven multiplies `--landing-depth` rather than naming its
+ * own pixel distance. Two consequences follow, and both are the point: the
+ * page cannot drift into one section moving twice as far as its neighbour, and
+ * reduced motion switches all of it off by setting the budget to zero, so no
+ * rule needs a reduced-motion branch of its own.
+ *
+ * `--depth-scale` is how much of the budget an element takes. Progress runs 0
+ * to 1, so the offset is centred: half the share above, half below.
+ */
+.landing-root .landing-depth {
+  transform: translate3d(
+    0,
+    calc((var(--scroll-progress) - 0.5) * var(--depth-scale, 1) * var(--landing-depth)),
+    0
+  );
+  will-change: transform;
+}
+
+/*
+ * The hover a card opts into.
+ *
+ * Two pixels and a slightly deeper shadow. Enough to answer "is this something
+ * I can press", short of the lift-and-scale that makes a page of cards feel
+ * like a game board. `focus-visible` gets the same treatment, because somebody
+ * navigating by keyboard is asking the same question.
+ *
+ * Applied to nothing yet; sections opt in as they are redesigned.
+ */
+.landing-root .landing-lift {
+  transition:
+    transform var(--landing-duration-micro) var(--reveal-ease),
+    box-shadow var(--landing-duration-micro) var(--reveal-ease);
+}
+
+.landing-root .landing-lift:hover,
+.landing-root .landing-lift:focus-visible {
+  transform: translate3d(0, -2px, 0);
+  box-shadow:
+    0 2px 4px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 18px 40px -24px color-mix(in oklab, var(--foreground) 26%, transparent);
+}
+
+/*
+ * Media that arrives rather than appears.
+ *
+ * The primitive the product screenshots will use when the workspace and the
+ * feature showcase start swapping between them: a wipe from the bottom edge
+ * plus a fraction of movement, so one screenshot replacing another reads as a
+ * deliberate change rather than a flicker.
+ *
+ * Driven by an attribute rather than a class, so a section can hold several
+ * and mark exactly one active without rewriting class lists. Nothing sets it
+ * yet.
+ */
+.landing-root .landing-media {
+  opacity: 0;
+  clip-path: inset(0 0 12% 0);
+  transform: translate3d(0, 10px, 0);
+  transition:
+    opacity var(--landing-duration-media) var(--reveal-ease),
+    clip-path var(--landing-duration-media) var(--reveal-ease),
+    transform var(--landing-duration-media) var(--reveal-ease);
+}
+
+.landing-root .landing-media[data-media-active='true'] {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transform: none;
+}
 
 /* --------------------------------------------------------------- photo strip */
 
@@ -236,6 +356,50 @@ html:has(.landing-root) {
     opacity: 1 !important;
     transform: none !important;
     transition: none !important;
+  }
+
+  /*
+   * One line disables every scroll-driven effect on the page, present and
+   * future.
+   *
+   * `.landing-depth` computes its offset as a share of this budget, so zero
+   * resolves the transform to `translate3d(0, 0, 0)` — the element's final,
+   * readable position — without the rule needing to know reduced motion
+   * exists. A rule that instead hard-coded its own pixel distance would have
+   * to be remembered here, and one day would not be.
+   *
+   * `useScrollProgress` goes on writing the variable. That costs a style
+   * write per frame while a section is on screen and moves nothing, which is
+   * the right trade against a JavaScript media query: this project forbids
+   * `matchMedia` in source, and the preference belongs to the stylesheet.
+   */
+  .landing-root {
+    --landing-depth: 0px;
+  }
+
+  .landing-root .landing-depth {
+    transform: none;
+    will-change: auto;
+  }
+
+  /* Hover may still respond — it is a reply to a deliberate action, not motion
+     the page starts on its own — but it arrives without travelling. */
+  .landing-root .landing-lift {
+    transition: box-shadow var(--landing-duration-micro) var(--reveal-ease);
+  }
+
+  .landing-root .landing-lift:hover,
+  .landing-root .landing-lift:focus-visible {
+    transform: none;
+  }
+
+  /* Media swaps still happen; they just cut rather than wipe, so nothing is
+     hidden behind an animation that was switched off. */
+  .landing-root .landing-media {
+    opacity: 1;
+    clip-path: none;
+    transform: none;
+    transition: none;
   }
 
   .landing-root .landing-marquee {
