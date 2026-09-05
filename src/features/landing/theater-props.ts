@@ -47,16 +47,16 @@ export function densityFor(viewportWidth: number): DensityPolicy {
     // A phone shows the whole pile at once and has the least room to spare, so
     // it gets fewer, smaller props and longer gaps between them.
     return {
-      initial: 5, maximum: 7,
-      minSize: 28, maxSize: 44,
-      minInterval: 11_000, maxInterval: 18_000,
+      initial: 10, maximum: 13,
+      minSize: 26, maxSize: 42,
+      minInterval: 7_000, maxInterval: 12_000,
     }
   }
 
   return {
-    initial: 10, maximum: 15,
-    minSize: 40, maxSize: 72,
-    minInterval: 7_000, maxInterval: 14_000,
+    initial: 28, maximum: 34,
+    minSize: 36, maxSize: 66,
+    minInterval: 4_000, maxInterval: 8_000,
   }
 }
 
@@ -129,10 +129,23 @@ export function spawnFor(
   random: () => number,
 ): SpawnState {
   const size = policy.minSize + random() * (policy.maxSize - policy.minSize)
-  const margin = size
+
+  /*
+   * Where a prop enters, and why it is not the whole width.
+   *
+   * Spread across the full viewport, twenty-eight props on a wide screen land
+   * as a single flat row one prop deep — they never meet, so nothing ever
+   * stacks. Dropping them down a central band makes them arrive on top of each
+   * other, and the pile then spreads outwards on its own as bodies roll off
+   * one another, which is the shape that reads as a pile rather than as a
+   * border. The band is still most of the screen, so this is a bias rather
+   * than a column.
+   */
+  const band = viewportWidth * SPAWN_BAND
+  const margin = (viewportWidth - band) / 2 + size / 2
 
   return {
-    x: margin + random() * Math.max(1, viewportWidth - margin * 2),
+    x: margin + random() * Math.max(1, band - size),
     // Above the top edge, far enough that it is already moving when it enters.
     y: -size * 2 - random() * 120,
     angle: (random() - 0.5) * 0.7,
@@ -145,6 +158,13 @@ export function spawnFor(
     prop: THEATER_PROPS[Math.floor(random() * THEATER_PROPS.length)] ?? THEATER_PROPS[0],
   }
 }
+
+/**
+ * The share of the viewport props fall into.
+ *
+ * Wide enough to stay random, narrow enough that they meet on the way down.
+ */
+export const SPAWN_BAND = 0.62
 
 /** Milliseconds until the next drop, from the current time rather than a queue. */
 export function nextDropDelay(policy: DensityPolicy, random: () => number): number {

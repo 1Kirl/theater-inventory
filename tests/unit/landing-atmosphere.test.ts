@@ -3,7 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   GLYPH_RADIUS_RATIO, NARROW_VIEWPORT, PHYSICS, STATIC_PROP_COUNT, THEATER_PROPS,
-  densityFor, nextDropDelay, spawnFor,
+  SPAWN_BAND, densityFor, nextDropDelay, spawnFor,
 } from '@/features/landing/theater-props'
 
 /**
@@ -170,25 +170,27 @@ describe('the density policy', () => {
     expect(phone.minInterval).toBeGreaterThan(desktop.minInterval)
   })
 
-  it('stays inside the counts the phase set', () => {
+  it('stays inside the counts the tuning set', () => {
     const phone = densityFor(390)
     const desktop = densityFor(1440)
 
-    expect(phone.initial).toBeGreaterThanOrEqual(4)
-    expect(phone.initial).toBeLessThanOrEqual(6)
+    expect(phone.initial).toBeGreaterThanOrEqual(8)
+    expect(phone.initial).toBeLessThanOrEqual(12)
     expect(phone.maximum).toBeGreaterThanOrEqual(phone.initial)
-    expect(phone.maximum).toBeLessThanOrEqual(7)
+    expect(phone.maximum).toBeLessThanOrEqual(14)
 
-    expect(desktop.initial).toBeGreaterThanOrEqual(8)
-    expect(desktop.initial).toBeLessThanOrEqual(12)
+    expect(desktop.initial).toBeGreaterThanOrEqual(24)
+    expect(desktop.initial).toBeLessThanOrEqual(32)
     expect(desktop.maximum).toBeGreaterThanOrEqual(desktop.initial)
-    expect(desktop.maximum).toBeLessThanOrEqual(16)
+    // The ceiling measured stable: all bodies asleep, and a settled step
+    // costing a sixteenth of a millisecond.
+    expect(desktop.maximum).toBeLessThanOrEqual(40)
   })
 
-  it('drops one every seven to fourteen seconds on a desktop', () => {
+  it('drops one every four to eight seconds on a desktop', () => {
     const policy = densityFor(1440)
-    expect(policy.minInterval).toBeGreaterThanOrEqual(7_000)
-    expect(policy.maxInterval).toBeLessThanOrEqual(14_000)
+    expect(policy.minInterval).toBeGreaterThanOrEqual(4_000)
+    expect(policy.maxInterval).toBeLessThanOrEqual(8_000)
 
     const delays = Array.from({ length: 40 }, (_, i) => nextDropDelay(policy, () => i / 40))
     expect(Math.min(...delays)).toBeGreaterThanOrEqual(policy.minInterval)
@@ -212,6 +214,24 @@ describe('every prop starts somewhere different', () => {
       expect(s.x, `x at ${r}`).toBeGreaterThanOrEqual(0)
       expect(s.x, `x at ${r}`).toBeLessThanOrEqual(1440)
     }
+  })
+
+  it('falls down a central band, so props meet on the way', () => {
+    // Spread across the whole width, twenty-eight props land one deep and
+    // never touch. The band is the reason there is a pile at all — measured,
+    // it puts thirteen of twenty-eight off the floor — and it is a bias rather
+    // than a column: they spread outwards again as bodies roll off each other.
+    expect(SPAWN_BAND).toBeGreaterThan(0.5)
+    expect(SPAWN_BAND).toBeLessThan(0.75)
+
+    const width = 1440
+    const xs = Array.from({ length: 21 }, (_, i) => spawnFor(width, policy, () => i / 20).x)
+    const inset = (width * (1 - SPAWN_BAND)) / 2
+
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(inset)
+    expect(Math.max(...xs)).toBeLessThanOrEqual(width - inset)
+    // Still random inside it, not a line.
+    expect(new Set(xs.map(Math.round)).size).toBeGreaterThan(15)
   })
 
   it('varies size, angle, drift and spin', () => {
@@ -337,7 +357,11 @@ describe('the vellum', () => {
   it('is milky white with a grain, and the grain never moves', () => {
     const block = rule(atmosphere, '.landing-root .landing-vellum {\n  z-index')
 
-    expect(block).toContain('background-color: color-mix(in oklab, var(--landing-panel)')
+    const opacity = Number(block.match(/var\(--landing-panel\) (\d+)%/)?.[1])
+    // Thin enough that the pile reads through it, opaque enough that the props
+    // never look pasted onto the page.
+    expect(opacity).toBeGreaterThanOrEqual(55)
+    expect(opacity).toBeLessThanOrEqual(72)
     expect(block).toContain('repeating-linear-gradient')
     expect(block).not.toContain('animation')
     expect(block).not.toContain('@keyframes')

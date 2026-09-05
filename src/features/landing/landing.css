@@ -91,9 +91,9 @@
    * section. Sections carrying product UI are the opaque ones, because a
    * screenshot has to be read and a background does not.
    */
-  --landing-veil-open: 32%;
-  --landing-veil-mid: 58%;
-  --landing-veil-muted: 84%;
+  --landing-veil-open: 26%;
+  --landing-veil-mid: 52%;
+  --landing-veil-muted: 88%;
 
   /*
    * Every section names one of the three. Leaving a section bare is not a
@@ -205,7 +205,7 @@
  */
 .landing-root .landing-vellum {
   z-index: var(--landing-z-vellum);
-  background-color: color-mix(in oklab, var(--landing-panel) 78%, transparent);
+  background-color: color-mix(in oklab, var(--landing-panel) 64%, transparent);
   background-image:
     repeating-linear-gradient(
       27deg,
