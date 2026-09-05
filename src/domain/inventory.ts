@@ -133,6 +133,34 @@ export function isSerialized(item: Pick<InventoryItem, 'tracking_mode'>): boolea
   return trackingModeOf(item) === 'serialized'
 }
 
+/**
+ * A bulk item's lifecycle status, defaulting the way `trackingModeOf` does.
+ *
+ * Absent means `available`. Every bulk item written before item lifecycle
+ * existed is in exactly that position, and reading the field directly would
+ * make each of those an `undefined` to handle at every call site.
+ *
+ * Only meaningful for a bulk item. A serialized item's units each carry their
+ * own status and the item mirrors them in `unit_counts`; asking this of one
+ * would invent a sixth answer next to the five its units already give.
+ */
+export function itemStatusOf(item: Pick<InventoryItem, 'status'>): UnitStatus {
+  return item.status ?? 'available'
+}
+
+/**
+ * Whether this item's own lifecycle status means anything.
+ *
+ * Bulk only, by construction rather than by convention: Security Rules refuse
+ * `status` on a serialized item, so a serialized one can never carry a value
+ * for this to read.
+ */
+export function tracksItemStatus(
+  item: Pick<InventoryItem, 'tracking_mode'>,
+): boolean {
+  return trackingModeOf(item) === 'bulk'
+}
+
 export const EMPTY_UNIT_COUNTS: UnitCounts = {
   active_total: 0,
   available: 0,
@@ -312,6 +340,29 @@ export function isOfferedTransition(from: UnitStatus, to: UnitStatus): boolean {
 
 export function offeredTransitions(from: UnitStatus): readonly UnitStatus[] {
   return OFFERED_ACTIONS[from] ?? []
+}
+
+/**
+ * The moves offered on a bulk item's own lifecycle: the same ones a unit gets.
+ *
+ * A bulk item differs from a unit in how finely it is counted, not in how
+ * equipment moves through its life, so Inventory offers it the same three
+ * things — and maintenance is not among them.
+ *
+ * That exclusion is the whole point of routing through `OFFERED_ACTIONS`
+ * rather than a table of its own. Equipment enters and leaves `in_maintenance`
+ * through the maintenance workflow, which writes the repair record and the
+ * status together; offering the move from Inventory would let somebody say
+ * equipment is at the shop with no repair to show for it. `ALLOWED_TRANSITIONS`
+ * stays broad because the maintenance service still has to make that move —
+ * this is only what a person is offered.
+ */
+export function offeredBulkTransitions(from: UnitStatus): readonly UnitStatus[] {
+  return offeredTransitions(from)
+}
+
+export function isOfferedBulkTransition(from: UnitStatus, to: UnitStatus): boolean {
+  return isOfferedTransition(from, to)
 }
 
 export function canTransition(from: UnitStatus, to: UnitStatus): boolean {

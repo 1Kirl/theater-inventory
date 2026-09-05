@@ -39,6 +39,8 @@
     --color-accent: var(--accent);
     --color-muted-foreground: var(--muted-foreground);
     --color-muted: var(--muted);
+    --color-placeholder-foreground: var(--placeholder-foreground);
+    --color-helper-foreground: var(--helper-foreground);
     --color-secondary-foreground: var(--secondary-foreground);
     --color-secondary: var(--secondary);
     --color-primary-foreground: var(--primary-foreground);
@@ -94,6 +96,21 @@
        ground or a muted block inside a card would read as a hole in it. */
     --muted: oklch(0.972 0.007 156);
     --muted-foreground: oklch(0.492 0.018 160);
+    /*
+     * Two steps below body text, and each one is a different job.
+     *
+     * `helper` is supporting prose — a card's subtitle, a field's hint. It sits
+     * just under `muted-foreground` so a title stays the thing you read first.
+     *
+     * `placeholder` is not content at all: it is an example of what to type,
+     * and it was being mistaken for a value somebody had already entered. It
+     * goes a step lighter still and the stylesheet sets it in italic, so the
+     * difference survives being read quickly. It stops well above the disabled
+     * text it must not be confused with — an unreadable hint is worse than a
+     * hint that looks like a value.
+     */
+    --helper-foreground: oklch(0.565 0.017 160);
+    --placeholder-foreground: oklch(0.618 0.015 160);
     /* A slightly stronger pale green for hover and active surfaces. */
     --accent: oklch(0.918 0.034 157);
     --accent-foreground: oklch(0.298 0.04 162);
@@ -222,6 +239,8 @@
     --secondary-foreground: oklch(0.952 0.008 155);
     --muted: oklch(0.268 0.016 166);
     --muted-foreground: oklch(0.718 0.019 158);
+    --helper-foreground: oklch(0.648 0.018 158);
+    --placeholder-foreground: oklch(0.585 0.016 158);
     --accent: oklch(0.328 0.031 163);
     --accent-foreground: oklch(0.952 0.01 155);
     --destructive: oklch(0.704 0.191 22.216);
@@ -319,6 +338,19 @@
     }
   html {
     @apply font-sans;
+    }
+  /*
+   * Every placeholder, in one place.
+   *
+   * Written as a base rule rather than a utility on each field because the
+   * application has one shared `Input` and eight hand-rolled `textarea`s, and a
+   * per-field class is exactly how those drift apart. Anything that genuinely
+   * needs a different placeholder can still say so with a utility, which wins
+   * over this layer.
+   */
+  ::placeholder {
+    color: var(--placeholder-foreground);
+    font-style: italic;
     }
 }
 @media print {

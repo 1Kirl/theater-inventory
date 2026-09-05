@@ -1,4 +1,4 @@
-import { trackingModeOf } from '@/domain/inventory'
+import { itemStatusOf, trackingModeOf } from '@/domain/inventory'
 import { activeQuantityOf } from '@/domain/inventory-value'
 import { costBreakdown, summarizeProductionCosts } from '@/domain/production-costs'
 import { ACTION_TYPE_LABELS } from '@/domain/production'
@@ -71,6 +71,8 @@ export interface LifecycleChart {
   activeTotal: number
   /** How many items contributed. Zero means there is nothing to draw. */
   serializedItemCount: number
+  /** Bulk items contributing their own status, one each. */
+  bulkItemCount: number
 }
 
 /**
@@ -87,9 +89,22 @@ export interface LifecycleChart {
  * Dropping it would either overstate `available` or leave a wedge of the ring
  * unaccounted for, and a reader would have no way to tell which.
  *
- * Only serialized items contribute. A bulk item is a quantity nobody counted
- * piece by piece; it has no lifecycle to chart, and folding its total in would
- * put units on the same ring as things that were never units.
+ * Both tracking modes contribute, and they contribute different things.
+ *
+ * A serialized item contributes its units, one apiece, read from the counts it
+ * already mirrors. A bulk item contributes **itself, once**, under its own
+ * status — never its `quantity_total`. That distinction is the whole point: a
+ * bulk item is a quantity nobody counted piece by piece, so twenty cables are
+ * one thing that has one state, and adding twenty to the ring would drown the
+ * individually tracked equipment in numbers that were never units.
+ *
+ * A bulk item with no stored status reads as `available`, which is what every
+ * item written before item lifecycle existed is. Nothing is migrated for that
+ * to hold.
+ *
+ * `unusable_on_hand` has no bulk equivalent. It is a per-unit distinction —
+ * this exact clamp is on the shelf and unusable — and a bulk item records
+ * condition as a spread across a quantity rather than as one answer.
  */
 export function lifecycleChart(items: readonly InventoryItem[]): LifecycleChart {
   const totals = {
@@ -102,18 +117,28 @@ export function lifecycleChart(items: readonly InventoryItem[]): LifecycleChart 
   }
 
   let serializedItemCount = 0
+  let bulkItemCount = 0
 
   for (const item of items) {
-    const counts = item.unit_counts
-    if (trackingModeOf(item) !== 'serialized' || !counts) continue
+    if (trackingModeOf(item) === 'serialized') {
+      const counts = item.unit_counts
+      // A serialized item with no mirrors has nothing to say yet.
+      if (!counts) continue
 
-    serializedItemCount += 1
-    totals.available += counts.available
-    totals.unusable_on_hand += counts.unusable_on_hand
-    totals.in_use += counts.in_use
-    totals.in_maintenance += counts.in_maintenance
-    totals.lost += counts.lost
-    totals.retired += counts.retired
+      serializedItemCount += 1
+      totals.available += counts.available
+      totals.unusable_on_hand += counts.unusable_on_hand
+      totals.in_use += counts.in_use
+      totals.in_maintenance += counts.in_maintenance
+      totals.lost += counts.lost
+      totals.retired += counts.retired
+      continue
+    }
+
+    // One, whatever the quantity. `itemStatusOf` supplies `available` for the
+    // items that predate the field.
+    bulkItemCount += 1
+    totals[itemStatusOf(item)] += 1
   }
 
   const slices: ChartDatum[] = [
@@ -167,6 +192,7 @@ export function lifecycleChart(items: readonly InventoryItem[]): LifecycleChart 
     total: activeTotal + totals.retired,
     activeTotal,
     serializedItemCount,
+    bulkItemCount,
   }
 }
 

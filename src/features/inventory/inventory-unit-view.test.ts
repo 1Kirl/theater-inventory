@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  UNIT_STATUS_LABELS, itemPresentation, unitBreakdownLine, unitStatusTone,
+  UNITS_PAGE_SIZE, UNIT_STATUS_LABELS, itemPresentation, paginateUnits, unitBreakdownLine,
+  unitStatusTone,
 } from '@/features/inventory/inventory-unit-view'
 import { EMPTY_UNIT_COUNTS } from '@/domain/inventory'
 import { STATUS_TONES } from '@/domain/status-tone'
@@ -138,5 +139,96 @@ describe('unit status presentation', () => {
     for (const status of UNIT_STATUSES) {
       expect(STATUS_TONES).toContain(unitStatusTone(status))
     }
+  })
+})
+
+describe('paginateUnits', () => {
+  const listOf = (n: number) => Array.from({ length: n }, (_, i) => `MIC-${i + 1}`)
+
+  it('leaves a short list alone, so no control is drawn for it', () => {
+    // The QA boundary: fifteen fits, sixteen does not.
+    const page = paginateUnits(listOf(15), 1)
+
+    expect(page.paginated).toBe(false)
+    expect(page.pageCount).toBe(1)
+    expect(page.items).toHaveLength(15)
+  })
+
+  it('splits at sixteen, into two pages', () => {
+    const page = paginateUnits(listOf(16), 1)
+
+    expect(page.paginated).toBe(true)
+    expect(page.pageCount).toBe(2)
+    expect(page.items).toHaveLength(15)
+  })
+
+  it('counts pages the way the QA examples do', () => {
+    expect(paginateUnits(listOf(30), 1).pageCount).toBe(2)
+    expect(paginateUnits(listOf(31), 1).pageCount).toBe(3)
+    expect(paginateUnits(listOf(45), 1).pageCount).toBe(3)
+  })
+
+  it('never puts more than a page-size on a page', () => {
+    for (const total of [1, 15, 16, 31, 100]) {
+      for (let page = 1; page <= paginateUnits(listOf(total), 1).pageCount; page += 1) {
+        expect(paginateUnits(listOf(total), page).items.length)
+          .toBeLessThanOrEqual(UNITS_PAGE_SIZE)
+      }
+    }
+  })
+
+  it('keeps the order it was given and loses nothing across the pages', () => {
+    // Ordering belongs to the caller; this must not sort, dedupe, or drop.
+    const all = listOf(31)
+    const rejoined = [1, 2, 3].flatMap((page) => paginateUnits(all, page).items)
+
+    expect(rejoined).toEqual(all)
+  })
+
+  it('corrects a page number the list has outgrown', () => {
+    // Deleting the last unit on the last page: the stored page still says 3,
+    // and without this the card would render empty with no way back.
+    const page = paginateUnits(listOf(16), 3)
+
+    expect(page.page).toBe(2)
+    expect(page.items).toHaveLength(1)
+  })
+
+  it('corrects a page number below the first one', () => {
+    expect(paginateUnits(listOf(20), 0).page).toBe(1)
+    expect(paginateUnits(listOf(20), -4).page).toBe(1)
+  })
+
+  it('survives a page number that is not a number at all', () => {
+    expect(paginateUnits(listOf(20), Number.NaN).page).toBe(1)
+    expect(paginateUnits(listOf(20), 1.7).page).toBe(1)
+  })
+
+  it('reports an empty list as one empty page rather than none', () => {
+    const page = paginateUnits([], 1)
+
+    expect(page.pageCount).toBe(1)
+    expect(page.paginated).toBe(false)
+    expect(page.items).toEqual([])
+    // Not "1–0 of 0".
+    expect(page.from).toBe(0)
+    expect(page.to).toBe(0)
+  })
+
+  it('numbers the positions it is showing', () => {
+    const second = paginateUnits(listOf(42), 2)
+
+    expect(second.from).toBe(16)
+    expect(second.to).toBe(30)
+    expect(second.total).toBe(42)
+
+    const last = paginateUnits(listOf(42), 3)
+    expect(last.from).toBe(31)
+    expect(last.to).toBe(42)
+  })
+
+  it('refuses a page size that would divide by zero', () => {
+    expect(paginateUnits(listOf(5), 1, 0).items).toHaveLength(1)
+    expect(paginateUnits(listOf(5), 1, -3).items).toHaveLength(1)
   })
 })

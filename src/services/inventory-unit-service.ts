@@ -11,7 +11,7 @@ import {
 import { buildInventoryItemUpdate } from '@/domain/inventory-payloads'
 import { isSerialized } from '@/domain/inventory'
 import {
-  EMPTY_MIRRORS, MAX_BULK_UNITS, mirrorsOf, promotionMaintenanceBlock, serializedMirrorInput, type PromotionDraft, validatePromotion, withConditionChanged, withUnitsAdded,
+  EMPTY_MIRRORS, MAX_BULK_UNITS, UNIT_DELETE_BLOCKED_MESSAGE, canHardDeleteUnit, mirrorsOf, promotionMaintenanceBlock, serializedMirrorInput, type PromotionDraft, validatePromotion, withConditionChanged, withUnitRemoved, withUnitsAdded,
 } from '@/domain/inventory-unit'
 import { listMaintenanceRecordsForItem } from '@/services/maintenance-service'
 import type { InventoryItem, InventoryUnit, UnitStatus } from '@/types/inventory'
@@ -497,6 +497,81 @@ export async function promoteToSerialized(params: {
       createdAt: item.created_at,
       now: serverTimestamp,
       input: serializedMirrorInput(item, mirrors),
+    }))
+  })
+}
+
+/**
+ * Delete a unit that should never have existed.
+ *
+ * The narrow undo for a mis-generated run, not a way to remove equipment: that
+ * is what retiring is for, and retiring keeps the history. Anything with a
+ * history attached is refused rather than cleaned up around — no cascade, no
+ * rewriting of events, no touching of the repair records that name it.
+ *
+ * The unit is re-read inside the transaction and re-checked there. The copy the
+ * caller is holding was loaded when the page rendered, and in between it may
+ * have been checked out, sent for repair, or planned into one; deciding from
+ * the stale copy is exactly how a unit with history would get deleted. Security
+ * Rules make the same check again on the server, so a client that skipped both
+ * is still refused.
+ *
+ * The parent's mirrors move in the same transaction, which Rules also require.
+ */
+export async function deleteInventoryUnit(params: {
+  item: InventoryItem
+  unit: InventoryUnit
+}): Promise<void> {
+  requireUid()
+
+  // Refused before a round trip when the answer is already visible, so the
+  // common case reports the real reason rather than a permission error.
+  if (!canHardDeleteUnit(params.unit)) {
+    throw new OrganizationError('invalid-inventory-unit', UNIT_DELETE_BLOCKED_MESSAGE)
+  }
+
+  const db = getFirebaseDb()
+  const itemRef = doc(db, COLLECTIONS.inventoryItems, params.item.item_id)
+  const unitRef = doc(db, COLLECTIONS.inventoryUnits, params.unit.unit_id)
+
+  await runTransaction(db, async (transaction) => {
+    const [unitSnapshot, itemSnapshot] = await Promise.all([
+      transaction.get(unitRef),
+      transaction.get(itemRef),
+    ])
+
+    if (!unitSnapshot.exists()) {
+      // Already gone. Nothing to do, and nothing to correct on the parent
+      // either, since whoever removed it moved the counts with it.
+      return
+    }
+    if (!itemSnapshot.exists()) {
+      throw new OrganizationError('inventory-item-not-found', 'That inventory item is gone.')
+    }
+
+    const unit = unitSnapshot.data() as InventoryUnit
+    const item = itemSnapshot.data() as InventoryItem
+
+    if (unit.organization_id !== item.organization_id
+        || unit.inventory_item_id !== item.item_id) {
+      throw new OrganizationError('invalid-inventory-unit', 'That unit belongs to another item.')
+    }
+
+    // The check that matters, on the server's copy rather than the page's.
+    if (!canHardDeleteUnit(unit)) {
+      throw new OrganizationError('invalid-inventory-unit', UNIT_DELETE_BLOCKED_MESSAGE)
+    }
+
+    const next = withUnitRemoved(mirrorsOf(item), unit)
+
+    transaction.delete(unitRef)
+    transaction.set(itemRef, buildInventoryItemUpdate({
+      itemId: item.item_id,
+      organizationId: item.organization_id,
+      createdByUid: item.created_by_uid,
+      createdAt: item.created_at,
+      now: serverTimestamp,
+      input: serializedMirrorInput(item, next),
     }))
   })
 }

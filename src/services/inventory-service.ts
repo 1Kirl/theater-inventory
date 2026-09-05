@@ -142,7 +142,15 @@ export async function updateInventoryItem(params: {
       createdByUid: params.existing.created_by_uid,
       createdAt: params.existing.created_at,
       now: serverTimestamp,
-      input: params.input,
+      // The item's lifecycle is not the edit form's business, but the write
+      // replaces the whole document — so anything the form does not carry is
+      // deleted. These three are carried, never set, here.
+      input: {
+        ...params.input,
+        status: params.existing.status,
+        retirementReason: params.existing.retirement_reason,
+        lastLifecycleEventId: params.existing.last_lifecycle_event_id,
+      },
     }),
   )
 }

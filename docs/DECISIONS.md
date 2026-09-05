@@ -62,7 +62,7 @@ Each takes `none`, `view`, or `edit`.
 **Dashboard has no permission.** Each summary card renders only when its underlying module is
 viewable. A member with no viewable module sees an empty-state dashboard.
 
-**Action List has no permission.** It follows `productions`, because an action item exists only as
+**Needs & Actions has no permission.** It follows `productions`, because an action item exists only as
 the resolution of a production requirement.
 
 ## 4. Organization Join Code
@@ -828,7 +828,7 @@ organization has actually used.
 | Topic | IA v3 | /docs (before) | Resolution |
 |---|---|---|---|
 | Permission storage | `team_permissions` collection, per (uid × org × team) | permission map on membership | Membership map (decision 2) |
-| Permission modules | 4 (inventory, maintenance, production, calendar) | 6 (adds dashboard, action_list) | 4, with Dashboard and Action List following other modules (decision 3) |
+| Permission modules | 4 (inventory, maintenance, production, calendar) | 6 (adds dashboard, action_list) | 4, with Dashboard and Needs & Actions following other modules (decision 3) |
 | Membership state fields | `role` + `status` | `role` only | `role` only; two fields would drift |
 | Member promotion | automatic on permission assignment | manual status change | Automatic (decision 11) |
 | Join code location | field on `organizations` | `organization_join_codes` collection | Separate collection (decision 4) |
@@ -1108,6 +1108,13 @@ do the work alone.
 The inventory condition angle is not lost: the Inventory Condition card reports how many items are
 mostly needing repair or unusable, derived with the existing `conditionSummary`, and sits behind
 `inventory` view where it belongs.
+
+**Superseded in QA round 1 (QA-07).** That card was replaced by a Needs & Actions summary in the
+same slot, which follows `productions` rather than `inventory`. The dashboard therefore no longer
+reports the "mostly needing repair or unusable" item count or the lost-unit line; `summarizeInventory`
+still computes both and remains tested, so restoring them is a rendering change rather than a new
+figure. Equipment status and Inventory by category still carry the condition and composition
+picture.
 
 ### 55a. A shortage that cannot be computed reports null, not zero
 
@@ -2767,7 +2774,7 @@ as tests rather than as changes:
 No lost-equipment card was added: `lostUnits` already appears in the attention
 area, and a second surface for the same number would be clutter. No financial
 KPI was added either — Phase 11F put cost where decisions are made, on Production
-Detail and the Action List, and a headline number on the dashboard would invite
+Detail and Needs & Actions, and a headline number on the dashboard would invite
 reading a planning estimate as a budget.
 
 ### 92d. What the AI is still not allowed to do

@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useOrganization } from '@/features/organizations/useOrganization'
 import { hasModuleAccess } from '@/domain/module-access'
 import { MAINTENANCE_STATUS_LABELS, isOverdue } from '@/domain/maintenance'
-import { PRODUCTION_STATUS_LABELS } from '@/domain/production'
+import { ACTION_TYPE_LABELS, PRODUCTION_STATUS_LABELS } from '@/domain/production'
+import { ACTION_TYPES } from '@/types/production'
 import {
   maintenanceStatusTone, productionStatusTone, type StatusTone,
 } from '@/domain/status-tone'
@@ -26,7 +27,8 @@ import { formatEventTime, isAllDay } from '@/domain/calendar'
 import { itemNameById } from '@/features/maintenance/maintenance-view'
 import { audienceLabel } from '@/features/calendar/calendar-view'
 import {
-  hasAnyAccess, summarizeCalendar, summarizeInventory, summarizeMaintenance, summarizeProductions,
+  hasAnyAccess, summarizeActionItems, summarizeCalendar, summarizeInventory, summarizeMaintenance,
+  summarizeProductions,
 } from '@/features/dashboard/dashboard-summary'
 import { useDashboardData, type ModuleState } from '@/features/dashboard/useDashboardData'
 import { paths } from '@/routes/paths'
@@ -132,9 +134,12 @@ function lifecycleSummaryText(chart: LifecycleChart): string {
     .filter((slice) => slice.value > 0)
     .map((slice) => `${slice.label}: ${String(slice.value)}`)
 
+  // "Pieces" rather than "units": the ring now mixes individually tracked units
+  // with whole bulk items, and calling a box of twenty cables a unit would be
+  // the same overstatement the counting rule exists to avoid.
   return parts.length === 0
-    ? 'Equipment status: no individually tracked units.'
-    : `Equipment status, ${String(chart.total)} units in total. ${parts.join('. ')}.`
+    ? 'Equipment status: nothing tracked yet.'
+    : `Equipment status, ${String(chart.total)} in total. ${parts.join('. ')}.`
 }
 
 /** True only when the module was requested and came back. */
@@ -177,6 +182,7 @@ export function DashboardPage() {
     })
     : null
   const calendarSummary = events ? summarizeCalendar(events, now) : null
+  const actionsSummary = production ? summarizeActionItems(production.actions) : null
 
   // Both charts read the inventory the page already loaded, through the same
   // helpers the cards above use. Neither computes a figure of its own.
@@ -335,10 +341,7 @@ export function DashboardPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Equipment status</CardTitle>
-              <CardDescription>
-                Individually tracked equipment only. Bulk quantities are not units and are
-                not counted here.
-              </CardDescription>
+              <CardDescription>Current equipment by status.</CardDescription>
             </CardHeader>
             {/*
               * A vertical composition: the ring first, at a size that makes it
@@ -368,12 +371,12 @@ export function DashboardPage() {
               * second layout to maintain.
               */}
             <CardContent className="flex flex-1 flex-col justify-center">
-              {lifecycle.serializedItemCount === 0 ? (
+              {lifecycle.serializedItemCount + lifecycle.bulkItemCount === 0 ? (
                 <div className="border-border flex w-full flex-col items-center gap-2 rounded-lg border border-dashed bg-surface-sunken px-4 py-8 text-center">
                   <Package className="text-muted-foreground size-5" aria-hidden="true" />
-                  <p className="text-sm font-medium">No individually tracked equipment yet</p>
+                  <p className="text-sm font-medium">No equipment yet</p>
                   <p className="text-muted-foreground text-xs">
-                    Items tracked as a bulk quantity have no per-unit status to chart.
+                    Add an item and its status appears here.
                   </p>
                 </div>
               ) : (
@@ -402,9 +405,8 @@ export function DashboardPage() {
             <CardHeader>
               <CardTitle className="text-base">Inventory by category</CardTitle>
               <CardDescription>
-                Counted in things currently held — a maintained quantity for bulk items, active
-                units for serialized ones. Retired equipment is excluded.
-              </CardDescription>
+  Things currently held. Retired equipment is excluded.
+</CardDescription>
             </CardHeader>
             <CardContent>
               {categories.rows.length === 0 ? (
@@ -592,49 +594,60 @@ export function DashboardPage() {
           </Card>
         ) : null}
 
-        {inventorySummary ? (
+        {/*
+          * Needs & Actions, in the slot the inventory condition card used to
+          * hold. It follows the productions permission, like the page it
+          * summarizes and like the Active productions card beside it — the
+          * dashboard has no permission of its own.
+          *
+          * Everything here is counted from the action items the productions
+          * module already loaded. No extra read, and no stored total.
+          */}
+        {actionsSummary ? (
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <Package className="size-4" aria-hidden="true" />
-                    Inventory condition
+                    <ListChecks className="size-4" aria-hidden="true" />
+                    Needs &amp; Actions
                   </CardTitle>
-                  <CardDescription>Derived from each item's condition counts.</CardDescription>
+                  <CardDescription>Open work, by what it calls for.</CardDescription>
                 </div>
                 <Button asChild variant="ghost" size="sm">
-                  <Link to={paths.inventory}>Open inventory</Link>
+                  <Link to={paths.actionList}>Open Needs &amp; Actions</Link>
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {inventorySummary.itemCount === 0 ? (
+            <CardContent className="space-y-3">
+              {actionsSummary.openCount === 0 ? (
                 <p className="text-muted-foreground text-sm">
-                  No inventory has been added yet.
-                  {canAddInventory ? ' Add the first item to start tracking.' : ''}
+                  {actionsSummary.totalCount === 0
+                    ? 'Nothing has been planned yet. Actions are raised from a production\u2019s requirements.'
+                    : 'Nothing open. Every action has been done or cancelled.'}
                 </p>
               ) : (
                 <>
                   <p className="text-sm tabular-nums">
-                    {inventorySummary.needsAttentionCount} of {inventorySummary.itemCount} item
-                    {inventorySummary.itemCount === 1 ? '' : 's'} are mostly needing repair or
-                    unusable.
+                    {actionsSummary.openCount} open action
+                    {actionsSummary.openCount === 1 ? '' : 's'} across every production.
                   </p>
-                  <p className="text-muted-foreground text-xs tabular-nums">
-                    {inventorySummary.availableUnits} of {inventorySummary.totalUnits} units are
-                    marked available.
-                  </p>
-                  {/* Only individually tracked equipment can go missing: a bulk
-                      quantity has no piece to lose. Counted from the item
-                      summaries already loaded here. */}
-                  {inventorySummary.lostUnits > 0 ? (
-                    <p className="text-sm font-medium tabular-nums">
-                      {inventorySummary.lostUnits} piece
-                      {inventorySummary.lostUnits === 1 ? ' of equipment is' : 's of equipment are'}
-                      {' '}currently lost.
-                    </p>
-                  ) : null}
+                  {/* One row per kind of work, and only the kinds that have any.
+                      A column of zeroes says nothing a reader needs. */}
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+                    {ACTION_TYPES.filter((type) => actionsSummary.openByType[type] > 0).map(
+                      (type) => (
+                        <div key={type}>
+                          <dt className="text-muted-foreground text-xs">
+                            {ACTION_TYPE_LABELS[type]}
+                          </dt>
+                          <dd className="text-lg font-semibold tabular-nums">
+                            {actionsSummary.openByType[type]}
+                          </dd>
+                        </div>
+                      ),
+                    )}
+                  </dl>
                 </>
               )}
             </CardContent>

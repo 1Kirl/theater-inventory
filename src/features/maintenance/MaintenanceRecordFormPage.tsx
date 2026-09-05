@@ -419,9 +419,8 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
           <CardHeader>
             <CardTitle className="text-base">Equipment</CardTitle>
             <CardDescription>
-              The owning team comes from the item and is recorded permanently. It cannot be chosen
-              or changed here.
-            </CardDescription>
+  The owning team comes from the item and cannot be changed here.
+</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
@@ -670,7 +669,7 @@ export function MaintenanceRecordFormPage({ mode }: { mode: 'create' | 'edit' })
             </div>
             <div className="space-y-2">
               <Label htmlFor={`${fieldId}-cost`}>Cost</Label>
-              <Input id={`${fieldId}-cost`} type="number" min={0} step="0.01" value={state.cost} onChange={(event) => set('cost', event.target.value)} disabled={submitting} />
+              <Input id={`${fieldId}-cost`} type="number" min={0} step="0.01" placeholder="$XX.XX" value={state.cost} onChange={(event) => set('cost', event.target.value)} disabled={submitting} />
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor={`${fieldId}-notes`}>Repair notes</Label>

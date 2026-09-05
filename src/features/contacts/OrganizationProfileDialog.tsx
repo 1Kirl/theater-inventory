@@ -76,9 +76,8 @@ export function OrganizationProfileDialog({
         <DialogHeader>
           <DialogTitle>Your profile in {organization?.name ?? 'this organization'}</DialogTitle>
           <DialogDescription>
-            How you appear to others here. This is separate from your account, and separate from
-            your profile in any other organization.
-          </DialogDescription>
+  How you appear here. Separate from your account and from other organizations.
+</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">

@@ -54,9 +54,8 @@ export function TeamsCard() {
       <CardHeader>
         <CardTitle className="text-base">Teams</CardTitle>
         <CardDescription>
-          Lighting, Sound, Scenic, and so on. Teams scope who may edit which records, and cannot be
-          deleted once created.
-        </CardDescription>
+  Lighting, Sound, Scenic. Teams scope who may edit which records, and cannot be deleted.
+</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {teams.length === 0 ? (

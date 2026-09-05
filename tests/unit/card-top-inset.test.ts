@@ -133,7 +133,23 @@ describe('cards that genuinely have a description keep their spacing', () => {
   })
 
   it('keeps the gap between a title and its description in the primitive', () => {
+    // The point is that one component owns this spacing, not that it has a
+    // particular value: a per-card gap is what this whole file exists to
+    // prevent. QA-03 tightened it from gap-1 so a description reads as
+    // belonging to the title above it rather than floating between two cards,
+    // and the value is pinned here so that change is deliberate next time too.
     const header = card.slice(card.indexOf('function CardHeader'))
-    expect(header.slice(0, header.indexOf('/>'))).toContain('gap-1')
+    const declaration = header.slice(0, header.indexOf('/>'))
+
+    expect(declaration).toMatch(/\bgap-0\.5\b/)
+  })
+
+  it('draws a description one step back from body text', () => {
+    // QA-03 again: supporting copy must sit below the title in the hierarchy.
+    // `helper-foreground` is a token of its own rather than `muted-foreground`,
+    // which the application also uses for ordinary secondary text.
+    const description = card.slice(card.indexOf('function CardDescription'))
+
+    expect(description.slice(0, description.indexOf('/>'))).toContain('text-helper-foreground')
   })
 })

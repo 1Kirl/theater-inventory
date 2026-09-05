@@ -167,10 +167,9 @@ export function ActionListPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Action List</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Needs &amp; Actions</h1>
         <p className="text-muted-foreground text-sm">
-          What still has to be bought, rented, built, or repaired. Actions are planned from a
-          production's requirements.
+          What still has to be bought, rented, built, or repaired.
         </p>
       </div>
 
@@ -248,8 +247,7 @@ export function ActionListPage() {
           <CardContent className="space-y-3">
             <p className="text-sm font-medium">Nothing to action yet.</p>
             <p className="text-muted-foreground text-sm">
-              Actions appear here once a production requirement is matched to inventory and comes up
-              short.
+              Actions appear when a matched requirement comes up short.
             </p>
             <Button asChild variant="outline" size="sm"><Link to={paths.productions}>Go to productions</Link></Button>
           </CardContent>

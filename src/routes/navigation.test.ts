@@ -31,7 +31,7 @@ describe('sidebar navigation', () => {
       ['Scan', 'inventory'],
       ['Maintenance', 'maintenance'],
       ['Productions', 'productions'],
-      ['Action List', 'productions'],
+      ['Needs & Actions', 'productions'],
       ['Calendar', 'calendar'],
       // Knowing who is on your crew is not a module permission. The directory
       // is organization-internal and carries none.
@@ -48,7 +48,7 @@ describe('sidebar navigation', () => {
     expect(dashboard?.adminOnly).toBe(false)
   })
 
-  it('keeps the Action List on the productions permission', () => {
+  it('keeps Needs & Actions on the productions permission', () => {
     expect(navItems.find((item) => item.path === paths.actionList)?.module).toBe('productions')
   })
 

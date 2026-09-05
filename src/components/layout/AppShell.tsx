@@ -1,6 +1,6 @@
 import { Suspense, useState } from 'react'
 import { Link, Outlet, useNavigate } from 'react-router-dom'
-import { Building2, Menu, UserRound } from 'lucide-react'
+import { ArrowLeftRight, Building2, Menu, UserRound } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -64,7 +64,8 @@ export function AppShell() {
       <aside className="border-border bg-card hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col md:border-r">
         <div className="border-border space-y-2 border-b px-4 py-3">
           {organizationBlock}
-          <Button variant="ghost" size="sm" className="h-7 px-2" onClick={switchOrganization}>
+          <Button variant="outline" size="sm" className="h-7 w-full px-2" onClick={switchOrganization}>
+            <ArrowLeftRight className="size-3.5" aria-hidden="true" />
             Switch organization
           </Button>
         </div>
@@ -101,6 +102,7 @@ export function AppShell() {
                     switchOrganization()
                   }}
                 >
+                  <ArrowLeftRight className="size-4" aria-hidden="true" />
                   Switch organization
                 </Button>
               </div>

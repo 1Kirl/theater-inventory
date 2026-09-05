@@ -27,6 +27,7 @@ import type { InventoryItem } from '@/types/inventory'
 import type { ActionItem, Production, ProductionRequirement } from '@/types/production'
 import { buildProductionPlan } from '@/domain/production-planning'
 import type { ResolvedFinding } from '@/features/ai/requirement-generator-service'
+import { AI_GENERATING, AiThinking } from '@/features/ai/AiThinking'
 import { Link } from 'react-router-dom'
 import { formatCents, formatCostOrUnknown } from '@/domain/money'
 import { trackingModeOf } from '@/domain/inventory'
@@ -359,10 +360,8 @@ export function RequirementGeneratorDialog({
             Draft requirements with AI
           </DialogTitle>
           <DialogDescription>
-            The AI reads the inventory you already have access to and drafts against it.
-            Suggestions only — nothing is saved until you accept it, and every quantity, team, and
-            inventory match is yours to correct.
-          </DialogDescription>
+  Drafted against inventory you can already see. Nothing is saved until you accept it.
+</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -387,6 +386,10 @@ export function RequirementGeneratorDialog({
           <Button onClick={generate} disabled={generating || saving}>
             {generating ? 'Drafting…' : drafts ? 'Regenerate' : 'Generate suggestions'}
           </Button>
+
+          {/* Sits where the drafts will appear, so the wait occupies the same
+              space as the answer rather than leaving the dialog looking idle. */}
+          {generating ? <AiThinking label={AI_GENERATING} /> : null}
 
           {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
           {saveResult ? <Alert><AlertDescription>{saveResult}</AlertDescription></Alert> : null}

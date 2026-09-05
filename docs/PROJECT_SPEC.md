@@ -259,7 +259,7 @@ This calculation must be deterministic application logic, not AI output.
 A requirement with no linked inventory item is Not Matched: available quantity is null rather than
 zero, and no shortage is calculated until a real item is linked.
 
-### 7.7 Action List
+### 7.7 Needs & Actions
 
 When production shortages require work, the system supports these action types:
 
@@ -272,7 +272,7 @@ Already Available is not an action type. It is the derived state of a requiremen
 is zero, and it produces no task.
 
 Each requirement has at most one action item, created or updated when the user chooses an action
-type. Access to the Action List follows the Productions permission.
+type. Access to Needs & Actions follows the Productions permission.
 
 An actionable task may contain:
 
@@ -341,8 +341,8 @@ Permission levels:
 - view
 - edit
 
-The Dashboard and the Action List have no permission of their own. Dashboard cards follow the
-module each card summarizes, and the Action List follows Productions. Team assignment scopes
+The Dashboard and Needs & Actions have no permission of their own. Dashboard cards follow the
+module each card summarizes, and Needs & Actions follows Productions. Team assignment scopes
 editing within inventory, maintenance, production requirements, and action items; productions,
 calendar events, and teams are organization-level.
 

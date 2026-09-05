@@ -35,7 +35,7 @@ export const navItems: readonly NavItem[] = [
   { label: 'Scan', path: paths.scanner, icon: ScanLine, adminOnly: false, module: 'inventory' },
   { label: 'Maintenance', path: paths.maintenance, icon: Wrench, adminOnly: false, module: 'maintenance' },
   { label: 'Productions', path: paths.productions, icon: Theater, adminOnly: false, module: 'productions' },
-  { label: 'Action List', path: paths.actionList, icon: ClipboardList, adminOnly: false, module: 'productions' },
+  { label: 'Needs & Actions', path: paths.actionList, icon: ClipboardList, adminOnly: false, module: 'productions' },
   { label: 'Calendar', path: paths.calendar, icon: CalendarDays, adminOnly: false, module: 'calendar' },
   {
     label: 'Contacts', path: paths.contacts, icon: Contact, adminOnly: false,

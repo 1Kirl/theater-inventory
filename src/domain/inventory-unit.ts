@@ -134,6 +134,33 @@ export function withUnitAdded(
   return recomputed(counts, conditions)
 }
 
+/**
+ * The parent after a unit is removed from the inventory entirely.
+ *
+ * The exact inverse of `withUnitAdded`, and only ever applied to a unit that
+ * `canHardDeleteUnit` has cleared — which is always `available` and never
+ * retired, so in practice only the first branch runs. The retired branch is
+ * kept so the two functions stay each other's opposite rather than nearly so.
+ */
+export function withUnitRemoved(
+  mirrors: ItemMirrors,
+  unit: Pick<InventoryUnit, 'status' | 'condition'>,
+): ItemMirrors {
+  const bucket = bucketOf(unit)
+  const counts = { ...mirrors.unit_counts }
+  const conditions = { ...mirrors.condition_counts }
+
+  if (bucket === null) {
+    counts.retired = Math.max(0, counts.retired - 1)
+    return recomputed(counts, conditions)
+  }
+
+  counts[bucket] = Math.max(0, counts[bucket] - 1)
+  conditions[unit.condition] = Math.max(0, conditions[unit.condition] - 1)
+
+  return recomputed(counts, conditions)
+}
+
 /** The parent after several units are added, in one step. */
 export function withUnitsAdded(
   mirrors: ItemMirrors,
@@ -201,6 +228,51 @@ export function generateAssetCodes(params: {
     const number = String(params.start + index).padStart(width, '0')
     return prefix.length > 0 ? `${prefix}-${number}` : number
   })
+}
+
+/**
+ * The number a new run of units should start at.
+ *
+ * Generating a second batch used to start at 1 again, so the codes collided
+ * with the batch already on the shelf and the dialog reported every one of them
+ * as a duplicate. The answer is one past the highest number already used under
+ * the same prefix.
+ *
+ * Matching is exact, which is the whole difficulty. `generateAssetCodes` joins
+ * the prefix to a zero-padded number with a hyphen, so `MIC` owns `MIC-004` and
+ * does not own `MIC-STAND-004` — that belongs to a different prefix that merely
+ * starts the same way. Anchoring the pattern and requiring digits to the end is
+ * what keeps the two apart. A trailing hyphen the user typed is ignored, since
+ * `MIC` and `MIC-` plainly mean the same run.
+ *
+ * The padding is deliberately not read back: `MIC-004` and `MIC-4` are the same
+ * number, and `padWidthFor` decides the width of the new run from its own size.
+ * Anything that is not a plain number after the prefix is ignored rather than
+ * guessed at, so a hand-typed `MIC-SPARE` cannot push the next run into the
+ * hundreds.
+ */
+export function nextStartFor(prefix: string, existingCodes: readonly string[]): number {
+  // `MIC-` and `MIC` are the same prefix; the separator belongs to the format.
+  const trimmed = prefix.trim().replace(/-+$/, '')
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const pattern = trimmed.length > 0
+    ? new RegExp(`^${escaped}-(\\d+)$`, 'i')
+    // With no prefix the codes are bare numbers, which is what this generates.
+    : /^(\d+)$/
+
+  let highest: number | null = null
+
+  for (const code of existingCodes) {
+    const match = pattern.exec(code.trim())
+    if (!match?.[1]) continue
+
+    const value = Number(match[1])
+    // A code long enough to lose precision is not a number anybody typed.
+    if (!Number.isSafeInteger(value)) continue
+    if (highest === null || value > highest) highest = value
+  }
+
+  return highest === null ? 1 : highest + 1
 }
 
 export type BulkGenerationResult =
@@ -558,4 +630,96 @@ export function isOperationallyAvailable(
   unit: Pick<InventoryUnit, 'status' | 'condition'>,
 ): boolean {
   return bucketOf(unit) === 'available'
+}
+
+/**
+ * Why a unit cannot be deleted, when it cannot.
+ *
+ * Deleting equipment is not how it leaves the inventory — retiring it is, and
+ * that keeps the history. This exists for one narrower case: a unit generated
+ * by mistake, moments ago, that nothing has happened to yet.
+ */
+export const UNIT_DELETE_BLOCKED_MESSAGE =
+  'This unit has linked records and can\u2019t be permanently deleted. Retire it instead.'
+
+/**
+ * Whether anything is attached to this unit.
+ *
+ * Every one of these is a pointer the unit itself carries, and that is what
+ * makes the question answerable at all — Security Rules cannot query, so a
+ * check that had to search `asset_events` and `maintenance_records` could not
+ * be enforced where it matters.
+ *
+ * It is sufficient rather than merely convenient, because of an invariant the
+ * Rules already enforce on every write: a unit's status cannot change without
+ * `last_lifecycle_event_id` being set to a new event in the same commit, and
+ * going into maintenance must append to `maintenance_record_ids`. So a unit
+ * with none of these pointers has never changed status, and a unit that has
+ * never changed status has no lifecycle event and no repair naming it. The
+ * planned-repair pointer is checked separately because a plan may be attached
+ * without the status moving at all.
+ *
+ * `available` is therefore implied by the absence of a lifecycle event, and is
+ * asserted anyway: it costs nothing, and it is the condition a reader of this
+ * function will expect to see stated.
+ */
+export function unitHasLinkedRecords(unit: InventoryUnit): boolean {
+  return unit.status !== 'available'
+    || unit.last_lifecycle_event_id !== undefined
+    || unit.current_maintenance_record_id !== undefined
+    || unit.planned_maintenance_record_id !== undefined
+    || (unit.maintenance_record_ids?.length ?? 0) > 0
+    || unit.using_team_id !== undefined
+    || unit.using_member_uid !== undefined
+    || unit.checked_out_at !== undefined
+    || unit.retirement_reason !== undefined
+}
+
+/**
+ * Whether this unit may be deleted outright.
+ *
+ * Deliberately conservative: anything this cannot prove is clean is refused,
+ * and the answer is to retire the unit instead. Permission is a separate
+ * question, asked by the caller and enforced by Rules.
+ */
+export function canHardDeleteUnit(unit: InventoryUnit): boolean {
+  return !unitHasLinkedRecords(unit)
+}
+
+/**
+ * Why this unit cannot be deleted, in words, or `null` when it can.
+ *
+ * The control stays on screen when it is unavailable, so it has to say why —
+ * a greyed-out button with no explanation is a worse answer than no button.
+ *
+ * This decides nothing. It reads the same fields as `unitHasLinkedRecords` and
+ * refuses in exactly the same cases; a test pins the two together so this can
+ * never become a second, more permissive opinion.
+ *
+ * The reasons are separated because they are genuinely different situations and
+ * one message cannot honestly cover them. "It has linked records" is false of a
+ * unit that is merely checked out, and "retire it instead" is false advice for
+ * a unit that is already retired. Retiring is only suggested where the unit
+ * page actually offers it: `OFFERED_ACTIONS` allows retiring from `available`
+ * and `lost`, but not from `in_use` or `in_maintenance`, so those two say what
+ * is true without pointing at a button that is not there.
+ */
+export function unitDeleteBlockedReason(unit: InventoryUnit): string | null {
+  if (unit.status === 'retired') {
+    return 'This unit is already retired. Retired units are kept for their history.'
+  }
+  if (unit.status === 'in_use') {
+    return 'This unit is checked out, so it has a history to keep. '
+      + 'It can\u2019t be permanently deleted.'
+  }
+  if (unit.status === 'in_maintenance') {
+    return 'This unit is away for repair, so it has a history to keep. '
+      + 'It can\u2019t be permanently deleted.'
+  }
+  if (unit.status === 'lost') {
+    return 'This unit is recorded as lost, so it has a history to keep. Retire it instead.'
+  }
+
+  // Available, but something is attached to it.
+  return unitHasLinkedRecords(unit) ? UNIT_DELETE_BLOCKED_MESSAGE : null
 }

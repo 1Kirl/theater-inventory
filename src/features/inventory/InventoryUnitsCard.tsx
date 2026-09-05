@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ListPlus, Plus, Printer } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ListPlus, Plus, Printer, Trash2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table'
 import { CONDITION_LABELS } from '@/domain/inventory'
-import { UNIT_STATUS_LABELS } from '@/features/inventory/inventory-unit-view'
+import { UNIT_STATUS_LABELS, paginateUnits } from '@/features/inventory/inventory-unit-view'
+import { unitDeleteBlockedReason } from '@/domain/inventory-unit'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { conditionTone, unitStatusTone } from '@/domain/status-tone'
 import { BulkGenerateUnitsDialog } from '@/features/inventory/BulkGenerateUnitsDialog'
@@ -20,7 +25,9 @@ import { UnitLifecycleDialog } from '@/features/inventory/UnitLifecycleDialog'
 import { unitMaintenanceIndicator, unitRowControls } from '@/features/inventory/unit-lifecycle-view'
 import { teamNameOf } from '@/features/inventory/inventory-view'
 import { useOrganization } from '@/features/organizations/useOrganization'
-import { listAssetCodes, listUnitsForItem } from '@/services/inventory-unit-service'
+import {
+  deleteInventoryUnit, listAssetCodes, listUnitsForItem,
+} from '@/services/inventory-unit-service'
 import { toOrganizationErrorMessage } from '@/services/organization-errors-view'
 import type { InventoryItem, InventoryUnit } from '@/types/inventory'
 import { paths } from '@/routes/paths'
@@ -41,6 +48,15 @@ interface Props {
 export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
   const { membership, role, teams } = useOrganization()
   const [units, setUnits] = useState<InventoryUnit[] | undefined>(undefined)
+  /**
+   * Which page of the list is on screen.
+   *
+   * Held as the requested number and corrected on the way out, never written
+   * back. Clamping at render means a reload that shortens the list — a deleted
+   * unit, a switched item — shows a real page immediately, with no effect
+   * watching the length and no frame spent on an empty card.
+   */
+  const [page, setPage] = useState(1)
   const [codes, setCodes] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -82,6 +98,70 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
     await onUnitsChanged()
   }, [load, onUnitsChanged])
 
+  // Paginates the list in the order it arrived; nothing here reorders it.
+  const shown = paginateUnits(units ?? [], page)
+
+  /**
+   * The delete control, in both layouts.
+   *
+   * Present on every unit and disabled on the ones that cannot be deleted, so
+   * the feature is discoverable and its unavailability is explained rather than
+   * merely observed. `disabled` on a real button is what stops the click and
+   * the keyboard both; nothing here relies on styling to prevent the action,
+   * and the service and Security Rules refuse it independently anyway.
+   *
+   * The reason rides on a wrapping span rather than the button, because a
+   * disabled button receives no mouse events and would never show its own
+   * `title`. It is repeated into `aria-label` so the explanation is not
+   * mouse-only.
+   */
+  function DeleteControl({ unit, iconOnly = false }: { unit: InventoryUnit; iconOnly?: boolean }) {
+    const blocked = unitDeleteBlockedReason(unit)
+    const label = blocked ?? `Delete ${unit.asset_code} permanently`
+
+    return (
+      <span title={blocked ?? undefined} className="inline-flex">
+        <Button
+          size="sm"
+          variant={iconOnly ? 'ghost' : 'outline'}
+          disabled={blocked !== null}
+          aria-label={iconOnly || blocked !== null ? label : undefined}
+          className={blocked === null ? 'text-destructive hover:text-destructive' : undefined}
+          onClick={() => { setDeleting(unit) }}
+        >
+          <Trash2 className="size-4" aria-hidden="true" />
+          {iconOnly ? null : 'Delete'}
+        </Button>
+      </span>
+    )
+  }
+
+  /**
+   * The unit awaiting a delete confirmation, and the request in flight.
+   *
+   * Held here rather than per row so the confirmation survives the row being
+   * re-rendered, and so only one delete can be running at a time.
+   */
+  const [deleting, setDeleting] = useState<InventoryUnit | null>(null)
+  const [removing, setRemoving] = useState(false)
+
+  async function confirmDelete() {
+    if (!deleting || removing) return
+    setRemoving(true)
+    setError(null)
+
+    try {
+      await deleteInventoryUnit({ item, unit: deleting })
+      setDeleting(null)
+      await refresh()
+    } catch (caught) {
+      setDeleting(null)
+      setError(toOrganizationErrorMessage(caught))
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -89,9 +169,9 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
           <div className="space-y-1.5">
             <CardTitle className="text-base">Units</CardTitle>
             <CardDescription>
-              Every physical piece, tracked on its own — each with its own team, location, and
-              status. Retired units stay here for their history and are counted separately above.
-            </CardDescription>
+  Every physical piece, with its own team, location, and status. Retired units stay listed but
+  are not in the Summary.
+</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
             {units && units.length > 0 ? (
@@ -134,7 +214,7 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
           <>
             {/* Cards on a phone, a table once there is room for one. */}
             <ul className="space-y-2 sm:hidden">
-              {units.map((unit) => (
+              {shown.items.map((unit) => (
                 <li key={unit.unit_id} className="rounded-md border p-3">
                   <div className="flex items-start justify-between gap-2">
                     <Link
@@ -193,6 +273,11 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                         Edit
                       </Button>
                     ) : null}
+                    {/* Shown on every unit, and disabled on the ones that
+                        cannot be deleted. Hiding it would leave somebody
+                        wondering whether the feature exists; disabled with a
+                        reason answers the question they actually have. */}
+                    {canEdit ? <DeleteControl unit={unit} /> : null}
                     <Button asChild size="sm" variant="outline">
                       <Link to={paths.inventoryUnit(unit.unit_id)}>View details</Link>
                     </Button>
@@ -214,7 +299,7 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {units.map((unit) => (
+                  {shown.items.map((unit) => (
                     <TableRow key={unit.unit_id}>
                       <TableCell className="font-mono">
                         <Link
@@ -276,6 +361,7 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                               Edit
                             </Button>
                           ) : null}
+                          {canEdit ? <DeleteControl unit={unit} iconOnly /> : null}
                           {/* An explicit way in. The asset code is also a link,
                               but a link that looks like a label is not a way
                               anybody finds. */}
@@ -289,9 +375,76 @@ export function InventoryUnitsCard({ item, canEdit, onUnitsChanged }: Props) {
                 </TableBody>
               </Table>
             </div>
+
+            {/*
+              * Only once the list is long enough to be worth splitting. The
+              * page number is corrected by `paginateUnits` rather than reset by
+              * an effect, so generating or deleting units cannot strand this on
+              * a page that no longer exists.
+              */}
+            {shown.paginated ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <p className="text-muted-foreground text-xs tabular-nums">
+                  {shown.from}–{shown.to} of {shown.total}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={shown.page <= 1}
+                    onClick={() => { setPage(shown.page - 1) }}
+                  >
+                    <ChevronLeft className="size-4" aria-hidden="true" />
+                    Previous
+                  </Button>
+                  <span className="text-muted-foreground text-xs tabular-nums">
+                    Page {shown.page} of {shown.pageCount}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={shown.page >= shown.pageCount}
+                    onClick={() => { setPage(shown.page + 1) }}
+                  >
+                    Next
+                    <ChevronRight className="size-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </>
         )}
       </CardContent>
+
+      {/*
+        * Deleting is the exception, so it asks. The wording says permanent and
+        * says what to do instead, because retiring is the ordinary way
+        * equipment leaves the inventory and this is only for a unit generated
+        * by mistake.
+        */}
+      <AlertDialog
+        open={deleting !== null}
+        onOpenChange={(next) => { if (!next && !removing) setDeleting(null) }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleting?.asset_code} permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. Only a unit nothing has happened to yet can be deleted —
+              to take real equipment out of service, retire it instead so its history is kept.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => { event.preventDefault(); void confirmDelete() }}
+              disabled={removing}
+            >
+              {removing ? 'Deleting…' : 'Delete permanently'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {adding ? (
         <InventoryUnitDialog

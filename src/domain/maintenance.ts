@@ -3,6 +3,7 @@ import {
   type MaintenanceRecord,
   type MaintenanceStatus,
 } from '@/types/maintenance'
+import type { UnitStatus } from '@/types/inventory'
 
 /**
  * Maintenance arithmetic, kept out of components so the list, the detail, and
@@ -24,6 +25,33 @@ export const MAINTENANCE_STATUS_LABELS: Record<MaintenanceStatus, string> = {
  * are finished.
  */
 export const ACTIVE_STATUSES: readonly MaintenanceStatus[] = ['sent', 'in_service', 'ready']
+
+/**
+ * The lifecycle status a bulk item should carry, given every repair filed
+ * against it.
+ *
+ * Bulk equipment has no units to move, so the item itself is what goes to the
+ * shop — and unlike a unit, it can be on several repairs at once. It is away
+ * while *any* of them is active, and back only when the last one closes. That
+ * is why this takes the whole set rather than the record being written: a
+ * record returning tells you nothing on its own if two others are still out.
+ *
+ * Returns `null` when the item's status should not move. Maintenance only ever
+ * swaps `available` and `in_maintenance`, the same pair `isMaintenanceMove`
+ * allows for a unit — equipment that is signed out or lost is not at a repair
+ * shop, and a repair opened against it leaves its status alone rather than
+ * overwriting where it actually is.
+ */
+export function bulkMaintenanceStatusFor(
+  currentItemStatus: UnitStatus,
+  records: readonly Pick<MaintenanceRecord, 'status'>[],
+): UnitStatus | null {
+  const away = records.some((record) => isActiveStatus(record.status))
+
+  if (away && currentItemStatus === 'available') return 'in_maintenance'
+  if (!away && currentItemStatus === 'in_maintenance') return 'available'
+  return null
+}
 
 export function isActiveStatus(status: MaintenanceStatus): boolean {
   return ACTIVE_STATUSES.includes(status)

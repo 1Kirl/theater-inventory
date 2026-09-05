@@ -161,8 +161,8 @@ export function MemberAssignmentDialog({
               </div>
             ))}
             <p className="text-muted-foreground text-xs">
-              Action List follows Productions. The Dashboard shows whichever cards these permissions
-              allow.
+              Needs &amp; Actions follows Productions. The Dashboard shows whichever cards these
+              permissions allow.
             </p>
           </div>
 
@@ -170,7 +170,7 @@ export function MemberAssignmentDialog({
             <AlertDescription>
               {willBeMember
                 ? 'This assignment makes them a Member.'
-                : 'With this assignment they stay Unassigned and cannot open the organization.'}
+                : 'Without a team assignment, they remain Unassigned and cannot access the organization.'}
             </AlertDescription>
           </Alert>
 

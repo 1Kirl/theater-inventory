@@ -205,6 +205,35 @@ export interface InventoryItem {
    * more than another is purchase history, and this product does not keep any.
    */
   unit_cost_cents?: number
+  /**
+   * Where this item is in its life, for a bulk item.
+   *
+   * The group's operational state, not a fact about any individual thing in it.
+   * A bulk item is a quantity nobody counted piece by piece, so this says what
+   * has happened to the collection — the whole box went to the shop, the whole
+   * set was retired — while `quantity_total` and `quantity_available` go on
+   * saying how much of it there is. The two are different questions and one
+   * does not constrain the other.
+   *
+   * Absent on every document written before item lifecycle existed, and read as
+   * `available`. Use `itemStatusOf()` rather than the field directly, exactly
+   * as `tracking_mode` is read through `trackingModeOf()`.
+   *
+   * Serialized items do not use it: their units each carry their own status,
+   * and a second answer at the item level would be a contradiction waiting to
+   * happen. Rules refuse it on a serialized item for that reason.
+   */
+  status?: UnitStatus
+  /** Required when a bulk item is retired, absent otherwise. */
+  retirement_reason?: RetirementReason
+  /**
+   * The `asset_events` entry that produced this item's current status.
+   *
+   * The same device the unit document uses, and for the same reason: Rules
+   * cannot search a collection, so the item has to name the event that moved
+   * it. Absent on an item that has never moved.
+   */
+  last_lifecycle_event_id?: string
   last_inspected_at?: Timestamp
   notes?: string
   created_by_uid: string

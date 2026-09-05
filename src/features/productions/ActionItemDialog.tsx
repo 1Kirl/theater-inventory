@@ -153,7 +153,7 @@ export function ActionItemDialog({
               <Input
                 id="action-cost"
                 inputMode="decimal"
-                placeholder="18.50"
+                placeholder="$XX.XX"
                 value={unitCost}
                 onChange={(e) => { setUnitCost(e.target.value); setCostTouched(true) }}
                 disabled={submitting}
