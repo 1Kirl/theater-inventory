@@ -123,3 +123,40 @@ describe('the wait is bounded by the SDK, not by a second clock', () => {
     }
   })
 })
+
+describe('the model and the thinking level are chosen deliberately', () => {
+  it('still uses gemini-3.5-flash', () => {
+    // Pinned so a model swap is a decision somebody makes on purpose. The
+    // latency work changed how much the model thinks, not which model it is.
+    expect(read('features/ai/ai-client.ts')).toContain("const AI_MODEL = 'gemini-3.5-flash'")
+  })
+
+  it('asks for minimal thinking in Smart Search and nowhere else', () => {
+    // The two features share one client, so the setting is per request. If it
+    // ever moves into the shared config, the generator loses the deliberation
+    // that is most of what it is for — silently, and only visibly as worse
+    // drafts.
+    expect(read('features/ai/smart-search-service.ts'))
+      .toContain('thinkingLevel: ThinkingLevel.MINIMAL')
+    expect(read('features/ai/requirement-generator-service.ts'))
+      .not.toContain('thinkingLevel')
+    // The client may name the *type*; what it must not do is pick a value.
+    const clientCode = read('features/ai/ai-client.ts')
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+    expect(clientCode).not.toContain('ThinkingLevel.MINIMAL')
+  })
+
+  it('never sets a thinking budget alongside a level', () => {
+    // The SDK documents that a model errors when both are given. Comments are
+    // stripped first: the client's own note explains why the budget is left
+    // alone, and matching that would be matching prose.
+    for (const file of [
+      'features/ai/ai-client.ts',
+      'features/ai/smart-search-service.ts',
+      'features/ai/requirement-generator-service.ts',
+    ]) {
+      const code = read(file).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')
+      expect(code, file).not.toContain('thinkingBudget')
+    }
+  })
+})

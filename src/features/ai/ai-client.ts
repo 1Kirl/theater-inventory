@@ -1,5 +1,5 @@
 import {
-  GoogleAIBackend, getAI, getGenerativeModel, type TypedSchema,
+  GoogleAIBackend, getAI, getGenerativeModel, type ThinkingLevel, type TypedSchema,
 } from 'firebase/ai'
 import { getFirebaseApp } from '@/lib/firebase'
 
@@ -49,6 +49,19 @@ export interface StructuredRequest {
   /** Model-side JSON shape. Zod validates the result again regardless. */
   responseSchema: TypedSchema
   maxOutputTokens: number
+  /**
+   * How much the model may deliberate before answering.
+   *
+   * Per request rather than per client, because the two features want
+   * different answers to it and they share this function. Absent leaves the
+   * model's own default, which is what the Requirement Generator wants: it
+   * drafts a production's requirements from a sentence, and thinking is most
+   * of the value.
+   *
+   * `thinkingBudget` is the other half of the same knob and is deliberately
+   * never set — the SDK documents that a model errors when both are given.
+   */
+  thinkingLevel?: ThinkingLevel
 }
 
 export interface AiResponse {
@@ -90,11 +103,14 @@ export const generateStructured: AiGenerate = async (request) => {
       responseMimeType: 'application/json',
       responseSchema: request.responseSchema,
       maxOutputTokens: request.maxOutputTokens,
-      // `thinkingConfig` is deliberately left at the model's default. Thinking
-      // tokens do count against `maxOutputTokens`, which is what made the old
-      // 2048 budget too small, but the SDK errors outright if a budget is set
-      // outside a model's supported range — a knob worth leaving alone in
-      // favour of a budget large enough for both.
+      // Thinking tokens count against `maxOutputTokens`, which is what made the
+      // old 2048 budget too small. The level itself is the caller's to choose:
+      // omitted here leaves the model's default, and the object is left off
+      // entirely rather than sent empty so a request that says nothing about
+      // thinking really does say nothing.
+      ...(request.thinkingLevel
+        ? { thinkingConfig: { thinkingLevel: request.thinkingLevel } }
+        : {}),
       // Search intent and requirement drafts should be reproducible rather than
       // inventive; the creativity that matters here is in the wording the user
       // typed, not in the model's sampling.

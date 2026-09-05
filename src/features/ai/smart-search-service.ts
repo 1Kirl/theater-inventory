@@ -1,4 +1,4 @@
-import { Schema } from 'firebase/ai'
+import { Schema, ThinkingLevel } from 'firebase/ai'
 import { CONDITION_KEYS } from '@/domain/inventory'
 import { AiOutputError } from '@/features/ai/ai-errors'
 import { generateStructured, type AiGenerate } from '@/features/ai/ai-client'
@@ -164,6 +164,24 @@ export async function askInventoryQuestion(params: {
     // whatever the model spends thinking. The old 2048 was the reason a normal
     // answer arrived cut in half.
     maxOutputTokens: 8192,
+    /**
+     * Minimal deliberation, because this is a lookup rather than a judgement.
+     *
+     * Measured, not assumed: the same client answers a trivial prompt in two to
+     * seven seconds, and this feature's own prompt took twenty-seven seconds
+     * with four inventory records and timed out past thirty with the real
+     * thirty. Payload size did not explain that — the thinking did, and the
+     * default level for this model is MEDIUM.
+     *
+     * The task suits it. The model is asked to read a question, pick matching
+     * rows out of a list it was handed, and fill a fixed schema; the answer is
+     * in the context rather than to be reasoned toward. The Requirement
+     * Generator is the opposite and keeps the default.
+     *
+     * Whether this actually recovers the latency is unverified — the daily
+     * free-tier quota is spent, so it has not been run against the live model.
+     */
+    thinkingLevel: ThinkingLevel.MINIMAL,
   })
 
   return buildSmartSearchResult({
