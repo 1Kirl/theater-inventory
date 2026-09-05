@@ -113,7 +113,7 @@ export function HowItWorksSection() {
   const trackRef = useScrollProgress()
 
   return (
-    <section id="how-it-works" className="workflow bg-[var(--landing-ground)] py-20 md:py-28">
+    <section id="how-it-works" className="workflow bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-muted),transparent)] py-20 md:py-28">
       <Reveal className="mx-auto w-full max-w-7xl px-5 sm:px-8">
         <p data-reveal className="landing-eyebrow">
           03 / How it works

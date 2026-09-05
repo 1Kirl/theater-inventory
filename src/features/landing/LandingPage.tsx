@@ -1,3 +1,4 @@
+import { FallingTheaterProps } from '@/features/landing/FallingTheaterProps'
 import { LandingHeader } from '@/features/landing/LandingHeader'
 import { HeroSection } from '@/features/landing/HeroSection'
 import { StorySection } from '@/features/landing/StorySection'
@@ -23,6 +24,10 @@ import '@/features/landing/landing.css'
 export function LandingPage() {
   return (
     <div className="landing-root min-h-svh">
+      {/* Behind everything, and part of nothing: two fixed decorative layers
+          that no section knows about and none of the content sits under. */}
+      <FallingTheaterProps />
+
       <LandingHeader />
 
       <main>

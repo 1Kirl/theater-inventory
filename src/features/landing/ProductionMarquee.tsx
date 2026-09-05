@@ -55,7 +55,7 @@ export function ProductionMarquee() {
   return (
     <section
       aria-label="Photographs from productions"
-      className="border-border bg-[var(--landing-ground)] border-t py-14 md:py-20"
+      className="border-border bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-mid),transparent)] border-t py-14 md:py-20"
     >
       <p className="landing-eyebrow mx-auto mb-8 w-full max-w-7xl px-5 sm:px-8">
         From the productions

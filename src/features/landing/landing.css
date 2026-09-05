@@ -61,8 +61,167 @@
    */
   --scroll-progress: 0;
 
+  /*
+   * The page's layers, named once.
+   *
+   * Only four numbers exist on this page, and every surface below refers to
+   * one of them rather than inventing its own. The order is the whole design:
+   * the props are the furthest back thing that is not the ground itself, the
+   * vellum softens them, each section's tint sits on the vellum, and content
+   * sits on the tint. The sticky header keeps the `z-40` it already had.
+   */
+  --landing-z-props: 0;
+  --landing-z-vellum: 1;
+  --landing-z-content: 2;
+
+  /*
+   * Whether the atmosphere is allowed to move, asked and answered in CSS.
+   *
+   * The JavaScript media-query API is banned across `src/`, so the physics
+   * layer reads this computed value once instead of subscribing to a query. Reduced
+   * motion sets it to 0 further down and the simulation never starts.
+   */
+  --landing-physics-motion: 1;
+
+  /*
+   * How much of the atmosphere each section lets through.
+   *
+   * Section surfaces keep exactly the colours they had; what changed is that
+   * they are now mixed with transparency. A lower number is a more open
+   * section. Sections carrying product UI are the opaque ones, because a
+   * screenshot has to be read and a background does not.
+   */
+  --landing-veil-open: 32%;
+  --landing-veil-mid: 58%;
+  --landing-veil-muted: 84%;
+
+  /*
+   * Every section names one of the three. Leaving a section bare is not a
+   * fourth option: with no surface at all a prop reads at full vellum strength
+   * and ends up sitting behind a headline, which is busy rather than
+   * atmospheric. The rhythm is deliberate — open through the narrative, muted
+   * wherever product UI has to be read, open again at the close.
+   */
+
+  position: relative;
+  /* Contains the whole scale, so nothing here can reach past the landing page
+     into the application's own stacking. */
+  isolation: isolate;
+
   background-color: var(--landing-ground);
   color: var(--foreground);
+}
+
+/* Content sits above both atmospheric layers. */
+.landing-root > main,
+.landing-root > footer {
+  position: relative;
+  z-index: var(--landing-z-content);
+}
+
+/* ------------------------------------------------------------- atmosphere */
+
+/*
+ * Production equipment, falling behind the page.
+ *
+ * Fixed rather than absolute: the pile belongs to the viewport, so it stays
+ * where it settled while the page scrolls over it. Both layers are inert —
+ * nothing here takes a click, a hover, a caret, or a tab stop, and neither is
+ * in the accessibility tree.
+ */
+.landing-root .landing-atmosphere,
+.landing-root .landing-vellum {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.landing-root .landing-atmosphere {
+  z-index: var(--landing-z-props);
+  overflow: hidden;
+}
+
+.landing-root .landing-prop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  line-height: 1;
+  /*
+   * The centring half-offset must not be rotated with the prop.
+   *
+   * `translate3d(...) rotate(...) translate(-50%, -50%)` places a box by its
+   * centre only while the origin is the corner: left at the default centre,
+   * the rotation turns the offset too, and a prop lying past ninety degrees is
+   * flung down and to the right — far enough, measured, to hang eighty pixels
+   * through the floor it is resting on.
+   */
+  transform-origin: top left;
+  /* Whatever emoji font the visitor's platform already has. Nothing is
+     bundled and no artwork is copied. */
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  will-change: transform;
+}
+
+/*
+ * The settled arrangement, for a visitor who has asked for no motion.
+ *
+ * The same props in the position they would have reached, placed here rather
+ * than in JavaScript so the component renders one way and the stylesheet
+ * decides what that looks like. Deliberately uneven: a row of evenly spaced
+ * emoji reads as a toolbar.
+ */
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop {
+  top: auto;
+  bottom: 3vh;
+  font-size: 3rem;
+  will-change: auto;
+}
+
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(1) {
+  left: 8%; font-size: 2.6rem; transform: translate(-50%, 0) rotate(-14deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(2) {
+  left: 24%; transform: translate(-50%, 0) rotate(7deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(3) {
+  left: 47%; font-size: 2.8rem; transform: translate(-50%, 0) rotate(-4deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(4) {
+  left: 71%; transform: translate(-50%, 0) rotate(11deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(5) {
+  left: 89%; font-size: 2.4rem; transform: translate(-50%, 0) rotate(-9deg);
+}
+
+/*
+ * The vellum.
+ *
+ * Milky translucent white over a fine, entirely static grain. The grain is two
+ * very small repeating gradients at low contrast rather than an image or a
+ * compositing effect. It costs one paint, it never animates, and there is no
+ * request for it. The props read through at roughly a fifth of their strength, which is
+ * enough to be felt and not enough to compete with a paragraph.
+ */
+.landing-root .landing-vellum {
+  z-index: var(--landing-z-vellum);
+  background-color: color-mix(in oklab, var(--landing-panel) 78%, transparent);
+  background-image:
+    repeating-linear-gradient(
+      27deg,
+      color-mix(in oklab, var(--foreground) 2.5%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    repeating-linear-gradient(
+      117deg,
+      color-mix(in oklab, var(--foreground) 2%, transparent) 0 1px,
+      transparent 1px 4px
+    ),
+    radial-gradient(
+      120% 90% at 50% 0%,
+      transparent 0%,
+      color-mix(in oklab, var(--landing-cream) 30%, transparent) 100%
+    );
 }
 
 /*
@@ -491,9 +650,22 @@ html:has(.landing-root) {
  * the section's scroll progress.
  */
 
+/*
+ * The most opaque section on the page, deliberately.
+ *
+ * Five screenshots crossfading in depth is the one place where a texture
+ * showing through would be read as part of the product rather than behind it.
+ * The gradient and its stops are unchanged; only the transparency is new.
+ */
 .landing-root .showcase {
   background:
-    linear-gradient(to bottom, var(--landing-ground), var(--landing-cream) 22%, var(--landing-cream) 78%, var(--landing-ground));
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--landing-ground) var(--landing-veil-muted), transparent),
+      color-mix(in oklab, var(--landing-cream) var(--landing-veil-muted), transparent) 22%,
+      color-mix(in oklab, var(--landing-cream) var(--landing-veil-muted), transparent) 78%,
+      color-mix(in oklab, var(--landing-ground) var(--landing-veil-muted), transparent)
+    );
 }
 
 .landing-root .showcase-item {
@@ -923,6 +1095,17 @@ html:has(.landing-root) {
  * media query, and the browser already re-evaluates it when it changes.
  */
 @media (prefers-reduced-motion: reduce) {
+  /*
+   * The atmosphere is shown as a settled pile rather than a falling one.
+   *
+   * Read once by the physics layer, which then never imports Matter, never
+   * starts a loop, and never schedules a drop. The vellum is unchanged: it was
+   * never motion.
+   */
+  .landing-root {
+    --landing-physics-motion: 0;
+  }
+
   html:has(.landing-root) {
     scroll-behavior: auto;
   }

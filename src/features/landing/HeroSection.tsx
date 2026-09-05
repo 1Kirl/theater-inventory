@@ -47,7 +47,7 @@ export function HeroSection() {
     <section
       id="top"
       ref={attach}
-      className="relative overflow-hidden bg-[linear-gradient(to_bottom,var(--landing-cream),var(--landing-ground)_72%)]"
+      className="relative overflow-hidden bg-[linear-gradient(to_bottom,color-mix(in_oklab,var(--landing-cream)_var(--landing-veil-mid),transparent),color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-open),transparent)_72%)]"
     >
       {/* Behind everything, and never in the way of a pointer or a screen
           reader. Two soft washes on a slow cycle; desktop only. */}

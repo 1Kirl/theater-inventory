@@ -39,7 +39,7 @@ const FRAGMENTS: readonly Fragment[] = [
 
 export function ProblemSection() {
   return (
-    <section className="border-border bg-[var(--landing-cream)] border-y py-24 md:py-32">
+    <section className="border-border bg-[color-mix(in_oklab,var(--landing-cream)_var(--landing-veil-open),transparent)] border-y py-24 md:py-32">
       <Reveal className="mx-auto w-full max-w-6xl px-5 sm:px-8">
         <h2 data-reveal className="landing-h2 mx-auto max-w-5xl text-center">
           The backstage work was connected.

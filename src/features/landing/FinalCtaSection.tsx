@@ -15,7 +15,7 @@ import { paths } from '@/routes/paths'
  */
 export function FinalCtaSection() {
   return (
-    <section className="bg-[var(--landing-band)] py-28 md:py-40">
+    <section className="bg-[color-mix(in_oklab,var(--landing-band)_var(--landing-veil-open),transparent)] py-28 md:py-40">
       <Reveal className="mx-auto w-full max-w-4xl px-5 text-center sm:px-8">
         <h2 data-reveal className="landing-h2">
           Ready to step backstage?

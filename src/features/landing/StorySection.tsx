@@ -16,7 +16,7 @@ import { landingMedia } from '@/features/landing/landing-media'
  */
 export function StorySection() {
   return (
-    <section id="about" className="bg-[var(--landing-ground)] py-24 md:py-36">
+    <section id="about" className="bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-open),transparent)] py-24 md:py-36">
       <Reveal className="mx-auto w-full max-w-7xl px-5 sm:px-8">
         <p data-reveal className="landing-eyebrow">
           01 / Why I built this

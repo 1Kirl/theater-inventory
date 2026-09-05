@@ -52,7 +52,7 @@ export function BuildJourneySection() {
   return (
     <section
       id="build-journey"
-      className="border-border bg-[var(--landing-cream)] border-y py-24 md:py-36"
+      className="border-border bg-[color-mix(in_oklab,var(--landing-cream)_var(--landing-veil-mid),transparent)] border-y py-24 md:py-36"
     >
       <Reveal className="mx-auto w-full max-w-7xl px-5 sm:px-8">
         <p data-reveal className="landing-eyebrow">

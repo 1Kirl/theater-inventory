@@ -9,7 +9,7 @@ import { Theater } from 'lucide-react'
  */
 export function LandingFooter() {
   return (
-    <footer className="border-border bg-[var(--landing-ground)] border-t">
+    <footer className="border-border bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-muted),transparent)] border-t">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-5 py-10 sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div className="flex items-center gap-2.5">
           <span
