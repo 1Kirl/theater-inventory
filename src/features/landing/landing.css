@@ -682,6 +682,189 @@ html:has(.landing-root) {
 /* Reduced motion and small screens share the same answer: nothing moves, and
    everything is in the document where it can be read. */
 
+/* -------------------------------------------------------------- how it works */
+
+/*
+ * The workflow, drawn as one line.
+ *
+ * The section above is a sticky stage where five screens stack in depth. This
+ * one deliberately shares none of that: nothing pins, nothing overlaps, and
+ * the same markup serves a phone unchanged. What carries it instead is a
+ * hairline running through four nodes, filling with the product's green as the
+ * reader descends — the line is both the ornament and the progress indicator,
+ * so the section has a motif without acquiring decoration.
+ *
+ * The node column spans the whole row and centres the dot and the line in one
+ * flex box, which is the reason they cannot come apart. The line then reaches
+ * past the row's own bottom edge by exactly the distance to the next node, so
+ * the connector between two steps is one element and nothing here depends on a
+ * row being a particular height. A paragraph that wraps to an extra line moves
+ * the node and the line together.
+ */
+
+.landing-root .workflow-track {
+  /* Where a node sits inside its row, measured from the row's content. */
+  --workflow-node: 0.9rem;
+  --workflow-gutter: 2.5rem;
+
+  /*
+   * The reading head, remapped from the list's own travel.
+   *
+   * `--scroll-progress` runs 0 to 1 across the list plus the viewport it
+   * crosses, so a step sits at a comfortable reading position over the middle
+   * of that range rather than at its ends. The window below is that middle,
+   * and everything downstream is a share of it.
+   */
+  --head: clamp(0, calc((var(--scroll-progress) - 0.21) / 0.51), 1);
+  /* Position along the four steps, 0 through 3. */
+  --cursor: calc(var(--head) * 3);
+}
+
+.landing-root .workflow-step {
+  --workflow-pad: 2.25rem;
+
+  /* Reached once the head arrives at this node, over a fifth of a step so the
+     change is a fade rather than a flick. */
+  --reached: clamp(0, calc((var(--cursor) - var(--step)) * 5 + 1), 1);
+  /* How much of the connector below this node has been drawn: 0 to 1 as the
+     head travels from this node to the next. */
+  --drawn: clamp(0, calc(var(--cursor) - var(--step)), 1);
+  /* Nearest to the head, falling to 0 one step away in either direction. */
+  --active: clamp(
+    0,
+    calc(1 - max(calc(var(--cursor) - var(--step)), calc(var(--step) - var(--cursor)))),
+    1
+  );
+
+  display: grid;
+  grid-template-columns: var(--workflow-gutter) minmax(0, 1fr);
+  /* Declared rather than implicit, because the node column spans the row with
+     `grid-row: 1 / -1` and `-1` counts lines in the explicit grid only. Left
+     implicit, the span silently collapses to the first row and the connector
+     stops short of the next node wherever the screenshot stacks below. */
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 0;
+  padding-block: var(--workflow-pad);
+}
+
+.landing-root .workflow-marker {
+  /* Every row, so the connector spans the media on a phone too. */
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.landing-root .workflow-marker__dot {
+  margin-block-start: calc(var(--workflow-node) - 0.4375rem);
+  block-size: 0.875rem;
+  inline-size: 0.875rem;
+  flex: none;
+  position: relative;
+  border: 1px solid var(--landing-line);
+  border-radius: 999px;
+  background-color: var(--landing-ground);
+  transform: scale(calc(1 + 0.16 * var(--active)));
+}
+
+/* The filled centre. A scale rather than a colour change, so an unreached node
+   is an empty ring and a reached one is unmistakably solid. */
+.landing-root .workflow-marker__dot::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 999px;
+  background-color: var(--primary);
+  transform: scale(var(--reached));
+}
+
+/*
+ * The connector. It takes the space left in the column and then overruns the
+ * row by the distance from a row's bottom edge to the next row's node —
+ * two paddings plus the node offset — which is what makes it end exactly on
+ * the next dot rather than near it.
+ */
+.landing-root .workflow-marker__line {
+  position: relative;
+  flex: 1;
+  inline-size: 1px;
+  margin-block-start: 0.4rem;
+  margin-block-end: calc(-1 * (2 * var(--workflow-pad) + var(--workflow-node)));
+  background-color: var(--landing-line);
+}
+
+.landing-root .workflow-marker__fill {
+  position: absolute;
+  inset: 0;
+  background-color: var(--primary);
+  /* Scaled rather than resized: a line that animates its height relayouts the
+     row on every frame, and one that animates its transform does not. */
+  transform: scaleY(var(--drawn));
+  transform-origin: top;
+}
+
+/* The last node ends the process; there is nothing for a line to reach. */
+.landing-root .workflow-step:last-child .workflow-marker__line {
+  display: none;
+}
+
+.landing-root .workflow-step__copy {
+  grid-column: 2;
+  grid-row: 1;
+  max-inline-size: 32rem;
+}
+
+/*
+ * The step number carries the emphasis that the prose deliberately does not.
+ *
+ * Dimming a paragraph the reader has not reached yet costs contrast on text
+ * that is on screen and legible, which is a poor trade for a little drama. A
+ * number is a label, so it can go quiet without that cost.
+ */
+.landing-root .workflow-step__number {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--primary) 45%, transparent);
+  color: color-mix(in oklab, var(--primary) calc(45% + 55% * var(--reached)), transparent);
+}
+
+.landing-root .workflow-step__media {
+  grid-column: 2;
+  grid-row: 2;
+  margin-block-start: 1.75rem;
+}
+
+/* The standing emphasis, on its own element: the entrance above owns opacity
+   and transform on the wrapper, and two systems writing one property is how
+   one of them silently stops working. */
+.landing-root .workflow-step__frame {
+  opacity: calc(0.82 + 0.18 * var(--active));
+  transform: scale(calc(0.99 + 0.01 * var(--active)));
+}
+
+@media (min-width: 1024px) {
+  .landing-root .workflow-step {
+    /* The media column is fixed rather than fractional: it decides the row
+       height, and a row height that changed with the window would make the
+       pacing of the whole section depend on how wide somebody's browser is. */
+    grid-template-columns: var(--workflow-gutter) minmax(0, 1fr) minmax(0, 30rem);
+    /* One row here: copy and screenshot sit side by side. */
+    grid-template-rows: auto;
+  }
+
+  .landing-root .workflow-step__media {
+    grid-column: 3;
+    grid-row: 1;
+    margin-block-start: 0;
+    margin-inline-start: 3rem;
+  }
+}
+
 /* --------------------------------------------------------------- photo strip */
 
 /*
@@ -826,6 +1009,33 @@ html:has(.landing-root) {
   /* The rail describes a sequence that is no longer happening. */
   .landing-root .showcase-rail {
     display: none;
+  }
+
+  /*
+   * The workflow is shown as a finished diagram rather than one being drawn.
+   *
+   * Every value below is otherwise a function of `--scroll-progress`, which
+   * never moves once there is no motion — so without these the line would stay
+   * empty, every marker would stay hollow, and three of the four screenshots
+   * would sit permanently dimmed. The section still says the same thing; it
+   * simply says all of it at once.
+   */
+  .landing-root .workflow-marker__fill {
+    transform: scaleY(1);
+  }
+
+  .landing-root .workflow-marker__dot,
+  .landing-root .workflow-marker__dot::before {
+    transform: none;
+  }
+
+  .landing-root .workflow-step__number {
+    color: var(--primary);
+  }
+
+  .landing-root .workflow-step__frame {
+    opacity: 1;
+    transform: none;
   }
 
   /*
