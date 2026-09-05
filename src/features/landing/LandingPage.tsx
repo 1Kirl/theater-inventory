@@ -1,8 +1,7 @@
 import { FallingTheaterProps } from '@/features/landing/FallingTheaterProps'
 import { LandingHeader } from '@/features/landing/LandingHeader'
 import { HeroSection } from '@/features/landing/HeroSection'
-import { StorySection } from '@/features/landing/StorySection'
-import { ProblemSection } from '@/features/landing/ProblemSection'
+import { NarrativeSection } from '@/features/landing/NarrativeSection'
 import { ProductShowcase } from '@/features/landing/ProductShowcase'
 import { HowItWorksSection } from '@/features/landing/HowItWorksSection'
 import { BuildJourneySection } from '@/features/landing/BuildJourneySection'
@@ -32,8 +31,7 @@ export function LandingPage() {
 
       <main>
         <HeroSection />
-        <StorySection />
-        <ProblemSection />
+        <NarrativeSection />
         <ProductShowcase />
         <HowItWorksSection />
         <BuildJourneySection />

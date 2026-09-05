@@ -357,14 +357,19 @@ describe('the vellum', () => {
     }
 
     const landing = path.join(src, 'features/landing')
-    const sections = ['StorySection', 'ProblemSection', 'HowItWorksSection', 'BuildJourneySection',
-      'FinalCtaSection', 'ProductionMarquee', 'LandingFooter', 'HeroSection']
+    const sections = ['NarrativeSection', 'HowItWorksSection', 'BuildJourneySection',
+      'ProductionMarquee', 'LandingFooter', 'HeroSection']
     for (const name of sections) {
       expect(readFileSync(path.join(landing, `${name}.tsx`), 'utf8'), name)
         .toContain('--landing-veil-')
     }
-    // The showcase keeps its gradient in the stylesheet.
+
+    // Two sections carry a gradient rather than a flat tint, so their level
+    // lives in the stylesheet with the rest of the gradient. Neither is bare.
     expect(css).toContain('color-mix(in oklab, var(--landing-cream) var(--landing-veil-muted)')
+    const close = rule(css, '.landing-root .landing-close {')
+    expect(close).toContain('var(--landing-band)')
+    expect(close).toContain('var(--landing-veil-open)')
   })
 })
 

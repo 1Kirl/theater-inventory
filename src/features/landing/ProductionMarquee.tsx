@@ -41,12 +41,31 @@ function Photo({ photo }: { photo: LandingMedia }) {
   )
 }
 
-function PhotoGroup({ hidden }: { hidden: boolean }) {
+/**
+ * One half of a row.
+ *
+ * `offset` rotates the same photographs so the two rows are not the same strip
+ * twice; it reuses the existing entries rather than needing any of its own.
+ */
+function PhotoGroup({ hidden, offset }: { hidden: boolean; offset: number }) {
+  const photos = landingMedia.productionPhotos
+  const ordered = [...photos.slice(offset), ...photos.slice(0, offset)]
+
   return (
     <div className="landing-marquee__group" aria-hidden={hidden ? true : undefined}>
-      {landingMedia.productionPhotos.map((photo) => (
+      {ordered.map((photo) => (
         <Photo key={photo.id} photo={photo} />
       ))}
+    </div>
+  )
+}
+
+/** One row. The seam copy is the same group again, announced to nobody. */
+function MarqueeRow({ variant, offset }: { variant: 'front' | 'back'; offset: number }) {
+  return (
+    <div className={`landing-marquee__track landing-marquee__track--${variant}`}>
+      <PhotoGroup hidden={false} offset={offset} />
+      <PhotoGroup hidden offset={offset} />
     </div>
   )
 }
@@ -55,7 +74,7 @@ export function ProductionMarquee() {
   return (
     <section
       aria-label="Photographs from productions"
-      className="border-border bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-mid),transparent)] border-t py-14 md:py-20"
+      className="border-border bg-[color-mix(in_oklab,var(--landing-ground)_var(--landing-veil-muted),transparent)] border-t py-14 md:py-20"
     >
       <p className="landing-eyebrow mx-auto mb-8 w-full max-w-7xl px-5 sm:px-8">
         From the productions
@@ -67,11 +86,13 @@ export function ProductionMarquee() {
         role="group"
         aria-label="Production photographs, scrollable"
       >
-        <div className="landing-marquee__track h-[132px] md:h-[200px]">
-          <PhotoGroup hidden={false} />
-          {/* The seam copy. Announced to nobody. */}
-          <PhotoGroup hidden />
-        </div>
+        {/* Two rows on a wide screen, travelling in opposite directions at
+            slightly different speeds. The second sits a little further back —
+            smaller and paler — so the pair reads as depth rather than as two
+            unrelated strips. A phone gets the front row only; two of these
+            over a physics atmosphere is more than a small screen wants. */}
+        <MarqueeRow variant="front" offset={0} />
+        <MarqueeRow variant="back" offset={4} />
       </div>
     </section>
   )

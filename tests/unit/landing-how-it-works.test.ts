@@ -245,13 +245,15 @@ describe('Phase D stayed in its lane', () => {
     expect(hero).not.toContain('workflow')
   })
 
-  it('did not turn BuildJourney into a second progress line', () => {
-    // Both express progression; they must not look like the same component.
+  it('did not turn BuildJourney into a second copy of this section', () => {
+    // Both express progression, so what keeps them apart has to be structural:
+    // this one fills as a reader descends and that one arrives complete with
+    // the section, and neither borrows the other's markup.
     const journey = read('features/landing/BuildJourneySection.tsx')
 
     expect(journey).not.toContain('useScrollProgress')
-    expect(journey).not.toContain('workflow')
-    expect(journey).toContain('lg:grid-cols-5')
+    expect(journey).not.toContain('workflow-')
+    expect(journey).toContain('journey-track')
   })
 
   it('touched nothing outside the landing page', () => {

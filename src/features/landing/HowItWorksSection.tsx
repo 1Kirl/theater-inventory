@@ -121,7 +121,7 @@ export function HowItWorksSection() {
         <h2 data-reveal className="landing-h2 reveal-d1 mt-6">
           From setup to showtime.
         </h2>
-        <p data-reveal className="landing-lead reveal-d2 mt-7 max-w-2xl">
+        <p data-reveal className="landing-lead reveal-d2 mt-7 max-w-xl text-balance">
           Four steps from an empty account to a production plan a crew can work from.
         </p>
       </Reveal>

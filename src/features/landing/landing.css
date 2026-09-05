@@ -986,7 +986,7 @@ html:has(.landing-root) {
 .landing-root .workflow-step__copy {
   grid-column: 2;
   grid-row: 1;
-  max-inline-size: 32rem;
+  max-inline-size: 30rem;
 }
 
 /*
@@ -1024,7 +1024,9 @@ html:has(.landing-root) {
     /* The media column is fixed rather than fractional: it decides the row
        height, and a row height that changed with the window would make the
        pacing of the whole section depend on how wide somebody's browser is. */
-    grid-template-columns: var(--workflow-gutter) minmax(0, 1fr) minmax(0, 30rem);
+    /* Widened from 30rem: at the old width the copy and the screenshot were
+       left with a two-hundred-pixel channel of nothing between them. */
+    grid-template-columns: var(--workflow-gutter) minmax(0, 1fr) minmax(0, 34rem);
     /* One row here: copy and screenshot sit side by side. */
     grid-template-rows: auto;
   }
@@ -1035,6 +1037,116 @@ html:has(.landing-root) {
     margin-block-start: 0;
     margin-inline-start: 3rem;
   }
+}
+
+/* ------------------------------------------------------------ build journey */
+
+/*
+ * The project's history, on one rule.
+ *
+ * Horizontal where the workflow above is vertical, and drawn by the reveal
+ * rather than by scroll progress: this is a history that is already finished,
+ * so it arrives complete when the section does instead of filling as a reader
+ * descends. That difference is the whole reason the two do not read as the same
+ * component — and it costs no second scroll loop.
+ */
+
+.landing-root .journey-track {
+  position: relative;
+  display: grid;
+  gap: 2.25rem;
+  padding-inline-start: 1.75rem;
+}
+
+/* The rule itself. Drawn from its start, once, when the section arrives. */
+.landing-root .journey-line {
+  position: absolute;
+  inset-block: 0.4rem auto;
+  inset-inline-start: 0.3rem;
+  inline-size: 1px;
+  block-size: calc(100% - 0.8rem);
+  background-color: color-mix(in oklab, var(--primary) 45%, var(--landing-line));
+  transform-origin: top;
+  transform: scaleY(0);
+  transition: transform 900ms var(--reveal-ease) 120ms;
+}
+
+.landing-root [data-revealed='true'] .journey-line {
+  transform: scaleY(1);
+}
+
+.landing-root .journey-stage {
+  position: relative;
+}
+
+.landing-root .journey-node {
+  position: absolute;
+  inset-block-start: 0.35rem;
+  inset-inline-start: -1.75rem;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background-color: var(--primary);
+  transform: scale(0);
+  transition: transform var(--landing-duration-micro) var(--reveal-ease) var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] .journey-node {
+  transform: scale(1);
+}
+
+@media (min-width: 768px) {
+  /*
+   * The rule turns and runs across the page. Five equal columns, each stage
+   * hanging below the line rather than beside it, so the eye reads left to
+   * right the way a timeline is read.
+   */
+  .landing-root .journey-track {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.5rem;
+    padding-inline-start: 0;
+    padding-block-start: 1.75rem;
+  }
+
+  .landing-root .journey-line {
+    inset-block: 0.3rem auto;
+    inset-inline: 0 0;
+    inline-size: auto;
+    block-size: 1px;
+    transform-origin: left;
+    transform: scaleX(0);
+  }
+
+  .landing-root [data-revealed='true'] .journey-line {
+    transform: scaleX(1);
+  }
+
+  .landing-root .journey-node {
+    inset-block-start: -1.6rem;
+    inset-inline-start: 0;
+  }
+}
+
+/* --------------------------------------------------------------- the close */
+
+/*
+ * The closing field.
+ *
+ * A single flat tint would have to choose between being green enough to read as
+ * a conclusion and being open enough to let the atmosphere through. This is a
+ * gradient instead: strongest across the middle, where the statement and the
+ * two buttons sit, and thinning towards the bottom edge, which is exactly where
+ * the props come to rest. Both things get what they need out of one surface.
+ */
+.landing-root .landing-close {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--landing-band) 42%, transparent),
+      color-mix(in oklab, var(--landing-band) 68%, transparent) 38%,
+      color-mix(in oklab, var(--landing-band) 46%, transparent) 82%,
+      color-mix(in oklab, var(--landing-band) var(--landing-veil-open), transparent)
+    );
 }
 
 /* --------------------------------------------------------------- photo strip */
@@ -1063,7 +1175,36 @@ html:has(.landing-root) {
 .landing-root .landing-marquee__track {
   display: flex;
   width: max-content;
+  block-size: 132px;
   animation: landing-marquee-scroll 78s linear infinite;
+}
+
+/*
+ * The second row.
+ *
+ * Opposite direction, a slower cycle, and set back a little — smaller frames at
+ * reduced contrast — so the two read as one field with depth rather than as two
+ * strips fighting each other. Hidden below `md`: a phone already has the
+ * atmosphere behind this section, and two moving rows over it is too much at
+ * once.
+ */
+.landing-root .landing-marquee__track--back {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .landing-root .landing-marquee__track {
+    block-size: 200px;
+  }
+
+  .landing-root .landing-marquee__track--back {
+    display: flex;
+    block-size: 140px;
+    margin-block-start: 10px;
+    opacity: 0.62;
+    animation-name: landing-marquee-scroll-back;
+    animation-duration: 96s;
+  }
 }
 
 .landing-root .landing-marquee__group {
@@ -1080,6 +1221,12 @@ html:has(.landing-root) {
 @keyframes landing-marquee-scroll {
   from { transform: translate3d(0, 0, 0); }
   to { transform: translate3d(-50%, 0, 0); }
+}
+
+/* The same seamless half-width travel, the other way. */
+@keyframes landing-marquee-scroll-back {
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
 }
 
 /* ------------------------------------------------------------ reduced motion */
@@ -1194,6 +1341,17 @@ html:has(.landing-root) {
     display: none;
   }
 
+  /* The project history arrives complete rather than drawing itself in. */
+  .landing-root .journey-line {
+    transform: scaleX(1) scaleY(1);
+    transition: none;
+  }
+
+  .landing-root .journey-node {
+    transform: scale(1);
+    transition: none;
+  }
+
   /*
    * The workflow is shown as a finished diagram rather than one being drawn.
    *
@@ -1271,5 +1429,11 @@ html:has(.landing-root) {
   .landing-root .landing-marquee__track {
     animation: none !important;
     transform: none !important;
+  }
+
+  /* One row is enough when nothing is moving; the second was depth, and depth
+     was the part that moved. Manual horizontal scrolling of the first is kept. */
+  .landing-root .landing-marquee__track--back {
+    display: none;
   }
 }

@@ -52,7 +52,7 @@ export function BuildJourneySection() {
   return (
     <section
       id="build-journey"
-      className="border-border bg-[color-mix(in_oklab,var(--landing-cream)_var(--landing-veil-mid),transparent)] border-y py-24 md:py-36"
+      className="border-border bg-[color-mix(in_oklab,var(--landing-cream)_var(--landing-veil-muted),transparent)] border-y py-24 md:py-36"
     >
       <Reveal className="mx-auto w-full max-w-7xl px-5 sm:px-8">
         <p data-reveal className="landing-eyebrow">
@@ -67,22 +67,25 @@ export function BuildJourneySection() {
         </p>
       </Reveal>
 
-      <Reveal className="mx-auto mt-16 w-full max-w-7xl px-5 sm:px-8 md:mt-20">
-        <ol className="grid gap-10 lg:grid-cols-5 lg:gap-6">
+      <Reveal className="journey mx-auto mt-16 w-full max-w-7xl px-5 sm:px-8 md:mt-20">
+        {/* One rule drawn across the milestones, and the milestones on it.
+            Horizontal here and vertical in How It Works, because these are two
+            different kinds of progression: that one is a workflow a reader will
+            carry out, this one is a history that is already finished. */}
+        <ol className="journey-track">
+          <span data-reveal className="journey-line" aria-hidden="true" />
+
           {STAGES.map((stage, index) => (
-            <li
-              key={stage.number}
-              data-reveal
-              className={cn('border-border border-t pt-6', DELAYS[index])}
-            >
-              <div className="flex items-center gap-2.5">
-                <span className="bg-primary/70 size-1.5 rounded-full" aria-hidden="true" />
+            <li key={stage.number} className={cn('journey-stage', DELAYS[index])}>
+              <span data-reveal className="journey-node" aria-hidden="true" />
+
+              <div data-reveal className={cn('journey-stage__body', DELAYS[index])}>
                 <span className="text-primary/80 text-xs font-semibold tracking-[0.18em]">
                   {stage.number}
                 </span>
+                <h3 className="mt-2.5 text-base font-semibold tracking-tight">{stage.title}</h3>
+                <p className="text-muted-foreground mt-2.5 text-sm leading-relaxed">{stage.body}</p>
               </div>
-              <h3 className="mt-3 text-base font-semibold tracking-tight">{stage.title}</h3>
-              <p className="text-muted-foreground mt-2.5 text-sm leading-relaxed">{stage.body}</p>
             </li>
           ))}
         </ol>
