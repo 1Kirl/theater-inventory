@@ -126,7 +126,13 @@ export function ProductShowcase() {
       </Reveal>
 
       <div ref={trackRef} className="showcase-track">
-        <div className="showcase-stage">
+        {/* The same gutter every other section uses. Below the desktop
+            breakpoint the stage is an ordinary block, and the `padding-inline`
+            that holds it off the edges lives in the sticky-stage rules — so
+            without this its copy and its screenshots ran to the viewport edge
+            while the heading above them stayed inset. At and above `lg` this
+            resolves to the 2rem those rules already set. */}
+        <div className="showcase-stage px-5 sm:px-8">
           {/*
             * The index rail. On desktop it says where in the sequence the
             * reader is; on a phone it is hidden, because the sequence is the
