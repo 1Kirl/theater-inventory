@@ -51,6 +51,9 @@ const FRAGMENTS: readonly Fragment[] = [
   },
 ]
 
+/** Stagger classes from `landing.css`; the sheet arrives left to right. */
+const STRIP_DELAYS = ['reveal-d1', 'reveal-d2', 'reveal-d3'] as const
+
 export function NarrativeSection() {
   return (
     <section
@@ -88,9 +91,6 @@ export function NarrativeSection() {
               </p>
             </div>
 
-            <div data-reveal className="reveal-frame reveal-d3 mt-10 max-w-sm">
-              <MediaPlaceholder media={landingMedia.story} />
-            </div>
           </div>
 
           {/* The scattered pieces, and the thing that holds them. The list is
@@ -128,6 +128,31 @@ export function NarrativeSection() {
             </li>
           </ul>
         </div>
+
+        {/*
+          * The contact sheet.
+          *
+          * Three photographs rather than one, and across the full width rather
+          * than tucked beside the prose: the section carries the only part of
+          * the page that is not about the software, and one portrait in a
+          * column left it looking thin. They are deliberately at three
+          * different distances — a pair of hands, a load-in, a whole stage
+          * mid-build — so the row reads as a sheet of frames from one
+          * production rather than three unrelated pictures.
+          *
+          * On a phone the first runs full width and the other two share a row
+          * beneath it, which keeps all three legible instead of shrinking them
+          * to thumbnails.
+          */}
+        <ul className="mt-14 grid grid-cols-2 gap-3 md:mt-16 sm:grid-cols-3 sm:gap-4">
+          {landingMedia.storyPhotos.map((photo, index) => (
+            <li key={photo.id} className={cn(index === 0 && 'col-span-2', 'sm:col-span-1')}>
+              <div data-reveal className={cn('reveal-frame', STRIP_DELAYS[index])}>
+                <MediaPlaceholder media={photo} />
+              </div>
+            </li>
+          ))}
+        </ul>
       </Reveal>
     </section>
   )

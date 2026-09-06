@@ -20,7 +20,7 @@ const read = (file: string) => readFileSync(path.join(landingDir, file), 'utf8')
 
 const every: LandingMedia[] = [
   landingMedia.hero,
-  landingMedia.story,
+  ...landingMedia.storyPhotos,
   landingMedia.workspace,
   ...Object.values(landingMedia.features),
   ...landingMedia.howItWorks,
@@ -29,13 +29,42 @@ const every: LandingMedia[] = [
 
 describe('every declared frame is a real frame', () => {
   it('declares nineteen, with unique ids', () => {
-    expect(every).toHaveLength(19)
-    expect(new Set(every.map((m) => m.id)).size).toBe(19)
+    expect(every).toHaveLength(21)
+    expect(new Set(every.map((m) => m.id)).size).toBe(21)
   })
 
   it('holds its space open, so a late image moves nothing', () => {
     for (const media of every) {
       expect(media.aspect, media.id).toMatch(/^\d+ \/ \d+$/)
+    }
+  })
+
+  it('has an asset in every frame', () => {
+    // Every frame is filled. A slot deliberately left empty would need saying
+    // out loud rather than quietly drawing a placeholder on a finished page.
+    for (const media of every) {
+      expect(media.src, media.id).toBeDefined()
+      expect(media.src, media.id).toMatch(/\.webp/)
+    }
+  })
+
+  it('carries three photographs in the narrative strip', () => {
+    expect(landingMedia.storyPhotos).toHaveLength(3)
+    // One frame shape, so the row is level rather than ragged.
+    expect(new Set(landingMedia.storyPhotos.map((m) => m.aspect)).size).toBe(1)
+    expect(new Set(landingMedia.storyPhotos.map((m) => m.src)).size).toBe(3)
+  })
+
+  it('describes the photograph it actually points at', () => {
+    // Two of these were transposed once: the alt said auditorium and the file
+    // was the scene shop.
+    const byFile = new Map<string, Set<string>>()
+    for (const media of landingMedia.productionPhotos) {
+      const file = media.src ?? ''
+      byFile.set(file, (byFile.get(file) ?? new Set()).add(media.alt))
+    }
+    for (const [file, alts] of byFile) {
+      expect(alts.size, `${file} is described ${alts.size} different ways`).toBe(1)
     }
   })
 
@@ -67,6 +96,13 @@ describe('every declared frame is a real frame', () => {
 })
 
 describe('nothing is declared that nothing renders', () => {
+  it('leaves no unused file in the media directory', () => {
+    const map = read('landing-media.ts')
+    for (const file of readdirSync(path.join(landingDir, 'media'))) {
+      expect(map, file).toContain(file)
+    }
+  })
+
   it('renders all six groups', () => {
     const sources = readdirSync(landingDir)
       .filter((f) => f.endsWith('.tsx') && !f.includes('.test.'))
@@ -75,7 +111,7 @@ describe('nothing is declared that nothing renders', () => {
 
     for (const reference of [
       'landingMedia.hero',
-      'landingMedia.story',
+      'landingMedia.storyPhotos',
       'landingMedia.workspace',
       'landingMedia.features[stage.key]',
       'landingMedia.howItWorks[index]',
@@ -92,9 +128,11 @@ describe('nothing is declared that nothing renders', () => {
   })
 
   it('does not make the hero and the workspace the same picture', () => {
-    // They are the same screen. Shot identically they would be one image shown
-    // twice, two sections apart.
-    expect(landingMedia.hero.aspect).not.toBe(landingMedia.workspace.aspect)
+    // They are the same screen deliberately shot twice — the dashboard whole,
+    // and its cards lifted apart. Shot identically they would be one image
+    // shown twice, two sections apart.
+    expect(landingMedia.hero.src).toBeDefined()
+    expect(landingMedia.hero.src).not.toBe(landingMedia.workspace.src)
     expect(landingMedia.hero.description).not.toBe(landingMedia.workspace.description)
   })
 

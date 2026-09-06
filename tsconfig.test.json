@@ -3,7 +3,9 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "target": "es2023",
     "lib": ["ES2023", "DOM"],
-    "types": ["node"],
+    /* `node` for the suites that read the filesystem, and `vite/client` because
+       the landing media map imports `.webp` assets and the tests import it. */
+    "types": ["node", "vite/client"],
     "skipLibCheck": true,
 
     /* Rules tests and boundary tests reach into `src` for the real payload
