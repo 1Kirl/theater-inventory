@@ -1,4 +1,4 @@
-import { Theater } from 'lucide-react'
+import { BrandMark } from '@/components/brand/BrandMark'
 
 /**
  * Minimal by intention.
@@ -16,7 +16,7 @@ export function LandingFooter() {
             className="bg-secondary text-primary flex size-7 items-center justify-center rounded-lg"
             aria-hidden="true"
           >
-            <Theater className="size-3.5" />
+            <BrandMark className="size-3.5" />
           </span>
           <span className="text-sm font-semibold tracking-tight">Theater Inventory Tracker</span>
         </div>

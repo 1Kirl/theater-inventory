@@ -174,24 +174,24 @@
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop {
   top: auto;
   bottom: 3vh;
-  font-size: 3rem;
+  font-size: 5.4rem;
   will-change: auto;
 }
 
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(1) {
-  left: 8%; font-size: 2.6rem; transform: translate(-50%, 0) rotate(-14deg);
+  left: 8%; font-size: 4.7rem; transform: translate(-50%, 0) rotate(-14deg);
 }
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(2) {
   left: 24%; transform: translate(-50%, 0) rotate(7deg);
 }
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(3) {
-  left: 47%; font-size: 2.8rem; transform: translate(-50%, 0) rotate(-4deg);
+  left: 47%; font-size: 5rem; transform: translate(-50%, 0) rotate(-4deg);
 }
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(4) {
   left: 71%; transform: translate(-50%, 0) rotate(11deg);
 }
 .landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(5) {
-  left: 89%; font-size: 2.4rem; transform: translate(-50%, 0) rotate(-9deg);
+  left: 89%; font-size: 4.3rem; transform: translate(-50%, 0) rotate(-9deg);
 }
 
 /*

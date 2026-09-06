@@ -35,6 +35,14 @@ export interface DensityPolicy {
 }
 
 /**
+ * Sizes here are 1.8x what they were, on both policies and at both ends of
+ * each range — so a phone still gets smaller props than a desktop, and the
+ * spread within a single pile is unchanged. The collision radius is a fixed
+ * share of the rendered size rather than its own number, so it followed
+ * without being touched.
+ */
+
+/**
  * Density from the viewport's width.
  *
  * A width comparison rather than a media query, because the JavaScript
@@ -48,14 +56,14 @@ export function densityFor(viewportWidth: number): DensityPolicy {
     // it gets fewer, smaller props and longer gaps between them.
     return {
       initial: 10, maximum: 13,
-      minSize: 26, maxSize: 42,
+      minSize: 47, maxSize: 76,
       minInterval: 7_000, maxInterval: 12_000,
     }
   }
 
   return {
     initial: 28, maximum: 34,
-    minSize: 36, maxSize: 66,
+    minSize: 65, maxSize: 119,
     minInterval: 4_000, maxInterval: 8_000,
   }
 }

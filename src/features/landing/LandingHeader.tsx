@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Menu, Theater } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger,
 } from '@/components/ui/sheet'
 import { paths } from '@/routes/paths'
 import { cn } from '@/lib/utils'
+import { BrandMark } from '@/components/brand/BrandMark'
 
 const APP_NAME = 'Theater Inventory Tracker'
 
@@ -67,7 +68,7 @@ export function LandingHeader() {
               className="bg-secondary text-primary flex size-8 items-center justify-center rounded-lg"
               aria-hidden="true"
             >
-              <Theater className="size-4" />
+              <BrandMark className="size-4" />
             </span>
             <span className="hidden text-sm font-semibold tracking-tight sm:inline">
               {APP_NAME}
