@@ -16,12 +16,22 @@ export function MediaPlaceholder({
   variant = 'photo',
   className,
   frameClassName,
+  priority = false,
 }: {
   media: LandingMedia
   /** `browser` adds a restrained window bar above the image. */
   variant?: 'browser' | 'photo'
   className?: string
   frameClassName?: string
+  /**
+   * This frame is above the fold and worth fetching first.
+   *
+   * Exactly one image on the page should set it. Lazy-loading the largest
+   * visible image is how a page ends up waiting on its own hero: the browser
+   * will not even begin the request until layout has run, and that image is
+   * the one the visitor is waiting to see.
+   */
+  priority?: boolean
 }) {
   const Icon = variant === 'browser' ? MonitorIcon : ImageIcon
 
@@ -65,8 +75,12 @@ export function MediaPlaceholder({
           <img
             src={media.src}
             alt={media.alt}
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : undefined}
             decoding="async"
+            /* No width or height needed: the wrapper already holds the frame
+               open at the declared aspect ratio, so an image arriving late
+               moves nothing around it. */
             className="absolute inset-0 size-full object-cover"
           />
         )}

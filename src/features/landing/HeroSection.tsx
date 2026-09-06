@@ -116,7 +116,7 @@ export function HeroSection() {
 
             <div className="hero-layer hero-layer-screen relative">
               <div data-reveal className="hero-screen">
-                <MediaPlaceholder media={landingMedia.hero} variant="browser" />
+                <MediaPlaceholder media={landingMedia.hero} variant="browser" priority />
               </div>
             </div>
           </div>

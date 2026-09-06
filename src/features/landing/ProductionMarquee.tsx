@@ -31,7 +31,16 @@ function Photo({ photo }: { photo: LandingMedia }) {
       ) : (
         <img
           src={photo.src}
-          alt={photo.alt}
+          /*
+           * Decorative, deliberately.
+           *
+           * The strip is atmosphere, the section already carries a label
+           * saying what it is, and each photograph appears twice for the
+           * seamless loop. Sixteen descriptions of crew work in progress is
+           * noise to read aloud, not information. The `alt` written in
+           * `landing-media.ts` stays as the note on what to photograph.
+           */
+          alt=""
           loading="lazy"
           decoding="async"
           className="size-full object-cover"
