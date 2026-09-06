@@ -1,0 +1,1473 @@
+/*
+ * Landing page styling that Tailwind utilities cannot express.
+ *
+ * Everything here is scoped under `.landing-root`, which exists only while the
+ * landing page is mounted. The authenticated application never renders that
+ * class, so none of these rules can reach it.
+ *
+ * No colour is written literally. The three surfaces below are mixed from the
+ * application's own tokens, so the page follows the light and dark themes the
+ * product already ships instead of introducing a second palette. The visitor's
+ * theme is whatever they last chose; a browser that has never chosen sees
+ * light, which is the design this page was drawn for.
+ */
+
+.landing-root {
+  --landing-ground: var(--background);
+  --landing-panel: var(--card);
+  /* Warm off-white: the card, carrying just enough of the mint to read as a
+     different sheet of paper rather than as a different colour. */
+  --landing-cream: color-mix(in oklab, var(--card) 90%, var(--secondary));
+  --landing-sage: color-mix(in oklab, var(--secondary) 55%, var(--card));
+  /* The one band that is meant to read as green rather than as paper.
+     Kept as the product's own soft mint so the closing section is the
+     application's colour, not a colour invented for a landing page. */
+  --landing-band: var(--secondary);
+  --landing-line: var(--border);
+
+  /* Restrained ease-out. No overshoot, no spring: this is an editorial page,
+     and a bounce would read as a toy. */
+  --reveal-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  /*
+   * The page's motion vocabulary, in one place.
+   *
+   * Read off what the page already does rather than invented beside it: the
+   * reveal has always been 700ms over 28px with a 90ms stagger, and these name
+   * those values so a new section reaches for the same ones instead of picking
+   * its own. A page where every section animates slightly differently reads as
+   * unfinished, and the difference is never visible in any single diff.
+   *
+   * `--landing-depth` is the ceiling on scroll-driven displacement, not a
+   * suggestion. Forty pixels is enough for one plane to separate from another
+   * and small enough that a phone scrolling quickly does not feel like it is
+   * sliding. It is also the single switch reduced motion turns off: a rule
+   * written as a fraction of this depth needs no reduced-motion branch of its
+   * own, because zero depth resolves it to its final position.
+   */
+  --landing-duration-micro: 200ms;
+  --landing-duration-reveal: 700ms;
+  --landing-duration-media: 450ms;
+  --landing-stagger: 90ms;
+  --landing-distance-reveal: 28px;
+  --landing-distance-text: 14px;
+  --landing-depth: 40px;
+
+  /*
+   * Maintained by `useScrollProgress` on sections that opt in, and 0 on every
+   * section that does not. Declared here so a rule reading it always finds a
+   * number: an undefined custom property inside `calc()` invalidates the whole
+   * declaration, which fails as a broken layout rather than as no animation.
+   */
+  --scroll-progress: 0;
+
+  /*
+   * The page's layers, named once.
+   *
+   * Only four numbers exist on this page, and every surface below refers to
+   * one of them rather than inventing its own. The order is the whole design:
+   * the props are the furthest back thing that is not the ground itself, the
+   * vellum softens them, each section's tint sits on the vellum, and content
+   * sits on the tint. The sticky header keeps the `z-40` it already had.
+   */
+  --landing-z-props: 0;
+  --landing-z-vellum: 1;
+  --landing-z-content: 2;
+
+  /*
+   * Whether the atmosphere is allowed to move, asked and answered in CSS.
+   *
+   * The JavaScript media-query API is banned across `src/`, so the physics
+   * layer reads this computed value once instead of subscribing to a query. Reduced
+   * motion sets it to 0 further down and the simulation never starts.
+   */
+  --landing-physics-motion: 1;
+
+  /*
+   * How much of the atmosphere each section lets through.
+   *
+   * Section surfaces keep exactly the colours they had; what changed is that
+   * they are now mixed with transparency. A lower number is a more open
+   * section. Sections carrying product UI are the opaque ones, because a
+   * screenshot has to be read and a background does not.
+   */
+  --landing-veil-open: 26%;
+  --landing-veil-mid: 52%;
+  --landing-veil-muted: 88%;
+
+  /*
+   * Every section names one of the three. Leaving a section bare is not a
+   * fourth option: with no surface at all a prop reads at full vellum strength
+   * and ends up sitting behind a headline, which is busy rather than
+   * atmospheric. The rhythm is deliberate — open through the narrative, muted
+   * wherever product UI has to be read, open again at the close.
+   */
+
+  position: relative;
+  /* Contains the whole scale, so nothing here can reach past the landing page
+     into the application's own stacking. */
+  isolation: isolate;
+
+  background-color: var(--landing-ground);
+  color: var(--foreground);
+}
+
+/* Content sits above both atmospheric layers. */
+.landing-root > main,
+.landing-root > footer {
+  position: relative;
+  z-index: var(--landing-z-content);
+}
+
+/* ------------------------------------------------------------- atmosphere */
+
+/*
+ * Production equipment, falling behind the page.
+ *
+ * Fixed rather than absolute: the pile belongs to the viewport, so it stays
+ * where it settled while the page scrolls over it. Both layers are inert —
+ * nothing here takes a click, a hover, a caret, or a tab stop, and neither is
+ * in the accessibility tree.
+ */
+.landing-root .landing-atmosphere,
+.landing-root .landing-vellum {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.landing-root .landing-atmosphere {
+  z-index: var(--landing-z-props);
+  overflow: hidden;
+}
+
+.landing-root .landing-prop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  line-height: 1;
+  /*
+   * The centring half-offset must not be rotated with the prop.
+   *
+   * `translate3d(...) rotate(...) translate(-50%, -50%)` places a box by its
+   * centre only while the origin is the corner: left at the default centre,
+   * the rotation turns the offset too, and a prop lying past ninety degrees is
+   * flung down and to the right — far enough, measured, to hang eighty pixels
+   * through the floor it is resting on.
+   */
+  transform-origin: top left;
+  /* Whatever emoji font the visitor's platform already has. Nothing is
+     bundled and no artwork is copied. */
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  will-change: transform;
+}
+
+/*
+ * The settled arrangement, for a visitor who has asked for no motion.
+ *
+ * The same props in the position they would have reached, placed here rather
+ * than in JavaScript so the component renders one way and the stylesheet
+ * decides what that looks like. Deliberately uneven: a row of evenly spaced
+ * emoji reads as a toolbar.
+ */
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop {
+  top: auto;
+  bottom: 3vh;
+  font-size: 5.4rem;
+  will-change: auto;
+}
+
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(1) {
+  left: 8%; font-size: 4.7rem; transform: translate(-50%, 0) rotate(-14deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(2) {
+  left: 24%; transform: translate(-50%, 0) rotate(7deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(3) {
+  left: 47%; font-size: 5rem; transform: translate(-50%, 0) rotate(-4deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(4) {
+  left: 71%; transform: translate(-50%, 0) rotate(11deg);
+}
+.landing-root .landing-atmosphere[data-settled='true'] .landing-prop:nth-child(5) {
+  left: 89%; font-size: 4.3rem; transform: translate(-50%, 0) rotate(-9deg);
+}
+
+/*
+ * The vellum.
+ *
+ * Milky translucent white over a fine, entirely static grain. The grain is two
+ * very small repeating gradients at low contrast rather than an image or a
+ * compositing effect. It costs one paint, it never animates, and there is no
+ * request for it. The props read through at roughly a fifth of their strength, which is
+ * enough to be felt and not enough to compete with a paragraph.
+ */
+.landing-root .landing-vellum {
+  z-index: var(--landing-z-vellum);
+  background-color: color-mix(in oklab, var(--landing-panel) 64%, transparent);
+  background-image:
+    repeating-linear-gradient(
+      27deg,
+      color-mix(in oklab, var(--foreground) 2.5%, transparent) 0 1px,
+      transparent 1px 3px
+    ),
+    repeating-linear-gradient(
+      117deg,
+      color-mix(in oklab, var(--foreground) 2%, transparent) 0 1px,
+      transparent 1px 4px
+    ),
+    radial-gradient(
+      120% 90% at 50% 0%,
+      transparent 0%,
+      color-mix(in oklab, var(--landing-cream) 30%, transparent) 100%
+    );
+}
+
+/*
+ * Smooth anchor scrolling, and only here.
+ *
+ * `scroll-behavior` belongs to the scrolling element, which is the document —
+ * so it cannot be set on a wrapper. Conditioning it on the landing page being
+ * present is what keeps it out of the application, where an instant jump is
+ * the correct behaviour for navigation.
+ */
+html:has(.landing-root) {
+  scroll-behavior: smooth;
+  /* Clears the sticky header when an anchor link lands. */
+  scroll-padding-top: 5.5rem;
+}
+
+/* ---------------------------------------------------------------- typography */
+
+.landing-root .landing-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.landing-root .landing-display {
+  font-size: clamp(2.5rem, 7.2vw, 5.25rem);
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-h2 {
+  font-size: clamp(1.95rem, 4.6vw, 3.5rem);
+  line-height: 1.06;
+  letter-spacing: -0.028em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-h3 {
+  font-size: clamp(1.6rem, 3.3vw, 2.75rem);
+  line-height: 1.1;
+  letter-spacing: -0.024em;
+  font-weight: 600;
+  text-wrap: balance;
+}
+
+.landing-root .landing-lead {
+  font-size: clamp(1.0625rem, 1.35vw, 1.3125rem);
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  max-width: 42ch;
+}
+
+.landing-root .landing-body {
+  font-size: clamp(1rem, 1.15vw, 1.125rem);
+  line-height: 1.7;
+  color: var(--muted-foreground);
+  max-width: 58ch;
+}
+
+/* -------------------------------------------------------------- scroll reveal */
+
+/*
+ * One transition, driven by a single attribute.
+ *
+ * A group container is marked `data-revealed` by one IntersectionObserver when
+ * it first enters the viewport, and every `data-reveal` descendant animates
+ * from its own offset. The observer disconnects immediately afterwards, so an
+ * element reveals exactly once and scrolling back up replays nothing.
+ */
+.landing-root [data-reveal] {
+  opacity: 0;
+  transform: translate3d(var(--reveal-x, 0px), var(--reveal-y, var(--landing-distance-reveal)), 0)
+    scale(var(--reveal-scale, 1));
+  transition:
+    opacity var(--reveal-duration, var(--landing-duration-reveal)) var(--reveal-ease)
+      var(--reveal-delay, 0ms),
+    transform var(--reveal-duration, var(--landing-duration-reveal)) var(--reveal-ease)
+      var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] [data-reveal] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Barely-noticeable stagger. Label, then headline, then copy, then media. */
+.landing-root .reveal-d1 { --reveal-delay: 90ms; }
+.landing-root .reveal-d2 { --reveal-delay: 180ms; }
+.landing-root .reveal-d3 { --reveal-delay: 280ms; }
+.landing-root .reveal-d4 { --reveal-delay: 380ms; }
+.landing-root .reveal-d5 { --reveal-delay: 480ms; }
+
+/* Side reveals, for the alternating feature rows. Kept well under 40px so the
+   movement reads as settling rather than as sliding in from off-screen. */
+.landing-root .reveal-left { --reveal-x: -32px; --reveal-y: 0px; }
+.landing-root .reveal-right { --reveal-x: 32px; --reveal-y: 0px; }
+
+/* Large media. Slower and with a fraction of scale, because it is the thing
+   the section is about. */
+.landing-root .reveal-frame {
+  --reveal-y: 30px;
+  --reveal-scale: 0.978;
+  --reveal-duration: 900ms;
+}
+
+/* ------------------------------------------------------------- hero section */
+
+/*
+ * The opening has its own choreography.
+ *
+ * Everything else on the page shares one reveal, which is right for a page of
+ * sections and wrong for the first thing anybody sees: the hero is a sequence,
+ * not a group. The eyebrow arrives, the headline lands a line at a time, the
+ * copy follows it, the actions settle, and the product appears last with the
+ * depth the rest of the page does not use.
+ *
+ * The whole thing is done in about 1.4 seconds. Longer than that and a visitor
+ * is waiting on an introduction rather than reading one; shorter and the order
+ * stops being legible as an order at all.
+ */
+.landing-root .hero-line,
+.landing-root .hero-copy,
+.landing-root .hero-actions {
+  --reveal-y: var(--landing-distance-text);
+}
+
+.landing-root .hero-line {
+  /* Each half of the headline is its own box so it can arrive on its own.
+     Inline-block keeps the two flowing as one sentence when the line break
+     between them is hidden on a narrow screen. */
+  display: inline-block;
+  --reveal-y: 20px;
+}
+
+.landing-root .hero-eyebrow { --reveal-delay: 0ms; }
+.landing-root .hero-line-1 { --reveal-delay: 80ms; }
+.landing-root .hero-line-2 { --reveal-delay: 160ms; }
+.landing-root .hero-copy { --reveal-delay: 300ms; }
+.landing-root .hero-actions { --reveal-delay: 420ms; }
+
+/*
+ * The product, last and with weight.
+ *
+ * A longer travel, a fraction of scale, and a slower curve than anything above
+ * it — the one element on the page allowed to feel like it has mass.
+ */
+.landing-root .hero-screen {
+  --reveal-y: 20px;
+  --reveal-scale: 0.96;
+  --reveal-duration: 900ms;
+  --reveal-delay: 540ms;
+}
+
+/*
+ * Two panels behind the screenshot, offset and dimmed.
+ *
+ * They carry no content and are not media slots: their whole job is to put
+ * something on a plane behind the product so the composition has a back to it.
+ * They arrive after the screenshot, which is what makes it read as the subject
+ * rather than as one of three cards.
+ */
+.landing-root .hero-panel {
+  --reveal-y: 26px;
+  --reveal-scale: 0.94;
+  --reveal-duration: 900ms;
+  position: absolute;
+  inset-inline: 0;
+  border-radius: 1rem;
+  border: 1px solid var(--landing-line);
+  background-color: color-mix(in oklab, var(--landing-panel) 72%, var(--landing-sage));
+}
+
+.landing-root .hero-panel-back {
+  --reveal-delay: 640ms;
+  top: -2.75rem;
+  height: 3rem;
+  margin-inline: 12%;
+}
+
+.landing-root .hero-panel-mid {
+  --reveal-delay: 600ms;
+  top: -1.5rem;
+  height: 2.5rem;
+  margin-inline: 6%;
+}
+
+/*
+ * A panel settles below full opacity, which is what puts it behind.
+ *
+ * Written only in the revealed state, and deliberately not on the base rule:
+ * `[data-reveal]` starts everything at zero, and an opacity here would match
+ * its specificity, win on source order, and quietly cancel the fade — leaving
+ * the panels visible from the first paint and sliding in silently.
+ */
+.landing-root [data-revealed='true'] .hero-panel-back { opacity: 0.55; }
+.landing-root [data-revealed='true'] .hero-panel-mid { opacity: 0.8; }
+
+/*
+ * Depth, from the pointer and from the scroll, sharing one budget.
+ *
+ * Each layer takes a share of `--landing-depth`: the panels behind move most,
+ * the screenshot least, and nothing moves more than a few pixels. The pointer
+ * contributes only where the stylesheet says a pointer exists, which is what
+ * keeps a phone from inheriting a hover effect it can never trigger.
+ *
+ * Text is deliberately excluded. Moving a headline under the cursor makes it
+ * harder to read and buys nothing.
+ */
+.landing-root .hero-layer {
+  transform: translate3d(
+    calc(var(--pointer-x, 0) * var(--layer-depth, 0.2) * var(--landing-depth) * 0.2),
+    calc(
+      (var(--pointer-y, 0) * var(--layer-depth, 0.2) * var(--landing-depth) * 0.2) +
+      ((var(--scroll-progress) - 0.5) * var(--layer-depth, 0.2) * var(--landing-depth))
+    ),
+    0
+  );
+  transition: transform 420ms var(--reveal-ease);
+}
+
+.landing-root .hero-layer-screen { --layer-depth: 0.28; }
+.landing-root .hero-layer-panels { --layer-depth: 0.75; }
+
+/*
+ * Atmosphere.
+ *
+ * Two soft washes drifting behind the opening, on a cycle slow enough that the
+ * movement is never the thing you notice — only that the corner of the page is
+ * not quite static. Radial gradients rather than a blurred shape: a large
+ * animated `filter: blur()` is one of the most expensive things a page can do,
+ * and at this softness it would look identical.
+ *
+ * Desktop only, and behind everything.
+ */
+.landing-root .hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.landing-root .hero-blob-a {
+  inset-block-start: -14%;
+  inset-inline-end: -10%;
+  width: 46rem;
+  height: 46rem;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--secondary) 62%, transparent) 0%,
+    transparent 68%
+  );
+}
+
+.landing-root .hero-blob-b {
+  inset-block-start: 28%;
+  inset-inline-start: -18%;
+  width: 34rem;
+  height: 34rem;
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--accent) 46%, transparent) 0%,
+    transparent 70%
+  );
+}
+
+@media (min-width: 768px) {
+  .landing-root .hero-blob-a { animation: hero-drift-a 78s ease-in-out infinite; }
+  .landing-root .hero-blob-b { animation: hero-drift-b 92s ease-in-out infinite; }
+}
+
+@keyframes hero-drift-a {
+  from { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-3.5%, 4%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+@keyframes hero-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(4%, -3%, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+/* The pointer only contributes where there is a pointer to contribute. On a
+   touch screen the layers keep their scroll depth and nothing else. */
+@media (hover: none), (pointer: coarse) {
+  .landing-root .hero-layer {
+    --pointer-x: 0;
+    --pointer-y: 0;
+  }
+}
+
+/* ------------------------------------------------------------ problem section */
+
+/*
+ * Scattered, then settled.
+ *
+ * Each label rests in a grid cell and starts a short distance further out, so
+ * the reveal reads as five separate things converging on one workspace. The
+ * grid positions carry the meaning on their own; the motion only makes it
+ * legible, which is why removing it costs nothing.
+ */
+.landing-root .landing-drift {
+  opacity: 0;
+  transform: translate3d(var(--drift-x, 0px), var(--drift-y, 0px), 0)
+    rotate(var(--drift-r, 0deg));
+  transition:
+    opacity 850ms var(--reveal-ease) var(--reveal-delay, 0ms),
+    transform 850ms var(--reveal-ease) var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] .landing-drift {
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * The scatter each piece settles in from.
+ *
+ * Vertical offset and rotation everywhere; sideways offset only once there is
+ * room for it. On a phone these cards are the full width of the column, so a
+ * forty-pixel horizontal start pushes them past the edge and the document
+ * scrolls sideways before they arrive — measured at twenty-three pixels of
+ * overflow at 390px wide. There is nothing to see in a horizontal scatter of
+ * items that are all the same width anyway.
+ *
+ * The threshold is the same one the narrative grid widens at. At 768 the three
+ * columns are still tight enough that a forty-pixel start on the right-hand
+ * card runs eleven pixels past the edge, which is how this was found the second
+ * time.
+ */
+.landing-root .drift-a { --drift-y: -26px; --drift-r: -2.5deg; --reveal-delay: 0ms; }
+.landing-root .drift-b { --drift-y: -36px; --drift-r: 1.75deg; --reveal-delay: 90ms; }
+.landing-root .drift-c { --drift-y: -22px; --drift-r: 2.5deg; --reveal-delay: 180ms; }
+.landing-root .drift-d { --drift-y: 24px; --drift-r: 2deg; --reveal-delay: 270ms; }
+.landing-root .drift-e { --drift-y: 26px; --drift-r: -2deg; --reveal-delay: 360ms; }
+
+@media (min-width: 1024px) {
+  .landing-root .drift-a { --drift-x: -38px; }
+  .landing-root .drift-b { --drift-x: 6px; }
+  .landing-root .drift-c { --drift-x: 40px; }
+  .landing-root .drift-d { --drift-x: -42px; }
+  .landing-root .drift-e { --drift-x: 42px; }
+}
+
+/* ------------------------------------------------------ shared primitives */
+
+/*
+ * A short text reveal, for a line that should arrive rather than travel.
+ *
+ * The standard 28px is right for a block; a headline broken into lines wants
+ * less, or the lines chase each other up the screen instead of settling
+ * together. Opt in per element, beside the delay classes.
+ */
+.landing-root .reveal-text {
+  --reveal-y: var(--landing-distance-text);
+}
+
+/*
+ * Depth, expressed as a share of the page's one depth budget.
+ *
+ * Anything scroll-driven multiplies `--landing-depth` rather than naming its
+ * own pixel distance. Two consequences follow, and both are the point: the
+ * page cannot drift into one section moving twice as far as its neighbour, and
+ * reduced motion switches all of it off by setting the budget to zero, so no
+ * rule needs a reduced-motion branch of its own.
+ *
+ * `--depth-scale` is how much of the budget an element takes. Progress runs 0
+ * to 1, so the offset is centred: half the share above, half below.
+ */
+.landing-root .landing-depth {
+  transform: translate3d(
+    0,
+    calc((var(--scroll-progress) - 0.5) * var(--depth-scale, 1) * var(--landing-depth)),
+    0
+  );
+  will-change: transform;
+}
+
+/*
+ * The hover a card opts into.
+ *
+ * Two pixels and a slightly deeper shadow. Enough to answer "is this something
+ * I can press", short of the lift-and-scale that makes a page of cards feel
+ * like a game board. `focus-visible` gets the same treatment, because somebody
+ * navigating by keyboard is asking the same question.
+ *
+ * Applied to nothing yet; sections opt in as they are redesigned.
+ */
+.landing-root .landing-lift {
+  transition:
+    transform var(--landing-duration-micro) var(--reveal-ease),
+    box-shadow var(--landing-duration-micro) var(--reveal-ease);
+}
+
+.landing-root .landing-lift:hover,
+.landing-root .landing-lift:focus-visible {
+  transform: translate3d(0, -2px, 0);
+  box-shadow:
+    0 2px 4px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 18px 40px -24px color-mix(in oklab, var(--foreground) 26%, transparent);
+}
+
+/*
+ * Media that arrives rather than appears.
+ *
+ * The primitive the product screenshots will use when the workspace and the
+ * feature showcase start swapping between them: a wipe from the bottom edge
+ * plus a fraction of movement, so one screenshot replacing another reads as a
+ * deliberate change rather than a flicker.
+ *
+ * Driven by an attribute rather than a class, so a section can hold several
+ * and mark exactly one active without rewriting class lists. Nothing sets it
+ * yet.
+ */
+.landing-root .landing-media {
+  opacity: 0;
+  clip-path: inset(0 0 12% 0);
+  transform: translate3d(0, 10px, 0);
+  transition:
+    opacity var(--landing-duration-media) var(--reveal-ease),
+    clip-path var(--landing-duration-media) var(--reveal-ease),
+    transform var(--landing-duration-media) var(--reveal-ease);
+}
+
+.landing-root .landing-media[data-media-active='true'] {
+  opacity: 1;
+  clip-path: inset(0 0 0 0);
+  transform: none;
+}
+
+/* ---------------------------------------------------------- product showcase */
+
+/*
+ * One product story, in one section.
+ *
+ * The markup is a plain list: each item holds its own copy and its own screen,
+ * which on a phone is exactly what it should be — read a paragraph, see the
+ * screen it describes, scroll on. Nothing below `min-width: 1024px` positions
+ * anything absolutely, nothing sticks, and no content waits on a scroll
+ * position to become visible.
+ *
+ * The desktop layout is an enhancement layered on top of that, not a different
+ * page: the same items are lifted onto a shared sticky stage and driven from
+ * the section's scroll progress.
+ */
+
+/*
+ * The most opaque section on the page, deliberately.
+ *
+ * Five screenshots crossfading in depth is the one place where a texture
+ * showing through would be read as part of the product rather than behind it.
+ * The gradient and its stops are unchanged; only the transparency is new.
+ */
+.landing-root .showcase {
+  /*
+   * The spread is decoration, and decoration must not scroll the document.
+   *
+   * A resting screen sits up to 104px out to one side, which the stage's own
+   * max-width absorbs on a large display and does not on a laptop: measured at
+   * 1366 the outermost screen ran 32px past the viewport, and at 1024 it was
+   * 81px. `clip` rather than `hidden`, because `hidden` would make this a
+   * scroll container and the sticky stage inside would stop sticking.
+   */
+  overflow-x: clip;
+
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--landing-ground) var(--landing-veil-muted), transparent),
+      color-mix(in oklab, var(--landing-cream) var(--landing-veil-muted), transparent) 22%,
+      color-mix(in oklab, var(--landing-cream) var(--landing-veil-muted), transparent) 78%,
+      color-mix(in oklab, var(--landing-ground) var(--landing-veil-muted), transparent)
+    );
+}
+
+.landing-root .showcase-item {
+  padding-block: 3.5rem;
+}
+
+.landing-root .showcase-item__index {
+  margin-inline-end: 0.6rem;
+  color: color-mix(in oklab, var(--foreground) 45%, transparent);
+}
+
+.landing-root .showcase-item__media {
+  margin-block-start: 2rem;
+}
+
+/* The rail is desktop furniture; the phone has the document order instead. */
+.landing-root .showcase-rail {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  /*
+   * The track is the scroll distance the sequence needs; the stage is what
+   * stays put while it is spent. Height in viewport units so the pacing is the
+   * same on a laptop and on a large display — a fixed pixel track would race
+   * past on one and crawl on the other.
+   *
+   * `top` clears the sticky header rather than pinning to the very top, and
+   * the stage is deliberately under a full viewport so the section below stays
+   * slightly visible. A reader can always see there is more page.
+   */
+  .landing-root .showcase-track {
+    height: 260vh;
+    margin-block-start: 4rem;
+  }
+
+  .landing-root .showcase-stage {
+    position: sticky;
+    top: 5rem;
+    height: 80vh;
+    max-width: 80rem;
+    margin-inline: auto;
+    padding-inline: 2rem;
+
+    /*
+     * Progress through the sequence, remapped from the track's own travel.
+     *
+     * `--scroll-progress` runs 0 to 1 across the whole track including the
+     * viewport it crosses, so the stage is only actually stuck across the
+     * middle of that range. The window below is that middle, clamped
+     * generously at both ends: erring wide means the first and last stages
+     * hold a little longer, which is what they should do anyway.
+     */
+    --sequence: clamp(0, calc((var(--scroll-progress) - 0.22) / 0.56), 1);
+    /* Position along the five stages, 0 through 4. */
+    --cursor: calc(var(--sequence) * 4);
+    /* The strip along the bottom that belongs to the rail. Declared once, so
+       the stages reserve exactly what the rail occupies. */
+    --rail-strip: 9rem;
+  }
+
+  .landing-root .showcase-items {
+    position: absolute;
+    inset: 0;
+  }
+
+  /*
+   * Every stage occupies the same box; which one is being read is decided by
+   * how near the cursor is to it.
+   *
+   * `--active` is a triangle: 1 at its own stage, falling to 0 one stage away
+   * in either direction. Two neighbours are partly present at any moment,
+   * which is what makes the change a dissolve rather than a cut.
+   */
+  .landing-root .showcase-item {
+    --distance: max(calc(var(--cursor) - var(--stage)), calc(var(--stage) - var(--cursor)));
+    --active: clamp(0, calc(1 - var(--distance)), 1);
+
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: minmax(17rem, 30%) 1fr;
+    align-items: center;
+    gap: 3rem;
+    /* Both columns centre in what is left above the rail, so a long paragraph
+       cannot run down into it. */
+    padding-block: 0 var(--rail-strip);
+    /* Only the stage being read can be interacted with; the others are behind
+       it and must not take a click meant for the screen in front. */
+    pointer-events: none;
+    z-index: 1;
+    z-index: calc(1 + round(down, var(--active) * 10, 1));
+  }
+
+  /*
+   * Copy and screen change on different curves, because they stack
+   * differently.
+   *
+   * A screen that is not being read stays faintly present and reads as depth:
+   * it is offset, turned, and scaled, so five of them look like a stack behind
+   * the one in front. Text has none of that. Two paragraphs at the same size
+   * crossfading in the same column do not read as depth, they read as one
+   * smeared paragraph — and a headline arriving between the lines of the one
+   * leaving is worse than either alone.
+   *
+   * So the copy is switched rather than dissolved. `--active` above 0.5 means
+   * this stage is the nearest one, and only one stage can be nearest, so
+   * keying the fade to that threshold makes two visible paragraphs impossible
+   * rather than merely unlikely. The swap takes about a sixteenth of the
+   * travel between stages, which reads as a cut. Nothing is lost by cutting:
+   * the continuity a reader follows is the screen, which is crossfading
+   * underneath the whole time.
+   */
+  .landing-root .showcase-item__copy {
+    /* Signed, so the stage being left leaves upward and the stage arriving
+       rises into place — a short settle on either side of the cut. */
+    transform: translate3d(0, calc((var(--stage) - var(--cursor)) * 26px), 0);
+    opacity: clamp(0, calc((var(--active) - 0.5) * 16), 1);
+  }
+
+  .landing-root .showcase-item__media {
+    /*
+     * What is not being read rests out to one side, alternating by stage, so
+     * the set reads as a spread rather than a pile — and converges on the
+     * reading position as its stage becomes active.
+     */
+    --rest-x: calc((var(--stage) - 2) * 52px);
+    --rest-y: calc(26px + var(--distance) * 12px);
+
+    margin-block-start: 0;
+    opacity: calc(0.14 + 0.86 * var(--active));
+    transform:
+      translate3d(
+        calc(var(--rest-x) * (1 - var(--active))),
+        calc(var(--rest-y) * (1 - var(--active))),
+        0
+      )
+      scale(calc(0.92 + 0.08 * var(--active)))
+      rotate(calc((var(--stage) - 2) * 0.5deg * (1 - var(--active))));
+  }
+
+  /*
+   * The index rail, along the bottom of the copy column. It says where in the
+   * sequence a reader is, which the stacked copy alone cannot.
+   */
+  .landing-root .showcase-rail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    position: absolute;
+    inset-block-end: 2rem;
+    inset-inline-start: 2rem;
+    width: 30%;
+    max-width: 17rem;
+    z-index: 20;
+  }
+
+  .landing-root .showcase-rail__item {
+    --distance: max(calc(var(--cursor) - var(--stage)), calc(var(--stage) - var(--cursor)));
+    --active: clamp(0, calc(1 - var(--distance)), 1);
+
+    display: flex;
+    gap: 0.7rem;
+    align-items: baseline;
+    font-size: 0.78rem;
+    opacity: calc(0.3 + 0.7 * var(--active));
+    transform: translate3d(calc(var(--active) * 5px), 0, 0);
+  }
+
+  .landing-root .showcase-rail__index {
+    font-variant-numeric: tabular-nums;
+    color: color-mix(in oklab, var(--foreground) 50%, transparent);
+  }
+
+  .landing-root .showcase-rail__label {
+    font-weight: 500;
+  }
+
+  /* The copy block inside each item carries its own index on a phone; on
+     desktop the rail says it, so the inline one would be a second answer. */
+  .landing-root .showcase-item__index {
+    display: none;
+  }
+}
+
+/* Reduced motion and small screens share the same answer: nothing moves, and
+   everything is in the document where it can be read. */
+
+/* -------------------------------------------------------------- how it works */
+
+/*
+ * The workflow, drawn as one line.
+ *
+ * The section above is a sticky stage where five screens stack in depth. This
+ * one deliberately shares none of that: nothing pins, nothing overlaps, and
+ * the same markup serves a phone unchanged. What carries it instead is a
+ * hairline running through four nodes, filling with the product's green as the
+ * reader descends — the line is both the ornament and the progress indicator,
+ * so the section has a motif without acquiring decoration.
+ *
+ * The node column spans the whole row and centres the dot and the line in one
+ * flex box, which is the reason they cannot come apart. The line then reaches
+ * past the row's own bottom edge by exactly the distance to the next node, so
+ * the connector between two steps is one element and nothing here depends on a
+ * row being a particular height. A paragraph that wraps to an extra line moves
+ * the node and the line together.
+ */
+
+.landing-root .workflow-track {
+  /* Where a node sits inside its row, measured from the row's content. */
+  --workflow-node: 0.9rem;
+  --workflow-gutter: 2.5rem;
+
+  /*
+   * The reading head, remapped from the list's own travel.
+   *
+   * `--scroll-progress` runs 0 to 1 across the list plus the viewport it
+   * crosses, so a step sits at a comfortable reading position over the middle
+   * of that range rather than at its ends. The window below is that middle,
+   * and everything downstream is a share of it.
+   */
+  --head: clamp(0, calc((var(--scroll-progress) - 0.21) / 0.51), 1);
+  /* Position along the four steps, 0 through 3. */
+  --cursor: calc(var(--head) * 3);
+}
+
+.landing-root .workflow-step {
+  --workflow-pad: 2.25rem;
+
+  /* Reached once the head arrives at this node, over a fifth of a step so the
+     change is a fade rather than a flick. */
+  --reached: clamp(0, calc((var(--cursor) - var(--step)) * 5 + 1), 1);
+  /* How much of the connector below this node has been drawn: 0 to 1 as the
+     head travels from this node to the next. */
+  --drawn: clamp(0, calc(var(--cursor) - var(--step)), 1);
+  /* Nearest to the head, falling to 0 one step away in either direction. */
+  --active: clamp(
+    0,
+    calc(1 - max(calc(var(--cursor) - var(--step)), calc(var(--step) - var(--cursor)))),
+    1
+  );
+
+  display: grid;
+  grid-template-columns: var(--workflow-gutter) minmax(0, 1fr);
+  /* Declared rather than implicit, because the node column spans the row with
+     `grid-row: 1 / -1` and `-1` counts lines in the explicit grid only. Left
+     implicit, the span silently collapses to the first row and the connector
+     stops short of the next node wherever the screenshot stacks below. */
+  grid-template-rows: auto auto;
+  align-items: start;
+  column-gap: 0;
+  padding-block: var(--workflow-pad);
+}
+
+.landing-root .workflow-marker {
+  /* Every row, so the connector spans the media on a phone too. */
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.landing-root .workflow-marker__dot {
+  margin-block-start: calc(var(--workflow-node) - 0.4375rem);
+  block-size: 0.875rem;
+  inline-size: 0.875rem;
+  flex: none;
+  position: relative;
+  border: 1px solid var(--landing-line);
+  border-radius: 999px;
+  background-color: var(--landing-ground);
+  transform: scale(calc(1 + 0.16 * var(--active)));
+}
+
+/* The filled centre. A scale rather than a colour change, so an unreached node
+   is an empty ring and a reached one is unmistakably solid. */
+.landing-root .workflow-marker__dot::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 999px;
+  background-color: var(--primary);
+  transform: scale(var(--reached));
+}
+
+/*
+ * The connector. It takes the space left in the column and then overruns the
+ * row by the distance from a row's bottom edge to the next row's node —
+ * two paddings plus the node offset — which is what makes it end exactly on
+ * the next dot rather than near it.
+ */
+.landing-root .workflow-marker__line {
+  position: relative;
+  flex: 1;
+  inline-size: 1px;
+  margin-block-start: 0.4rem;
+  margin-block-end: calc(-1 * (2 * var(--workflow-pad) + var(--workflow-node)));
+  background-color: var(--landing-line);
+}
+
+.landing-root .workflow-marker__fill {
+  position: absolute;
+  inset: 0;
+  background-color: var(--primary);
+  /* Scaled rather than resized: a line that animates its height relayouts the
+     row on every frame, and one that animates its transform does not. */
+  transform: scaleY(var(--drawn));
+  transform-origin: top;
+}
+
+/* The last node ends the process; there is nothing for a line to reach. */
+.landing-root .workflow-step:last-child .workflow-marker__line {
+  display: none;
+}
+
+.landing-root .workflow-step__copy {
+  grid-column: 2;
+  grid-row: 1;
+  max-inline-size: 30rem;
+}
+
+/*
+ * The step number carries the emphasis that the prose deliberately does not.
+ *
+ * Dimming a paragraph the reader has not reached yet costs contrast on text
+ * that is on screen and legible, which is a poor trade for a little drama. A
+ * number is a label, so it can go quiet without that cost.
+ */
+.landing-root .workflow-step__number {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in oklab, var(--primary) 45%, transparent);
+  color: color-mix(in oklab, var(--primary) calc(45% + 55% * var(--reached)), transparent);
+}
+
+.landing-root .workflow-step__media {
+  grid-column: 2;
+  grid-row: 2;
+  margin-block-start: 1.75rem;
+}
+
+/* The standing emphasis, on its own element: the entrance above owns opacity
+   and transform on the wrapper, and two systems writing one property is how
+   one of them silently stops working. */
+.landing-root .workflow-step__frame {
+  opacity: calc(0.82 + 0.18 * var(--active));
+  transform: scale(calc(0.99 + 0.01 * var(--active)));
+}
+
+@media (min-width: 1024px) {
+  .landing-root .workflow-step {
+    /* The media column is fixed rather than fractional: it decides the row
+       height, and a row height that changed with the window would make the
+       pacing of the whole section depend on how wide somebody's browser is. */
+    /* Widened from 30rem: at the old width the copy and the screenshot were
+       left with a two-hundred-pixel channel of nothing between them. */
+    grid-template-columns: var(--workflow-gutter) minmax(0, 1fr) minmax(0, 34rem);
+    /* One row here: copy and screenshot sit side by side. */
+    grid-template-rows: auto;
+  }
+
+  .landing-root .workflow-step__media {
+    grid-column: 3;
+    grid-row: 1;
+    margin-block-start: 0;
+    margin-inline-start: 3rem;
+  }
+}
+
+/* ------------------------------------------------------------ build journey */
+
+/*
+ * The project's history, on one rule.
+ *
+ * Horizontal where the workflow above is vertical, and drawn by the reveal
+ * rather than by scroll progress: this is a history that is already finished,
+ * so it arrives complete when the section does instead of filling as a reader
+ * descends. That difference is the whole reason the two do not read as the same
+ * component — and it costs no second scroll loop.
+ */
+
+.landing-root .journey-track {
+  position: relative;
+  display: grid;
+  gap: 2.25rem;
+  padding-inline-start: 1.75rem;
+}
+
+/* The rule itself. Drawn from its start, once, when the section arrives. */
+.landing-root .journey-line {
+  position: absolute;
+  inset-block: 0.4rem auto;
+  inset-inline-start: 0.3rem;
+  inline-size: 1px;
+  block-size: calc(100% - 0.8rem);
+  background-color: color-mix(in oklab, var(--primary) 45%, var(--landing-line));
+  transform-origin: top;
+  transform: scaleY(0);
+  transition: transform 900ms var(--reveal-ease) 120ms;
+}
+
+.landing-root [data-revealed='true'] .journey-line {
+  transform: scaleY(1);
+}
+
+.landing-root .journey-stage {
+  position: relative;
+}
+
+.landing-root .journey-node {
+  position: absolute;
+  inset-block-start: 0.35rem;
+  inset-inline-start: -1.75rem;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
+  border-radius: 999px;
+  background-color: var(--primary);
+  transform: scale(0);
+  transition: transform var(--landing-duration-micro) var(--reveal-ease) var(--reveal-delay, 0ms);
+}
+
+.landing-root [data-revealed='true'] .journey-node {
+  transform: scale(1);
+}
+
+@media (min-width: 768px) {
+  /*
+   * The rule turns and runs across the page. Five equal columns, each stage
+   * hanging below the line rather than beside it, so the eye reads left to
+   * right the way a timeline is read.
+   */
+  .landing-root .journey-track {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.5rem;
+    padding-inline-start: 0;
+    padding-block-start: 1.75rem;
+  }
+
+  .landing-root .journey-line {
+    inset-block: 0.3rem auto;
+    inset-inline: 0 0;
+    inline-size: auto;
+    block-size: 1px;
+    transform-origin: left;
+    transform: scaleX(0);
+  }
+
+  .landing-root [data-revealed='true'] .journey-line {
+    transform: scaleX(1);
+  }
+
+  .landing-root .journey-node {
+    inset-block-start: -1.6rem;
+    inset-inline-start: 0;
+  }
+}
+
+/* --------------------------------------------------------------- the close */
+
+/*
+ * The closing field.
+ *
+ * A single flat tint would have to choose between being green enough to read as
+ * a conclusion and being open enough to let the atmosphere through. This is a
+ * gradient instead: strongest across the middle, where the statement and the
+ * two buttons sit, and thinning towards the bottom edge, which is exactly where
+ * the props come to rest. Both things get what they need out of one surface.
+ */
+.landing-root .landing-close {
+  background:
+    linear-gradient(
+      to bottom,
+      color-mix(in oklab, var(--landing-band) 42%, transparent),
+      color-mix(in oklab, var(--landing-band) 68%, transparent) 38%,
+      color-mix(in oklab, var(--landing-band) 46%, transparent) 82%,
+      color-mix(in oklab, var(--landing-band) var(--landing-veil-open), transparent)
+    );
+}
+
+/* --------------------------------------------------------------- photo strip */
+
+/*
+ * A seamless loop, without a JavaScript ticker.
+ *
+ * The track holds the same group twice. Each group carries its own internal
+ * gap plus a trailing gap of the same size, so the two halves are exactly equal
+ * and translating the track by half its width lands the second group precisely
+ * where the first began. That is why there is no jump at the reset — the
+ * arithmetic is exact rather than close.
+ */
+.landing-root .landing-marquee {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent, black 5%, black 95%, transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent, black 5%, black 95%, transparent
+  );
+}
+
+.landing-root .landing-marquee__track {
+  display: flex;
+  width: max-content;
+  block-size: 132px;
+  animation: landing-marquee-scroll 78s linear infinite;
+}
+
+/*
+ * The second row.
+ *
+ * Opposite direction, a slower cycle, and set back a little — smaller frames at
+ * reduced contrast — so the two read as one field with depth rather than as two
+ * strips fighting each other. Hidden below `md`: a phone already has the
+ * atmosphere behind this section, and two moving rows over it is too much at
+ * once.
+ */
+.landing-root .landing-marquee__track--back {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .landing-root .landing-marquee__track {
+    block-size: 200px;
+  }
+
+  .landing-root .landing-marquee__track--back {
+    display: flex;
+    block-size: 140px;
+    margin-block-start: 10px;
+    opacity: 0.62;
+    animation-name: landing-marquee-scroll-back;
+    animation-duration: 96s;
+  }
+}
+
+.landing-root .landing-marquee__group {
+  display: flex;
+  gap: 10px;
+  padding-right: 10px;
+}
+
+.landing-root .landing-marquee:hover .landing-marquee__track,
+.landing-root .landing-marquee:focus-within .landing-marquee__track {
+  animation-play-state: paused;
+}
+
+@keyframes landing-marquee-scroll {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+
+/* The same seamless half-width travel, the other way. */
+@keyframes landing-marquee-scroll-back {
+  from { transform: translate3d(-50%, 0, 0); }
+  to { transform: translate3d(0, 0, 0); }
+}
+
+/* ------------------------------------------------------------ reduced motion */
+
+/*
+ * Motion is never how this page communicates.
+ *
+ * Everything above is decoration on content that is already in the document, so
+ * switching it off leaves a complete, readable page. The strip becomes a row
+ * the visitor scrolls themselves.
+ *
+ * Implemented here rather than in JavaScript on purpose: the preference is a
+ * media query, and the browser already re-evaluates it when it changes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  /*
+   * The atmosphere is shown as a settled pile rather than a falling one.
+   *
+   * Read once by the physics layer, which then never imports Matter, never
+   * starts a loop, and never schedules a drop. The vellum is unchanged: it was
+   * never motion.
+   */
+  .landing-root {
+    --landing-physics-motion: 0;
+  }
+
+  html:has(.landing-root) {
+    scroll-behavior: auto;
+  }
+
+  .landing-root [data-reveal],
+  .landing-root .landing-drift {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  /*
+   * One line disables every scroll-driven effect on the page, present and
+   * future.
+   *
+   * `.landing-depth` computes its offset as a share of this budget, so zero
+   * resolves the transform to `translate3d(0, 0, 0)` — the element's final,
+   * readable position — without the rule needing to know reduced motion
+   * exists. A rule that instead hard-coded its own pixel distance would have
+   * to be remembered here, and one day would not be.
+   *
+   * `useScrollProgress` goes on writing the variable. That costs a style
+   * write per frame while a section is on screen and moves nothing, which is
+   * the right trade against a JavaScript media query: this project forbids
+   * `matchMedia` in source, and the preference belongs to the stylesheet.
+   */
+  .landing-root {
+    --landing-depth: 0px;
+  }
+
+  .landing-root .landing-depth {
+    transform: none;
+    will-change: auto;
+  }
+
+  /*
+   * The product showcase becomes a document again.
+   *
+   * The sticky stage is abandoned rather than merely frozen: a stuck panel
+   * whose contents no longer change is a reader scrolling past nothing, which
+   * is worse than no effect at all. The items return to the flow they already
+   * have on a phone, each with its copy and its screen, in order.
+   */
+  .landing-root .showcase-track {
+    height: auto;
+    margin-block-start: 0;
+  }
+
+  .landing-root .showcase-stage {
+    position: static;
+    height: auto;
+    max-width: none;
+    padding-inline: 0;
+  }
+
+  .landing-root .showcase-items {
+    position: static;
+  }
+
+  .landing-root .showcase-item {
+    position: static;
+    display: block;
+    opacity: 1;
+    padding-block: 3.5rem;
+    pointer-events: auto;
+  }
+
+  /* Both the offsets and the progress-driven fades: nothing here may depend on
+     `--scroll-progress`, which never moves once the depth budget is zero. */
+  .landing-root .showcase-item__copy,
+  .landing-root .showcase-item__media {
+    transform: none;
+    opacity: 1;
+  }
+
+  .landing-root .showcase-item__media {
+    margin-block-start: 2rem;
+  }
+
+  .landing-root .showcase-item__index {
+    display: inline;
+  }
+
+  /* The rail describes a sequence that is no longer happening. */
+  .landing-root .showcase-rail {
+    display: none;
+  }
+
+  /* The project history arrives complete rather than drawing itself in. */
+  .landing-root .journey-line {
+    transform: scaleX(1) scaleY(1);
+    transition: none;
+  }
+
+  .landing-root .journey-node {
+    transform: scale(1);
+    transition: none;
+  }
+
+  /*
+   * The workflow is shown as a finished diagram rather than one being drawn.
+   *
+   * Every value below is otherwise a function of `--scroll-progress`, which
+   * never moves once there is no motion — so without these the line would stay
+   * empty, every marker would stay hollow, and three of the four screenshots
+   * would sit permanently dimmed. The section still says the same thing; it
+   * simply says all of it at once.
+   */
+  .landing-root .workflow-marker__fill {
+    transform: scaleY(1);
+  }
+
+  .landing-root .workflow-marker__dot,
+  .landing-root .workflow-marker__dot::before {
+    transform: none;
+  }
+
+  .landing-root .workflow-step__number {
+    color: var(--primary);
+  }
+
+  .landing-root .workflow-step__frame {
+    opacity: 1;
+    transform: none;
+  }
+
+  /*
+   * The hero settles immediately, in its finished composition.
+   *
+   * Zeroing the depth budget above already stops the pointer and scroll
+   * layers, since both are written as a share of it. What is left is the
+   * entrance itself and the drifting washes, and neither may run: the opening
+   * has to be complete and readable the moment it is on screen, not
+   * assembling.
+   */
+  .landing-root .hero-layer {
+    transform: none;
+    transition: none;
+    will-change: auto;
+  }
+
+  .landing-root .hero-blob {
+    animation: none !important;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  /* Hover may still respond — it is a reply to a deliberate action, not motion
+     the page starts on its own — but it arrives without travelling. */
+  .landing-root .landing-lift {
+    transition: box-shadow var(--landing-duration-micro) var(--reveal-ease);
+  }
+
+  .landing-root .landing-lift:hover,
+  .landing-root .landing-lift:focus-visible {
+    transform: none;
+  }
+
+  /* Media swaps still happen; they just cut rather than wipe, so nothing is
+     hidden behind an animation that was switched off. */
+  .landing-root .landing-media {
+    opacity: 1;
+    clip-path: none;
+    transform: none;
+    transition: none;
+  }
+
+  .landing-root .landing-marquee {
+    overflow-x: auto;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
+  .landing-root .landing-marquee__track {
+    animation: none !important;
+    transform: none !important;
+  }
+
+  /* One row is enough when nothing is moving; the second was depth, and depth
+     was the part that moved. Manual horizontal scrolling of the first is kept. */
+  .landing-root .landing-marquee__track--back {
+    display: none;
+  }
+}

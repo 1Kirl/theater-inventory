@@ -21,6 +21,7 @@
     "firebase": "^12.18.0",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.33.0",
+    "matter-js": "^0.20.0",
     "qrcode.react": "^4.2.0",
     "radix-ui": "^1.6.7",
     "react": "^19.2.8",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/matter-js": "^0.20.2",
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom'
-import { Theater } from 'lucide-react'
+import { BrandMark } from '@/components/brand/BrandMark'
 
 /**
  * Centered, single-column layout for the pre-organization auth screens.
@@ -18,7 +18,7 @@ export function AuthLayout() {
           className="bg-secondary text-primary flex size-11 items-center justify-center rounded-xl"
           aria-hidden="true"
         >
-          <Theater className="size-5" />
+          <BrandMark className="size-5" />
         </span>
         <h1 className="text-lg font-semibold tracking-tight">Theater Inventory Tracker</h1>
       </div>
