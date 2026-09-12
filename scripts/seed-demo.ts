@@ -41,6 +41,7 @@ import { buildCalendarEventDocument } from '@/domain/calendar-payloads'
 import {
   DEMO_ACTIONS, DEMO_CALENDAR, DEMO_INVENTORY, DEMO_MAINTENANCE, DEMO_MEMBER_PERMISSIONS,
   DEMO_MEMBER_TEAMS, DEMO_ORGANIZATION_NAME, DEMO_PRODUCTIONS, DEMO_REQUIREMENTS, DEMO_TEAMS,
+  PREVIOUS_DEMO_ORGANIZATION_NAMES,
   demoConditionCounts, demoDate,
 } from '@/domain/demo-dataset'
 import type { Organization, OrganizationMembership } from '@/types/organization'
@@ -115,7 +116,8 @@ async function signInOrCreate(params: {
 }
 
 /**
- * The demo organization, if this account already administers one by that name.
+ * The demo organization, if this account already administers one by that name
+ * — or by a name the demo has had before, so a rename cannot cause a duplicate.
  *
  * Found the way the application finds organizations — through the caller's own
  * memberships — because listing organizations is denied to everyone, which is
@@ -139,7 +141,9 @@ async function findDemoOrganization(
     if (!snapshot.exists()) continue
 
     const organization = snapshot.data() as Organization
-    if (organization.name === DEMO_ORGANIZATION_NAME && organization.admin_uid === uid) {
+    const isDemo = organization.name === DEMO_ORGANIZATION_NAME
+      || PREVIOUS_DEMO_ORGANIZATION_NAMES.includes(organization.name)
+    if (isDemo && organization.admin_uid === uid) {
       return organization
     }
   }
@@ -185,7 +189,8 @@ async function main(): Promise<void> {
   const existing = await findDemoOrganization(db, admin.uid)
   if (existing) {
     fail(
-      `"${DEMO_ORGANIZATION_NAME}" already exists for this Admin, so nothing was written.\n`
+      `The demo organization already exists for this Admin as "${existing.name}", so nothing\n`
+      + `  was written.\n`
       + `  Running again would duplicate every record. Delete the organization's documents in\n`
       + `  the Firebase console first if you want a fresh dataset.`,
     )
