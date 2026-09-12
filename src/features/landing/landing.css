@@ -1161,6 +1161,106 @@ html:has(.landing-root) {
   }
 }
 
+/* ------------------------------------------------------------- in the field */
+
+/*
+ * Photographs from the field, composed by how many there are.
+ *
+ * Each count gets its own arrangement rather than one grid of equal cells:
+ * five identical thumbnails read as a gallery widget, and this is meant to read
+ * as reportage. On a phone everything settles into two columns with the lead
+ * photograph across both, so nothing shrinks below legibility.
+ */
+.landing-root .field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.landing-root .field-grid__frame {
+  /* `clip`, not `hidden`: rounds the photograph's corners without making the
+     frame a scroll container. */
+  overflow: clip;
+  border: 1px solid var(--landing-line);
+  border-radius: 1rem;
+  background-color: var(--landing-sage);
+  aspect-ratio: 4 / 3;
+  box-shadow: 0 18px 44px -28px color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+
+/* The lead photograph runs across both columns on a phone. */
+.landing-root .field-grid--single .field-grid__item,
+.landing-root .field-grid--pair .field-grid__item,
+.landing-root .field-grid--trio .field-grid__item:first-child,
+.landing-root .field-grid--five .field-grid__item:first-child {
+  grid-column: span 2;
+}
+
+.landing-root .field-grid--single .field-grid__frame {
+  aspect-ratio: 3 / 2;
+}
+
+@media (min-width: 768px) {
+  .landing-root .field-grid {
+    gap: 1rem;
+  }
+
+  .landing-root .field-grid .field-grid__item {
+    grid-column: auto;
+  }
+
+  /* One photograph: a single wide frame. */
+  .landing-root .field-grid--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .landing-root .field-grid--single .field-grid__frame {
+    aspect-ratio: 2 / 1;
+  }
+
+  /* Two: side by side, the same size. */
+  .landing-root .field-grid--pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Three: one large on the left, two stacked beside it. */
+  .landing-root .field-grid--trio {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* Four: two by two. */
+  .landing-root .field-grid--quad {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .landing-root .field-grid--quad .field-grid__frame {
+    aspect-ratio: 3 / 2;
+  }
+
+  /* Five: one large, four around it — never five equal thumbnails. */
+  .landing-root .field-grid--five {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  /* The lead frame in the trio and the five spans two rows, and fills them
+     rather than holding its own ratio. */
+  .landing-root .field-grid--trio .field-grid__item:first-child {
+    grid-column: 1 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  .landing-root .field-grid--five .field-grid__item:first-child {
+    grid-column: 1 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  .landing-root .field-grid--trio .field-grid__item:first-child .field-grid__frame,
+  .landing-root .field-grid--five .field-grid__item:first-child .field-grid__frame {
+    aspect-ratio: auto;
+    height: 100%;
+  }
+}
+
 /* --------------------------------------------------------------- the close */
 
 /*

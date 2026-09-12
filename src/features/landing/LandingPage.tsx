@@ -5,8 +5,10 @@ import { NarrativeSection } from '@/features/landing/NarrativeSection'
 import { ProductShowcase } from '@/features/landing/ProductShowcase'
 import { HowItWorksSection } from '@/features/landing/HowItWorksSection'
 import { BuildJourneySection } from '@/features/landing/BuildJourneySection'
+import { FieldSection } from '@/features/landing/FieldSection'
 import { FinalCtaSection } from '@/features/landing/FinalCtaSection'
 import { ProductionMarquee } from '@/features/landing/ProductionMarquee'
+import { ContactSection } from '@/features/landing/ContactSection'
 import { LandingFooter } from '@/features/landing/LandingFooter'
 import '@/features/landing/landing.css'
 
@@ -35,8 +37,10 @@ export function LandingPage() {
         <ProductShowcase />
         <HowItWorksSection />
         <BuildJourneySection />
+        <FieldSection />
         <FinalCtaSection />
         <ProductionMarquee />
+        <ContactSection />
       </main>
 
       <LandingFooter />

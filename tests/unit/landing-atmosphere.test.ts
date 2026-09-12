@@ -381,7 +381,7 @@ describe('the vellum', () => {
     }
 
     const landing = path.join(src, 'features/landing')
-    const sections = ['NarrativeSection', 'HowItWorksSection', 'BuildJourneySection',
+    const sections = ['NarrativeSection', 'HowItWorksSection', 'BuildJourneySection', 'FieldSection', 'ContactSection',
       'ProductionMarquee', 'LandingFooter', 'HeroSection']
     for (const name of sections) {
       expect(readFileSync(path.join(landing, `${name}.tsx`), 'utf8'), name)

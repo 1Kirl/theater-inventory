@@ -204,7 +204,7 @@ npm run seed:demo     # seed the demo organization (see below)
 
 ## Demo data
 
-**Ridgeview High School Theater** is a seeded demo organization: six teams, 17 inventory items
+**Governor's Academy** is a seeded demo organization: six teams, 17 inventory items
 across ten categories, four repair records including one overdue, a musical with a genuine
 microphone shortage, two action items, and six upcoming calendar events.
 

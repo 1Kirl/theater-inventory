@@ -10,7 +10,7 @@ Everything needed to demonstrate the application, and the story to tell while do
 
 ### What exists
 
-**Ridgeview High School Theater** is a seeded demo organization built for exactly this purpose: six
+**Governor's Academy** is a seeded demo organization built for exactly this purpose: six
 teams, 17 inventory items across ten categories, four repair records including one overdue, a
 musical with a genuine microphone shortage, two action items, and six upcoming calendar events.
 

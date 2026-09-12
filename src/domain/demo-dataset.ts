@@ -19,7 +19,18 @@ import type { ModulePermissions } from '@/types/organization'
  * that matches nothing.
  */
 
-export const DEMO_ORGANIZATION_NAME = 'Ridgeview High School Theater'
+export const DEMO_ORGANIZATION_NAME = "Governor's Academy"
+
+/**
+ * Names the demo organization has had before.
+ *
+ * The seed script recognises an existing demo by its name, so renaming the demo
+ * without this would make a re-run miss the one already seeded under the old
+ * name and write a second, complete copy beside it. Existing organizations are
+ * never renamed by this change — a seeded one keeps its name until an Admin
+ * edits it in the application.
+ */
+export const PREVIOUS_DEMO_ORGANIZATION_NAMES: readonly string[] = ['Ridgeview High School Theater']
 
 /** Local keys. They never reach Firestore; they are how this file cross-references itself. */
 export type TeamKey = 'lighting' | 'sound' | 'scenic' | 'props' | 'costumes' | 'stage-management'

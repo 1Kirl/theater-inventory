@@ -139,7 +139,7 @@ describe('the unit-only parser', () => {
 })
 
 describe('what a printed label says', () => {
-  const organization = { name: 'Ridgeview High School Theater' }
+  const organization = { name: "Governor's Academy" }
 
   function item(trackingMode: 'bulk' | 'serialized'): InventoryItem {
     return {
@@ -155,7 +155,7 @@ describe('what a printed label says', () => {
     expect(label.qrUrl).toBe(`${ORIGIN}/inventory/${ITEM_ID}`)
     expect(label.assetCode).toBe('Bulk item')
     expect(label.itemName).toBe('Cannon XLR Cable')
-    expect(label.organizationName).toBe('Ridgeview High School Theater')
+    expect(label.organizationName).toBe("Governor's Academy")
   })
 
   it('names a serialized parent as an item, not a bulk one', () => {
