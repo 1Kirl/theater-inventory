@@ -190,9 +190,10 @@ export const landingMedia: LandingMediaConfig = {
   /*
    * The film strip at the foot of the page.
    *
-   * Ten photographs, each used once. `production-04` is not among them: it is
-   * the narrative section's photograph now, and the same picture twice on one
-   * page reads as a mistake. Ordered so neighbours differ in shape — portrait
+   * Eleven photographs, each used once within the strip. `production-04` is
+   * also the narrative section's photograph, and that is deliberate: the strip
+   * is meant to feel full, and a picture seen once above is welcome again in
+   * passing. Ordered so neighbours differ in shape — portrait
    * next to landscape, never two of the same ratio side by side, including
    * across the loop — because a row of identical rectangles reads as a
    * component and a row of different ones reads as a contact sheet.
@@ -215,27 +216,31 @@ export const landingMedia: LandingMediaConfig = {
       aspect: '3 / 4', alt: 'Crew working on rigging equipment in the shop.', src: production05,
     },
     {
-      id: 'production-02', label: 'Project photo 05', description: 'Flats stacked over the auditorium seats',
+      id: 'production-04', label: 'Project photo 05', description: 'Two crew members backstage, between jobs',
+      aspect: '3 / 2', alt: 'Two crew members talking backstage beside a part-built flat.', src: production04,
+    },
+    {
+      id: 'production-02', label: 'Project photo 06', description: 'Flats stacked over the auditorium seats',
       aspect: '16 / 9', alt: 'Set flats stored above the auditorium seating.', src: production02,
     },
     {
-      id: 'production-add-03', label: 'Project photo 06', description: 'Clamping a frame on the shop floor',
+      id: 'production-add-03', label: 'Project photo 07', description: 'Clamping a frame on the shop floor',
       aspect: '3 / 4', alt: 'A crew member clamping a set frame together.', src: add03,
     },
     {
-      id: 'story-01', label: 'Project photo 07', description: 'Sanding and clamping a flat, close in',
+      id: 'story-01', label: 'Project photo 08', description: 'Sanding and clamping a flat, close in',
       aspect: '3 / 2', alt: 'Two students clamping and sanding a set flat.', src: storyBackstage1,
     },
     {
-      id: 'production-add-02', label: 'Project photo 08', description: 'The sound desk, cabled up',
+      id: 'production-add-02', label: 'Project photo 09', description: 'The sound desk, cabled up',
       aspect: '9 / 16', alt: 'A sound mixing console with its cables patched in.', src: add02,
     },
     {
-      id: 'production-03', label: 'Project photo 09', description: 'A set piece in the scene shop',
+      id: 'production-03', label: 'Project photo 10', description: 'A set piece in the scene shop',
       aspect: '16 / 9', alt: 'Two crew members beside a set piece in the scene shop.', src: production03,
     },
     {
-      id: 'story-02', label: 'Project photo 10', description: 'Set pieces going onto the truck',
+      id: 'story-02', label: 'Project photo 11', description: 'Set pieces going onto the truck',
       aspect: '4 / 3', alt: 'Flats and platforms stacked on a truck during a load-in.', src: storyBackstage2,
     },
   ],

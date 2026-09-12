@@ -28,9 +28,9 @@ const every: LandingMedia[] = [
 ]
 
 describe('every declared frame is a real frame', () => {
-  it('declares nineteen, with unique ids', () => {
-    expect(every).toHaveLength(21)
-    expect(new Set(every.map((m) => m.id)).size).toBe(21)
+  it('declares twenty-two, with unique ids', () => {
+    expect(every).toHaveLength(22)
+    expect(new Set(every.map((m) => m.id)).size).toBe(22)
   })
 
   it('holds its space open, so a late image moves nothing', () => {
@@ -62,17 +62,22 @@ describe('every declared frame is a real frame', () => {
     }
   })
 
-  it('never shows the same photograph twice on the page', () => {
-    // production-04 is the narrative's photograph now, so it left the strip.
-    const photographs = [landingMedia.story, ...landingMedia.productionPhotos].map((m) => m.src)
-    expect(new Set(photographs).size).toBe(photographs.length)
+  it('shows the narrative photograph in the film strip as well, on purpose', () => {
+    const strip = landingMedia.productionPhotos.map((m) => m.src)
+    expect(strip).toContain(landingMedia.story.src)
+  })
+
+  it('never repeats a photograph within the film strip', () => {
+    const strip = landingMedia.productionPhotos.map((m) => m.src)
+    expect(new Set(strip).size).toBe(strip.length)
   })
 
   it('describes the photograph it actually points at', () => {
     // Two of these were transposed once: the alt said auditorium and the file
-    // was the scene shop.
+    // was the scene shop. The narrative's photograph is in the strip too, so
+    // it is held to the same description in both places.
     const byFile = new Map<string, Set<string>>()
-    for (const media of landingMedia.productionPhotos) {
+    for (const media of [landingMedia.story, ...landingMedia.productionPhotos]) {
       const file = media.src ?? ''
       byFile.set(file, (byFile.get(file) ?? new Set()).add(media.alt))
     }
