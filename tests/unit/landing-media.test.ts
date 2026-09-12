@@ -20,7 +20,7 @@ const read = (file: string) => readFileSync(path.join(landingDir, file), 'utf8')
 
 const every: LandingMedia[] = [
   landingMedia.hero,
-  ...landingMedia.storyPhotos,
+  landingMedia.story,
   landingMedia.workspace,
   ...Object.values(landingMedia.features),
   ...landingMedia.howItWorks,
@@ -48,11 +48,24 @@ describe('every declared frame is a real frame', () => {
     }
   })
 
-  it('carries three photographs in the narrative strip', () => {
-    expect(landingMedia.storyPhotos).toHaveLength(3)
-    // One frame shape, so the row is level rather than ragged.
-    expect(new Set(landingMedia.storyPhotos.map((m) => m.aspect)).size).toBe(1)
-    expect(new Set(landingMedia.storyPhotos.map((m) => m.src)).size).toBe(3)
+  it('gives the narrative one photograph, and not the backstage strip', () => {
+    expect(landingMedia.story.src).toMatch(/production-04/)
+    // The three backstage frames moved to the film strip.
+    expect(landingMedia.story.src).not.toMatch(/story-backstage/)
+  })
+
+  it('carries the six added photographs in the film strip, alongside the old ones', () => {
+    const strip = landingMedia.productionPhotos.map((m) => m.src ?? '')
+    for (const file of ['story-backstage1', 'story-backstage2', 'story-backstage3', 'add01', 'add02', 'add03',
+      'production-01', 'production-02', 'production-03', 'production-05']) {
+      expect(strip.some((src) => src.includes(file)), file).toBe(true)
+    }
+  })
+
+  it('never shows the same photograph twice on the page', () => {
+    // production-04 is the narrative's photograph now, so it left the strip.
+    const photographs = [landingMedia.story, ...landingMedia.productionPhotos].map((m) => m.src)
+    expect(new Set(photographs).size).toBe(photographs.length)
   })
 
   it('describes the photograph it actually points at', () => {
@@ -111,7 +124,7 @@ describe('nothing is declared that nothing renders', () => {
 
     for (const reference of [
       'landingMedia.hero',
-      'landingMedia.storyPhotos',
+      'landingMedia.story',
       'landingMedia.workspace',
       'landingMedia.features[stage.key]',
       'landingMedia.howItWorks[index]',

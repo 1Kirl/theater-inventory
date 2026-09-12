@@ -18,8 +18,10 @@ import { cn } from '@/lib/utils'
  * carried, twice.
  *
  * Now the personal voice frames it and the composition demonstrates it: the
- * prose says the work was scattered, and beside it five labelled pieces settle
- * around the one thing that holds them. The first person is kept deliberately.
+ * prose says the work was scattered, a photograph from the shop sits beside
+ * it, and beneath both five labelled pieces settle around the one thing that
+ * holds them. It is signed — the project is Patrick Kim's, and a first-person
+ * account with no name on it reads as copywriting. The first person is kept deliberately.
  * This is the only part of the page that is not about the software, and turning
  * it into product copy would remove the reason it is here.
  *
@@ -51,9 +53,6 @@ const FRAGMENTS: readonly Fragment[] = [
   },
 ]
 
-/** Stagger classes from `landing.css`; the sheet arrives left to right. */
-const STRIP_DELAYS = ['reveal-d1', 'reveal-d2', 'reveal-d3'] as const
-
 export function NarrativeSection() {
   return (
     <section
@@ -73,85 +72,73 @@ export function NarrativeSection() {
           <br className="hidden sm:inline" /> The tools weren&rsquo;t.
         </h2>
 
-        <div className="mt-14 grid gap-12 md:mt-16 lg:grid-cols-12 lg:items-start lg:gap-14">
-          <div className="lg:col-span-5">
-            <div data-reveal className="reveal-d2 space-y-5">
-              <p className="landing-body">
-                During theatre productions I kept noticing that the hardest work happens behind the
-                stage: equipment, production requirements, team responsibilities, and last-minute
-                changes, scattered across messages, spreadsheets, and conversations.
-              </p>
-              <p className="landing-body">
-                A production keeps all of it in step at once. Kept in separate places, each piece
-                stops answering questions about the others.
-              </p>
-              <p className="landing-body">
-                I wanted to find out whether one workspace could hold it instead. That question
-                became this project.
-              </p>
-            </div>
-
+        {/*
+          * The story beside its photograph.
+          *
+          * Prose on the left, one large photograph on the right, so the section
+          * reads as a person's account rather than as a feature. On a phone they
+          * stack, text first, and the photograph keeps the full column width.
+          */}
+        <div className="mt-14 grid gap-10 md:mt-16 lg:grid-cols-12 lg:items-center lg:gap-14">
+          <div data-reveal className="reveal-d2 space-y-5 lg:col-span-5">
+            <p className="landing-body">
+              I&rsquo;m Patrick Kim, and I work backstage in high-school technical theater. During
+              productions I kept noticing that the hardest work happens behind the stage: equipment,
+              production requirements, team responsibilities, and last-minute changes, scattered
+              across messages, spreadsheets, and conversations.
+            </p>
+            <p className="landing-body">
+              A production keeps all of it in step at once. Kept in separate places, each piece
+              stops answering questions about the others.
+            </p>
+            <p className="landing-body">
+              I wanted to find out whether one workspace could hold it instead. That question
+              became this project.
+            </p>
           </div>
 
-          {/* The scattered pieces, and the thing that holds them. The list is
-              the argument the prose beside it is making, which is why the two
-              share a row rather than following one another. */}
-          <ul className="grid gap-3 sm:grid-cols-3 sm:items-center sm:gap-4 lg:col-span-6 lg:col-start-7">
-            {FRAGMENTS.map((fragment) => (
-              <li
-                key={fragment.label}
-                className={cn(
-                  'landing-drift border-border bg-[var(--landing-panel)] flex items-center gap-3 rounded-xl border px-4 py-3.5',
-                  fragment.drift,
-                  fragment.placement,
-                )}
-              >
-                <fragment.icon className="text-primary size-4 shrink-0" aria-hidden="true" />
-                <span className="text-sm font-medium">{fragment.label}</span>
-              </li>
-            ))}
-
-            <li
-              data-reveal
-              className="reveal-d5 border-primary/25 bg-[var(--landing-sage)] flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-7 text-center sm:col-start-2 sm:row-start-2"
-            >
-              <span
-                className="bg-[var(--landing-panel)] text-primary border-border flex size-9 items-center justify-center rounded-xl border"
-                aria-hidden="true"
-              >
-                <Theater className="size-4" />
-              </span>
-              <span className="text-sm font-semibold">One workspace</span>
-              <span className="text-muted-foreground text-xs">
-                Where every piece can see the others
-              </span>
-            </li>
-          </ul>
+          <div data-reveal className="reveal-frame reveal-d3 lg:col-span-7">
+            <MediaPlaceholder media={landingMedia.story} />
+          </div>
         </div>
 
         {/*
-          * The contact sheet.
+          * The scattered pieces, and the thing that holds them.
           *
-          * Three photographs rather than one, and across the full width rather
-          * than tucked beside the prose: the section carries the only part of
-          * the page that is not about the software, and one portrait in a
-          * column left it looking thin. They are deliberately at three
-          * different distances — a pair of hands, a load-in, a whole stage
-          * mid-build — so the row reads as a sheet of frames from one
-          * production rather than three unrelated pictures.
-          *
-          * On a phone the first runs full width and the other two share a row
-          * beneath it, which keeps all three legible instead of shrinking them
-          * to thumbnails.
+          * Below the story rather than beside it: the prose names the problem,
+          * the photograph shows where it happens, and this is the conclusion the
+          * two arrive at — five pieces that settle around one workspace.
           */}
-        <ul className="mt-14 grid grid-cols-2 gap-3 md:mt-16 sm:grid-cols-3 sm:gap-4">
-          {landingMedia.storyPhotos.map((photo, index) => (
-            <li key={photo.id} className={cn(index === 0 && 'col-span-2', 'sm:col-span-1')}>
-              <div data-reveal className={cn('reveal-frame', STRIP_DELAYS[index])}>
-                <MediaPlaceholder media={photo} />
-              </div>
+        <ul className="mx-auto mt-16 grid max-w-4xl gap-3 sm:grid-cols-3 sm:items-center sm:gap-4 md:mt-20">
+          {FRAGMENTS.map((fragment) => (
+            <li
+              key={fragment.label}
+              className={cn(
+                'landing-drift border-border bg-[var(--landing-panel)] flex items-center gap-3 rounded-xl border px-4 py-3.5',
+                fragment.drift,
+                fragment.placement,
+              )}
+            >
+              <fragment.icon className="text-primary size-4 shrink-0" aria-hidden="true" />
+              <span className="text-sm font-medium">{fragment.label}</span>
             </li>
           ))}
+
+          <li
+            data-reveal
+            className="reveal-d5 border-primary/25 bg-[var(--landing-sage)] flex flex-col items-center justify-center gap-2 rounded-2xl border px-4 py-7 text-center sm:col-start-2 sm:row-start-2"
+          >
+            <span
+              className="bg-[var(--landing-panel)] text-primary border-border flex size-9 items-center justify-center rounded-xl border"
+              aria-hidden="true"
+            >
+              <Theater className="size-4" />
+            </span>
+            <span className="text-sm font-semibold">One workspace</span>
+            <span className="text-muted-foreground text-xs">
+              Where every piece can see the others
+            </span>
+          </li>
         </ul>
       </Reveal>
     </section>

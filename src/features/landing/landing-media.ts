@@ -16,6 +16,9 @@ import production02 from './media/production-02.webp'
 import production03 from './media/production-03.webp'
 import production04 from './media/production-04.webp'
 import production05 from './media/production-05.webp'
+import add01 from './media/add01.webp'
+import add02 from './media/add02.webp'
+import add03 from './media/add03.webp'
 
 /**
  * Every image the landing page holds, in one place.
@@ -27,9 +30,9 @@ import production05 from './media/production-05.webp'
  * and no component elsewhere imports a file from `media/`.
  *
  * The supplied photographs were re-encoded before they were committed. They
- * arrived as PNG and JPEG carrying camera EXIF, and three of them carried the
- * name of a real school and its GPS coordinates; two were stored rotated. What
- * is here is WebP with the metadata stripped and the rotation baked in.
+ * arrived as PNG and JPEG carrying camera EXIF — several with GPS coordinates —
+ * and five were stored rotated. What is here is WebP with the metadata
+ * stripped and the rotation baked in; `add01`–`add03` went through the same.
  */
 
 export interface LandingMedia {
@@ -59,7 +62,7 @@ export type FeatureKey = 'inventory' | 'maintenance' | 'productions' | 'ai'
 
 export interface LandingMediaConfig {
   readonly hero: LandingMedia
-  readonly storyPhotos: readonly LandingMedia[]
+  readonly story: LandingMedia
   readonly workspace: LandingMedia
   readonly features: Readonly<Record<FeatureKey, LandingMedia>>
   readonly howItWorks: readonly LandingMedia[]
@@ -83,39 +86,22 @@ export const landingMedia: LandingMediaConfig = {
   },
 
   /*
-   * Three photographs rather than one.
+   * One photograph, and a large one.
    *
-   * The narrative section carries the only part of the page that is not about
-   * the software, and one portrait beside three paragraphs left it looking
-   * thin. Three read as a contact sheet — and they are deliberately at three
-   * different distances: a pair of hands, a load-in, and a whole stage mid-build.
+   * The narrative section used to close on a strip of three small frames,
+   * which read as a contact sheet under the prose rather than as part of the
+   * story. It now sets a single photograph beside the text, at a size that
+   * carries the section on its own. The three backstage frames moved to the
+   * film strip at the foot of the page, where a row of photographs belongs.
    */
-  storyPhotos: [
-    {
-      id: 'story-01',
-      label: 'Build detail',
-      description: 'Sanding and clamping a flat, close in',
-      aspect: '4 / 3',
-      alt: 'Two students clamping and sanding a set flat.',
-      src: storyBackstage1,
-    },
-    {
-      id: 'story-02',
-      label: 'Load-in',
-      description: 'Set pieces going onto the truck',
-      aspect: '4 / 3',
-      alt: 'Flats and platforms stacked on a truck during a load-in.',
-      src: storyBackstage2,
-    },
-    {
-      id: 'story-03',
-      label: 'Build day',
-      description: 'The stage mid-build, tools laid out',
-      aspect: '4 / 3',
-      alt: 'A stage during a build day, with tools and hardware laid out on a table.',
-      src: storyBackstage3,
-    },
-  ],
+  story: {
+    id: 'story',
+    label: 'Project photo',
+    description: 'Two crew members backstage, between jobs',
+    aspect: '3 / 2',
+    alt: 'Two crew members talking backstage beside a part-built flat.',
+    src: production04,
+  },
 
   workspace: {
     id: 'workspace',
@@ -204,12 +190,12 @@ export const landingMedia: LandingMediaConfig = {
   /*
    * The film strip at the foot of the page.
    *
-   * Five photographs across eight frames. Two of the six supplied were the same
-   * file, so the set is ordered rather than repeated in place: no photograph
-   * touches itself, including across the wrap, and the second row starts a
-   * different distance in so the two rows never line up. Mixed aspect ratios on
-   * purpose — a row of identical rectangles reads as a component, a row of
-   * different ones reads as a contact sheet.
+   * Ten photographs, each used once. `production-04` is not among them: it is
+   * the narrative section's photograph now, and the same picture twice on one
+   * page reads as a mistake. Ordered so neighbours differ in shape — portrait
+   * next to landscape, never two of the same ratio side by side, including
+   * across the loop — because a row of identical rectangles reads as a
+   * component and a row of different ones reads as a contact sheet.
    */
   productionPhotos: [
     {
@@ -217,32 +203,40 @@ export const landingMedia: LandingMediaConfig = {
       aspect: '3 / 2', alt: 'Cast and crew on stage in front of a finished set.', src: production01,
     },
     {
-      id: 'production-02', label: 'Project photo 02', description: 'Flats stacked over the auditorium seats',
+      id: 'production-add-01', label: 'Project photo 02', description: 'Tool pouches laid out before a build',
+      aspect: '9 / 16', alt: 'Two loaded tool pouches laid out on a table.', src: add01,
+    },
+    {
+      id: 'story-03', label: 'Project photo 03', description: 'The stage mid-build, tools laid out',
+      aspect: '4 / 3', alt: 'A stage during a build day, with tools and hardware laid out on a table.', src: storyBackstage3,
+    },
+    {
+      id: 'production-05', label: 'Project photo 04', description: 'Rigging and cable in the shop',
+      aspect: '3 / 4', alt: 'Crew working on rigging equipment in the shop.', src: production05,
+    },
+    {
+      id: 'production-02', label: 'Project photo 05', description: 'Flats stacked over the auditorium seats',
       aspect: '16 / 9', alt: 'Set flats stored above the auditorium seating.', src: production02,
     },
     {
-      id: 'production-03', label: 'Project photo 03', description: 'A set piece in the scene shop',
+      id: 'production-add-03', label: 'Project photo 06', description: 'Clamping a frame on the shop floor',
+      aspect: '3 / 4', alt: 'A crew member clamping a set frame together.', src: add03,
+    },
+    {
+      id: 'story-01', label: 'Project photo 07', description: 'Sanding and clamping a flat, close in',
+      aspect: '3 / 2', alt: 'Two students clamping and sanding a set flat.', src: storyBackstage1,
+    },
+    {
+      id: 'production-add-02', label: 'Project photo 08', description: 'The sound desk, cabled up',
+      aspect: '9 / 16', alt: 'A sound mixing console with its cables patched in.', src: add02,
+    },
+    {
+      id: 'production-03', label: 'Project photo 09', description: 'A set piece in the scene shop',
       aspect: '16 / 9', alt: 'Two crew members beside a set piece in the scene shop.', src: production03,
     },
     {
-      id: 'production-04', label: 'Project photo 04', description: 'Backstage, between jobs',
-      aspect: '3 / 2', alt: 'Two crew members talking backstage beside a part-built flat.', src: production04,
-    },
-    {
-      id: 'production-05', label: 'Project photo 05', description: 'Rigging and cable in the shop',
-      aspect: '3 / 4', alt: 'Crew working on rigging equipment in the shop.', src: production05,
-    },
-    {
-      id: 'production-06', label: 'Project photo 06', description: 'The company on the set, after a build',
-      aspect: '3 / 2', alt: 'Cast and crew on stage in front of a finished set.', src: production01,
-    },
-    {
-      id: 'production-07', label: 'Project photo 07', description: 'Rigging and cable in the shop',
-      aspect: '3 / 4', alt: 'Crew working on rigging equipment in the shop.', src: production05,
-    },
-    {
-      id: 'production-08', label: 'Project photo 08', description: 'A set piece in the scene shop',
-      aspect: '16 / 9', alt: 'Two crew members beside a set piece in the scene shop.', src: production03,
+      id: 'story-02', label: 'Project photo 10', description: 'Set pieces going onto the truck',
+      aspect: '4 / 3', alt: 'Flats and platforms stacked on a truck during a load-in.', src: storyBackstage2,
     },
   ],
 }
