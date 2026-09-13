@@ -1,11 +1,29 @@
 import path from 'node:path'
+import { loadEnv } from 'vite'
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+/**
+ * Keeps the Contact recipient's address out of the bundle once FormSubmit has
+ * issued a form ID for it.
+ *
+ * The page reads `VITE_CONTACT_FORM_ID || VITE_CONTACT_RECIPIENT_EMAIL`, and
+ * Vite inlines every variable the code reads — so with both set, whether the
+ * unused address survived beside the ID would be up to the minifier. Defining
+ * it away here, before the code is compiled, makes that certain.
+ */
+function contactFormDefine(mode: string): Record<string, string> {
+  const env = loadEnv(mode, import.meta.dirname, 'VITE_CONTACT_')
+  return env.VITE_CONTACT_FORM_ID
+    ? { 'import.meta.env.VITE_CONTACT_RECIPIENT_EMAIL': 'undefined' }
+    : {}
+}
+
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react(), tailwindcss()],
+  define: contactFormDefine(mode),
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),
@@ -42,4 +60,4 @@ export default defineConfig({
     passWithNoTests: true,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx', 'tests/unit/**/*.test.ts'],
   },
-})
+}))

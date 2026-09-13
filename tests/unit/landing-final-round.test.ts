@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  CONTACT_LIMITS, configuredContactTransport, contactReducer, endpointTransport, initialContactState,
-  isUsableEndpoint, validateContactDraft, type ContactDraft,
+  CONTACT_LIMITS, contactReducer, initialContactState, validateContactDraft, type ContactDraft,
 } from '@/features/landing/contact-message'
 import { MAX_FIELD_PHOTOS, fieldLayoutFor, fieldMediaFrom } from '@/features/landing/field-media'
 import { DEMO_ORGANIZATION_NAME, PREVIOUS_DEMO_ORGANIZATION_NAMES } from '@/domain/demo-dataset'
@@ -129,40 +128,8 @@ describe('Contact — validation', () => {
   })
 })
 
-describe('Contact — delivery', () => {
-  const message = { name: 'Ada', title: 'Hi', message: 'Hello' }
-
-  it('is unavailable until an endpoint is configured', () => {
-    expect(configuredContactTransport(undefined)).toBeNull()
-    expect(configuredContactTransport('')).toBeNull()
-    expect(configuredContactTransport('http://example.com/form')).toBeNull()
-    expect(configuredContactTransport('https://forms.example/f/abc')).not.toBeNull()
-  })
-
-  it('posts only to HTTPS, or to loopback for local testing', () => {
-    expect(isUsableEndpoint('https://forms.example/f/abc')).toBe(true)
-    expect(isUsableEndpoint('http://localhost:8787/contact')).toBe(true)
-    expect(isUsableEndpoint('http://forms.example/f/abc')).toBe(false)
-    expect(isUsableEndpoint('mailto:someone@example.com')).toBe(false)
-    expect(isUsableEndpoint('not a url')).toBe(false)
-  })
-
-  it('resolves only when the endpoint accepts the message', async () => {
-    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }))
-    await expect(endpointTransport('https://forms.example/f', fetchImpl)(message)).resolves.toBeUndefined()
-
-    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit]
-    expect(init.method).toBe('POST')
-    expect(JSON.parse(init.body as string)).toEqual(message)
-  })
-
-  it('rejects on a refusal or a network failure', async () => {
-    await expect(endpointTransport('https://forms.example/f',
-      async () => new Response('', { status: 500 }))(message)).rejects.toThrow(/500/)
-    await expect(endpointTransport('https://forms.example/f',
-      async () => { throw new TypeError('offline') })(message)).rejects.toThrow()
-  })
-
+// Delivery through FormSubmit is covered in `landing-contact.test.ts`.
+describe('Contact — source', () => {
   it('never writes a message to the console', () => {
     for (const file of ['features/landing/contact-message.ts', 'features/landing/ContactSection.tsx']) {
       expect(code(file), file).not.toMatch(/console\./)
@@ -196,7 +163,10 @@ describe('Contact — states', () => {
 
     const submitting = contactReducer(idle, { type: 'submit' })
     expect(contactReducer(submitting, { type: 'delivered' }).status).toBe('sent')
-    expect(contactReducer(submitting, { type: 'rejected' }).status).toBe('failed')
+    expect(contactReducer(submitting, { type: 'rejected', reason: 'delivery' })).toMatchObject({
+      status: 'failed', failure: 'delivery',
+    })
+    expect(contactReducer(idle, { type: 'rejected', reason: 'delivery' })).toBe(idle)
   })
 
   it('clears a field error as that field is edited', () => {
