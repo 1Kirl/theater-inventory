@@ -1,10 +1,10 @@
-import { useId, useMemo, useReducer, useRef, useState, type FormEvent } from 'react'
+import { useId, useMemo, useReducer, useState, type FormEvent } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Reveal } from '@/features/landing/ScrollReveal'
 import {
-  CONTACT_LIMITS, configuredContactTransport, contactReducer, initialContactState,
-  validateContactDraft, type ContactDraft, type ContactField,
+  CONTACT_LIMITS, configuredContactTransport, contactReducer, createContactSender,
+  initialContactState, type ContactDraft, type ContactField, type ContactTransport,
 } from '@/features/landing/contact-message'
 import { cn } from '@/lib/utils'
 
@@ -15,19 +15,29 @@ import { cn } from '@/lib/utils'
  * transport configured at build time (see `contact-message.ts`); with none
  * configured the fields are disabled and the section says so, rather than
  * accepting a message it has nowhere to send. It shows "sent" only after the
- * endpoint has answered that it accepted the message.
+ * provider has answered that it accepted the message.
  *
  * Nothing a visitor types is logged, kept, or sent anywhere except the
- * configured endpoint.
+ * configured provider.
  */
 
 const EMPTY: ContactDraft = { name: '', title: '', message: '', website: '' }
 
-export function ContactSection() {
-  const transport = useMemo(() => configuredContactTransport(), [])
+/** Resolved once, at build time; `null` when no target is configured. */
+const CONFIGURED_TRANSPORT = configuredContactTransport()
+
+export function ContactSection({
+  transport = CONFIGURED_TRANSPORT,
+}: {
+  /** For tests. The page always uses the configured one. */
+  transport?: ContactTransport | null
+}) {
   const [state, dispatch] = useReducer(contactReducer, transport !== null, initialContactState)
+  const send = useMemo(
+    () => (transport === null ? null : createContactSender(transport, dispatch)),
+    [transport],
+  )
   const [draft, setDraft] = useState<ContactDraft>(EMPTY)
-  const inFlight = useRef(false)
   const id = useId()
   const fieldId = (field: string) => `${id}-${field}`
 
@@ -41,37 +51,13 @@ export function ContactSection() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    // A ref as well as the reducer: two clicks inside one frame both see the
-    // old render, and only the ref sees the first one.
-    if (transport === null || inFlight.current) return
+    if (send === null) return
 
-    const result = validateContactDraft(draft)
-    if (!result.ok) {
-      // A filled honeypot is treated as a failed send and nothing leaves the
-      // page. A person never sees this field, so never takes this branch.
-      if (result.spam) {
-        dispatch({ type: 'submit' })
-        dispatch({ type: 'rejected' })
-      } else {
-        dispatch({ type: 'invalid', errors: result.errors })
-        const first = (Object.keys(result.errors) as ContactField[])[0]
-        if (first) document.getElementById(fieldId(first))?.focus()
-      }
-      return
-    }
-
-    inFlight.current = true
-    dispatch({ type: 'submit' })
-    try {
-      await transport(result.value)
-      dispatch({ type: 'delivered' })
-      setDraft(EMPTY)
-    } catch {
-      // The reason is not shown or logged: it can only be a status code or a
-      // network error, and neither helps the visitor more than "try again".
-      dispatch({ type: 'rejected' })
-    } finally {
-      inFlight.current = false
+    const outcome = await send(draft)
+    if (outcome.kind === 'sent') setDraft(EMPTY)
+    if (outcome.kind === 'invalid') {
+      const first = (Object.keys(outcome.errors) as ContactField[])[0]
+      if (first) document.getElementById(fieldId(first))?.focus()
     }
   }
 
@@ -238,7 +224,9 @@ export function ContactSection() {
 
                   {state.status === 'failed' ? (
                     <p role="alert" className="text-destructive text-sm">
-                      The message could not be sent. Nothing was delivered — please try again.
+                      {state.failure === 'activation'
+                        ? 'Message delivery is waiting to be activated, so nothing was delivered. Please try again later.'
+                        : 'The message could not be sent. Nothing was delivered — please try again.'}
                     </p>
                   ) : null}
                 </div>
