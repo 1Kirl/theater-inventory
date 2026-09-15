@@ -60,10 +60,19 @@ afterEach(() => {
 
 describe('Contact — unconfigured', () => {
   it('has no transport without a valid target', () => {
-    for (const target of [undefined, '', '   ', 'not an address', 'short', `${ADDRESS}/x`,
+    for (const target of ['', '   ', 'not an address', 'short', `${ADDRESS}/x`,
       'owner@example', 'https://formsubmit.co/ajax/x', `a?b=${ADDRESS}`, 'a#b@example.invalid']) {
       expect(configuredContactTransport(target), String(target)).toBeNull()
     }
+  })
+
+  it('has no target when nothing is configured', () => {
+    // Through `formSubmitEndpoint`, not `configuredContactTransport(undefined)`:
+    // an explicit `undefined` takes the parameter default, which reads the
+    // environment, so that call would pass or fail with whatever .env.local
+    // happens to hold while the recipient is configured for a deploy.
+    expect(formSubmitEndpoint(undefined)).toBeNull()
+    expect(formSubmitEndpoint('')).toBeNull()
   })
 
   it('renders the form, disabled, and says why', () => {
